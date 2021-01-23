@@ -4,7 +4,6 @@
 #include "D3d12SDKLayers.h"
 #include "DXGI.h"
 #include "Entity.h"
-#include "PipelineShader.h"
 #include "PresentTarget.h"
 #include "RayTracingPipelineShader.h"
 #include "ResourceBuffer.h"

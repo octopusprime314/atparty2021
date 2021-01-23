@@ -116,7 +116,7 @@ if (MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_definitions("/MP /std:c++17")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
-    # Disable individual compilatio of hlsl include files
+    # Disable individual compilation of hlsl include files
     set_source_files_properties(${HLSL_INCLUDE_SHADER_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
     # VS_SHADER_TYPE means Visual Studio Shader Type and NOT Vertex Shader Shader Type LOL
     set_source_files_properties(${HLSL_VS_SHADER_FILES} PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename).cso\" /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename)_compiled.h\" -Od /Zi -WX -Qembed_debug -enable-16bit-types /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Vertex  VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
@@ -131,14 +131,14 @@ target_link_libraries(compaction-lib-demo optimized ${CMAKE_SOURCE_DIR}/libs/glt
 
 #pre fetches assets during cmake -G configuration
 FetchContent_Populate(assets
-                      URL        https://www.dropbox.com/s/eqms9g5o39c4oxz/assets.zip?dl=0
-                      URL_HASH   MD5=56001501fa5067ff5704be459a19b767
+                      URL        https://www.dropbox.com/s/pm2vsf3bm97hhpm/compaction-demo-assets.zip?dl=0
+                      URL_HASH   MD5=c44ce115fc12c8375c296d10b0a3a15d
                       SOURCE_DIR assets)
 
 #pre fetches lib dependencies during cmake -G configuration
 FetchContent_Populate(libs
-                      URL        https://www.dropbox.com/s/nkred738hhssal1/libs.zip?dl=0
-                      URL_HASH   MD5=aa82212214d0f6b53dc215c1488454c2
+                      URL        https://www.dropbox.com/s/k6uatfwg2ixlvio/compaction-demo-libs.zip?dl=0
+                      URL_HASH   MD5=57bf31cf16d6f54c233f80d599003c19
                       SOURCE_DIR libs)
 
 #Copy over the contents of the unzipped folder

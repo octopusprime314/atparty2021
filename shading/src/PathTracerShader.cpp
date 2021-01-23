@@ -206,43 +206,65 @@ RenderTexture* PathTracerShader::getCompositedFrame()
 
 void PathTracerShader::updateResources()
 {
+    auto buildUnboundedTextureViewsThread =
+        new std::thread(&PathTracerShader::_buildUnboundedTextureViews, this);
 
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
-    if (rtPipeline != nullptr)
+    auto buildUnboundedAttributeViewsThread =
+        new std::thread(&PathTracerShader::_buildUnboundedAttributeViews, this);
+
+    auto buildUnboundedIndexBufferViewsThread =
+        new std::thread(&PathTracerShader::_buildUnboundedIndexBufferViews, this);
+
+    buildUnboundedTextureViewsThread->join();
+    buildUnboundedAttributeViewsThread->join();
+    buildUnboundedIndexBufferViewsThread->join();
+}
+
+void PathTracerShader::_buildUnboundedTextureViews()
+{
+    RayTracingPipelineShader* rtPipeline    = EngineManager::getRTPipeline();
+    auto                      sceneTextures = rtPipeline->getSceneTextures();
+
+    rtPipeline->resetUnboundedTextureDescriptorTable();
+    for (auto textureMap : sceneTextures)
     {
-        auto sceneTextures = rtPipeline->getSceneTextures();
-
-        rtPipeline->resetUnboundedTextureDescriptorTable();
-        for (auto textureMap : sceneTextures)
+        for (auto texture : textureMap.second)
         {
-            for (auto texture : textureMap.second)
-            {
-                rtPipeline->addSRVToUnboundedTextureDescriptorTable(texture);
-            }
+            rtPipeline->addSRVToUnboundedTextureDescriptorTable(texture);
         }
+    }
+}
 
-        auto vertexBuffers = rtPipeline->getVertexBuffers();
-        
-        rtPipeline->resetUnboundedAttributeBufferDescriptorTable();
-        for (auto vertexBufferMap : vertexBuffers)
+void PathTracerShader::_buildUnboundedAttributeViews()
+{
+    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+    auto                      vertexBuffers = rtPipeline->getVertexBuffers();
+
+    rtPipeline->resetUnboundedAttributeBufferDescriptorTable();
+    for (auto vertexBufferMap : vertexBuffers)
+    {
+        for (auto vertexBuffer : vertexBufferMap.second)
         {
-            for (auto vertexBuffer : vertexBufferMap.second)
-            {
-                rtPipeline->addSRVToUnboundedAttributeBufferDescriptorTable(
-                    vertexBuffer, vertexBuffer->count, vertexBuffer->offset);
-            }
+            rtPipeline->addSRVToUnboundedAttributeBufferDescriptorTable(vertexBuffer,
+                                                                        vertexBuffer->count,
+                                                                        vertexBuffer->offset);
         }
+    }
+}
 
-        auto indexBuffers = rtPipeline->getIndexBuffers();
+void PathTracerShader::_buildUnboundedIndexBufferViews()
+{
+    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+    auto                      indexBuffers = rtPipeline->getIndexBuffers();
 
-        rtPipeline->resetUnboundedIndexBufferDescriptorTable();
-        for (auto indexBufferMap : indexBuffers)
+    rtPipeline->resetUnboundedIndexBufferDescriptorTable();
+    for (auto indexBufferMap : indexBuffers)
+    {
+        for (auto indexBuffer : indexBufferMap.second)
         {
-            for (auto indexBuffer : indexBufferMap.second)
-            {
-                rtPipeline->addSRVToUnboundedIndexBufferDescriptorTable(
-                    indexBuffer, indexBuffer->count, indexBuffer->offset);
-            }
+            rtPipeline->addSRVToUnboundedIndexBufferDescriptorTable(indexBuffer,
+                                                                    indexBuffer->count,
+                                                                    indexBuffer->offset);
         }
     }
 }
@@ -259,9 +281,10 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
     cameraPos                = -cameraPos;
 
     static unsigned int previousTime = 0;
+    static constexpr unsigned int lightGenInternalMs = 250;
 
     auto milliSeconds = MasterClock::instance()->getGameTime();
-    if (((milliSeconds - previousTime) > 1000) /*&& lights.size() < 2*/)
+    if (((milliSeconds - previousTime) > lightGenInternalMs) /*&& lights.size() < 2*/)
     {
         // random floats between -1.0 - 1.0
         // Will be used to obtain a seed for the random number engine
@@ -432,110 +455,22 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
 
     barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc[0].Transition.pResource =
-        _albedoPrimaryRays->getResource()->getResource().Get();
+    barrierDesc[0].Transition.pResource   =_albedoPrimaryRays->getResource()->getResource().Get();
     barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_GENERIC_READ;
 
     barrierDesc[2] = barrierDesc[1] = barrierDesc[0];
-    barrierDesc[1].Transition.pResource =
-        _positionPrimaryRays->getResource()->getResource().Get();
-    barrierDesc[2].Transition.pResource =
-        _normalPrimaryRays->getResource()->getResource().Get();
+    barrierDesc[1].Transition.pResource = _positionPrimaryRays->getResource()->getResource().Get();
+    barrierDesc[2].Transition.pResource = _normalPrimaryRays->getResource()->getResource().Get();
 
     cmdList->ResourceBarrier(3, barrierDesc);
 
+    // Process point lights
     PointLightList pointLightList;
     _processLights(lights, viewEventDistributor, pointLightList);
 
-    //// Use map to sort the lights based on distance from the viewer
-    //std::map<float, int> lightsSorted;
-    //// Get point light positions
-    //unsigned int pointLights = 0;
-    //Vector4      cameraPos   = viewEventDistributor->getCameraPos();
-    //cameraPos                = -cameraPos;
-
-    //static unsigned int previousTime = 0;
-
-    //auto milliSeconds = MasterClock::instance()->getGameTime();
-    //if (((milliSeconds - previousTime) > 1000) /*&& lights.size() < 2*/)
-    //{
-    //    // random floats between -1.0 - 1.0
-    //    // Will be used to obtain a seed for the random number engine
-    //    std::random_device               rd;
-    //    // Standard mersenne_twister_engine seeded with rd()
-    //    std::mt19937                     generator(rd());
-    //    std::uniform_real_distribution<> randomFloats(-1.0, 1.0);
-
-    //    float   lightIntensityRange  = 10.0f;
-    //    float randomLightIntensity = (((randomFloats(generator) + 1.0) / 2.0) * lightIntensityRange) + 300.0;
-
-    //    Vector4 randomColor(static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
-    //                        static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
-    //                        static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0));
-
-    //    //Vector4 randomColor(1.0, 1.0, 1.0);
-    //    //Vector4 randomColor(64.0 / 255.0, 156.0 / 255.0, 255.0 / 255.0);
-
-    //    SceneLight light;
-    //    light.name       = "light trail" + std::to_string(lights.size());
-    //    light.lightType  = LightType::POINT;
-    //    light.rotation   = Vector4(0.0, 0.0, 0.0, 1.0);
-    //    light.scale      = Vector4(randomLightIntensity, randomLightIntensity, randomLightIntensity);
-    //    light.color      = randomColor;
-    //    light.position   = cameraPos;
-    //    light.lockedIdx  = -1;
-    //    EngineManager::instance()->addLight(light);
-
-    //    previousTime = MasterClock::instance()->getGameTime();
-    //}
-
-    //int pointLightOffset = 0;
-    //for (auto& light : lights)
-    //{
-    //    if (light->getType() == LightType::POINT ||
-    //        light->getType() == LightType::SHADOWED_POINT)
-    //    {
-    //        Vector4 pointLightPos     = light->getPosition();
-    //        Vector4 pointLightVector  = cameraPos - pointLightPos;
-    //        float   distanceFromLight = pointLightVector.getMagnitude();
-
-    //        lightsSorted.insert(std::pair<float, int>(distanceFromLight, pointLightOffset));
-    //        pointLights++;
-    //    }
-    //    pointLightOffset++;
-    //}
-    //// Constant max of 1024 lights in shader
-    //const int MAX_LIGHTS       = 1024;
-    //float*    lightPosArray    = new float[4 * MAX_LIGHTS];
-    //float*    lightColorsArray = new float[4 * MAX_LIGHTS];
-    //float*    lightRangesArray = new float[MAX_LIGHTS];
-    //int       lightPosIndex    = 0;
-    //int       lightColorIndex  = 0;
-    //int       lightRangeIndex  = 0;
-    //int       totalLights      = 0;
-    //for (auto& lightIndex : lightsSorted)
-    //{
-    //    auto light = lights[lightIndex.second];
-    //    // If point light then add to uniforms
-    //    if (light->getType() == LightType::POINT ||
-    //        light->getType() == LightType::SHADOWED_POINT)
-    //    {
-    //        // Point lights need to remain stationary so move lights with camera space changes
-    //        auto   pos       = light->getPosition();
-    //        float* posBuff   = pos.getFlatBuffer();
-    //        float* colorBuff = light->getColor().getFlatBuffer();
-    //        for (int i = 0; i < 4; i++)
-    //        {
-    //            lightPosArray[lightPosIndex++]      = posBuff[i];
-    //            lightColorsArray[lightColorIndex++] = colorBuff[i];
-    //        }
-    //        lightRangesArray[lightRangeIndex++] = light->getRange();
-    //        totalLights++;
-    //    }
-    //}
-
+    // Process directional light
     Vector4 sunLightColor  = Vector4(1.0, 1.0, 1.0);
     float   sunLightRange  = 100000.0;
     Vector4 sunLightPos    = cameraView * Vector4(700.0, 700.0, 0.0);
@@ -568,10 +503,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     }
 
     cmdList->BeginEvent(0, L"Sun light Rays", sizeof(L"Sun light Rays"));
-
-    auto resourceBindings = shader->_resourceIndexes;
-    ID3D12DescriptorHeap* descriptorHeaps[] = {rtPipeline->getDescHeap().Get()};
-    cmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
     //// Sun light rays
 
@@ -719,11 +650,15 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     
     if (_denoising)
     {
-        barrierDesc[3].Transition.pResource =
-            _svgfDenoiser->getOcclusionHistoryBuffer()->getResource()->getResource().Get();
+        barrierDesc[3].Transition.pResource = _svgfDenoiser->getOcclusionHistoryBuffer()->getResource()->getResource().Get();
+
+        cmdList->ResourceBarrier(4, barrierDesc);
+    }
+    else
+    {
+        cmdList->ResourceBarrier(3, barrierDesc);
     }
 
-    cmdList->ResourceBarrier(4, barrierDesc);
 
     cmdList->EndEvent();
 
@@ -776,9 +711,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     if (_denoising)
     {
         barrierDesc[6].Transition.pResource = _svgfDenoiser->getOcclusionHistoryBuffer()->getResource()->getResource().Get();
+        cmdList->ResourceBarrier(7, barrierDesc);
+    }
+    else
+    {
+        cmdList->ResourceBarrier(6, barrierDesc);
     }
 
-    cmdList->ResourceBarrier(7, barrierDesc);
 
     cmdList->EndEvent();
 

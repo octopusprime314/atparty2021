@@ -346,9 +346,11 @@ void ViewEventDistributor::_updateView(Camera* camera, Vector4 posV, Vector4 rot
 
     _rotation        = Matrix::rotationAroundY(rotV.gety()) * 
                        Matrix::rotationAroundZ(rotV.getz()) *
-                       Matrix::rotationAroundX(rotV.getx()) *
-    //_rotation        = Matrix::rotationAroundX(rot[0]) * Matrix::rotationAroundY(rot[1]);
-    _inverseRotation = Matrix::rotationAroundY(-rot[1]);
+                       Matrix::rotationAroundX(rotV.getx());
+
+    _inverseRotation = Matrix::rotationAroundY(-rotV.gety()) *
+                       Matrix::rotationAroundZ(-rotV.getz()) *
+                       Matrix::rotationAroundX(-rotV.getx());
 
     // translate then rotate around point
     camera->setViewMatrix(_rotation * _translation);

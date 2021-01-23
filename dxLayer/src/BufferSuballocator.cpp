@@ -175,10 +175,9 @@ Suballocation BufferSuballocator::CreateSubAllocation(ID3D12Device* device,
 
         if (!nextSuballocatorResource)
         {
-            const uint32_t memorySavedBySuballocating = ((subAllocationBuffer.alignedBufferSizeInBytes + (D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT - 1)) &
-                                                         ~(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT - 1));
-            m_suballocationAlignmentMemorySavings +=
-                (memorySavedBySuballocating - subAllocationBuffer.alignedBufferSizeInBytes);
+            const uint32_t memoryAlignedSize = ((subAllocationBuffer.alignedBufferSizeInBytes + (D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT - 1)) &
+                                                ~(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT - 1));
+            m_suballocationAlignmentMemorySavings += (memoryAlignedSize - subAllocationBuffer.alignedBufferSizeInBytes);
 
             subAllocationBuffer.parentResource = suballocatorBlock.suballocatingBuffer;
             break;
@@ -222,6 +221,10 @@ void BufferSuballocator::FreeSubAllocation(Suballocation& suballocation)
                 suballocation.parentResource = nullptr;
 
             }
+            const uint32_t memoryAlignedSize = ((suballocation.alignedBufferSizeInBytes + (D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT - 1)) &
+                                                   ~(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT - 1));
+            m_suballocationAlignmentMemorySavings -= (memoryAlignedSize - suballocation.alignedBufferSizeInBytes);
+
             break;
         }
 

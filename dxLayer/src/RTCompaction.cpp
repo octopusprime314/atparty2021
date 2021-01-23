@@ -29,15 +29,19 @@ namespace RTCompaction
         //Clear out previous command lists compaction logging
         _buildLogger.clear();
 
+        float memoryReductionRatio = (static_cast<float>(_totalCompactedMemory) / (_totalUncompactedMemory + 1.0));
         _buildLogger.append(
-            "Uncompacted memory: "                               + std::to_string((_totalUncompactedMemory                        ) / 1000000.0f) + " MB\n"
-            "Compacted memory: "                                 + std::to_string((_totalCompactedMemory                          ) / 1000000.0f) + " MB\n"
-            "Memory saved from compaction: "                     + std::to_string((_totalUncompactedMemory - _totalCompactedMemory) / 1000000.0f) + " MB\n"
-            "Uncompacted suballocator memory: "                  + std::to_string((_resultPool->GetSuballocatorSize()             ) / 1000000.0f) + " MB\n"
-            "Compacted suballocator memory: "                    + std::to_string((_compactionPool->GetSuballocatorSize()         ) / 1000000.0f) + " MB\n"
-            "Uncompacted suballocation alignment memory saved: " + std::to_string((_resultPool->GetAlignmentSavingSize()          ) / 1000000.0f) + " MB\n"
-            "Compacted suballocation alignment memory saved: "   + std::to_string((_compactionPool->GetAlignmentSavingSize()      ) / 1000000.0f) + " MB\n"
-            "Compacted unused freed suballocation memory: "      + std::to_string((_compactionPool->GetFreeSuballocationsSize()   ) / 1000000.0f) + " MB\n");
+            "Theoretical uncompacted  memory: "                  + std::to_string(_totalUncompactedMemory                      / 1000000.0f) + " MB\n"
+            "Compacted                memory: "                  + std::to_string(_totalCompactedMemory                        / 1000000.0f) + " MB\n"
+            "Compaction  memory    reduction: "                  + std::to_string(memoryReductionRatio                         * 100.0f)     + " %%\n"
+            "Uncompacted suballocator memory: "                  + std::to_string(_resultPool->GetSuballocatorSize()           / 1000000.0f) + " MB\n"
+            "Compacted   suballocator memory: "                  + std::to_string(_compactionPool->GetSuballocatorSize()       / 1000000.0f) + " MB\n"
+            "Scratch     suballocator memory: "                  + std::to_string(_scratchPool->GetSuballocatorSize()          / 1000000.0f) + " MB\n"
+            "Unused      uncompacted  memory: "                  + std::to_string(_resultPool->GetFreeSuballocationsSize()     / 1000000.0f) + " MB\n"
+            "Unused      compacted    memory: "                  + std::to_string(_compactionPool->GetFreeSuballocationsSize() / 1000000.0f) + " MB\n"
+            "Unused      scratch      memory: "                  + std::to_string(_scratchPool->GetFreeSuballocationsSize()    / 1000000.0f) + " MB\n"
+            "Suballocation alignment   saved: "                  + std::to_string(_compactionPool->GetAlignmentSavingSize()    / 1000000.0f) + " MB\n"
+        );
 
         // Release queue indicates acceleration structure is completely removed
         while (_asBufferReleaseQueue.empty() == false)
@@ -158,7 +162,7 @@ namespace RTCompaction
                                                                                     prebuildInfo.ResultDataMaxSizeInBytes,
                                                                                     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
 
-            _totalUncompactedMemory += prebuildInfo.ResultDataMaxSizeInBytes;
+            _totalUncompactedMemory += buffers[buildIndex].resultGpuMemory.alignedBufferSizeInBytes;
 
             // Keeps track of which frame index the build was requested
             buffers[buildIndex].frameIndexRequest = _commandListIndex;
@@ -257,8 +261,6 @@ namespace RTCompaction
                 D3D12_RANGE readbackBufferRange{offset, offset + SizeOfCompactionDescriptor};
                 buffers[compactionIndex]->compactionSizeCpuMemory.parentResource->Map(0, &readbackBufferRange, (void**)&data);
                 memcpy(&compactionSize, &data[offset], SizeOfCompactionDescriptor);
-                // D3D12 Unmap warnings.  Debug later please.
-                buffers[compactionIndex]->compactionSizeCpuMemory.parentResource->Unmap(0, &readbackBufferRange);
 
                 // If zero compactions have been performed but the transient memory budget isn't big enough
                 // still move forward with the compaction
@@ -274,7 +276,7 @@ namespace RTCompaction
                                                                                                      compactionSize,
                                                                                                      D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
 
-                _totalCompactedMemory += compactionSize;
+                _totalCompactedMemory += buffers[compactionIndex]->compactionGpuMemory.alignedBufferSizeInBytes;
 
                 // Copy the result buffer into the compacted buffer
                 commandList->CopyRaytracingAccelerationStructure(buffers[compactionIndex]->compactionGpuMemory.GetGPUVA(),
@@ -334,6 +336,9 @@ namespace RTCompaction
             {
                 _compactionPool->FreeSubAllocation(buffers[buildIndex]->compactionGpuMemory);
             }
+
+            _totalUncompactedMemory -= buffers[buildIndex]->resultGpuMemory.alignedBufferSizeInBytes;
+            _totalCompactedMemory   -= buffers[buildIndex]->compactionGpuMemory.alignedBufferSizeInBytes;
 
             // This prevents compaction from being performed if an acceleration structure
             // gets allocated and then deallocated between round trips

@@ -462,7 +462,9 @@ void PrintResourceInfo(const Document*           document,
 
         int i = 0;
         int materialIndex = 0;
+        int textureIndex  = 0;
         std::vector<std::string> materialTextureNames;
+        std::set<std::string> materialRepeatCount;
         for (const auto& texture : textureIndexing)
         {
             auto modelName            = model->getName();
@@ -489,10 +491,25 @@ void PrintResourceInfo(const Document*           document,
             {
                 filename = image.uri;
             }
-
             if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
             {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/" + filename);
+                auto textureName = TEXTURE_LOCATION + "collections/" + filename;
+                if (materialRepeatCount.find(textureName) != materialRepeatCount.end())
+                {
+                    if (textureIndex % 3 == 1)
+                    {
+                        materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultNormal.dds");
+                    }
+                    else if (textureIndex % 3 == 2)
+                    {
+                        materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
+                    }
+                }
+                else
+                {
+                    materialTextureNames.push_back(textureName);
+                }
+                materialRepeatCount.insert(textureName);
             }
             else
             {
@@ -508,6 +525,7 @@ void PrintResourceInfo(const Document*           document,
                 materialIndex = 0;
                 materialTextureNames.clear();
             }
+            textureIndex++;
         }
 
         if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)

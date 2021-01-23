@@ -75,6 +75,9 @@ class PathTracerShader : public ShaderBase
     void _processLights(std::vector<Light*>&  lights,
                         ViewEventDistributor* viewEventDistributor,
                         PointLightList&       pointLightList);
+    void _buildUnboundedTextureViews();
+    void _buildUnboundedAttributeViews();
+    void _buildUnboundedIndexBufferViews();
 
   public:
     PathTracerShader(std::string shaderName);

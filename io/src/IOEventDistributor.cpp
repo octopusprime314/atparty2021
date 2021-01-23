@@ -217,7 +217,7 @@ void IOEventDistributor::_mouseClick(GLFWwindow* window, int button, int action,
 {
     double xpos, ypos;
 
-    IOEvents::updateMouseClick(button, action, static_cast<int>(xpos), static_cast<int>(ypos));
+    //IOEvents::updateMouseClick(button, action, static_cast<int>(xpos), static_cast<int>(ypos));
 }
 
 void IOEventDistributor::_frameRateTrigger(int milliSeconds)

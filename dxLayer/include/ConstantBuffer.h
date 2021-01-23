@@ -1,10 +1,11 @@
 #pragma once
 #include "Matrix.h"
-#include "PipelineShader.h"
 #include "d3dx12.h"
 #include <d3d12.h>
 #include <wrl.h>
 #include "DXDefines.h"
+#include <vector>
+#include <d3d12shader.h>
 
 using namespace Microsoft::WRL;
 

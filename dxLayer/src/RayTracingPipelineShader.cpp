@@ -6,128 +6,25 @@
 #include "DXLayer.h"
 #include <random>
 
-const wchar_t* c_hitGroupName         = L"MyHitGroup";
-const wchar_t* c_raygenShaderName     = L"MyRaygenShader";
-const wchar_t* c_closestHitShaderName = L"MyClosestHitShader";
-const wchar_t* c_missShaderName       = L"MyMissShader";
-
-inline std::string BlobToUtf8(_In_ IDxcBlob* pBlob)
-{
-    if (pBlob == nullptr)
-    {
-        return std::string();
-    }
-    return std::string((char*)pBlob->GetBufferPointer(), pBlob->GetBufferSize());
-}
-
-void RayTracingPipelineShader::allocateUploadBuffer(ID3D12Device* pDevice, void* pData,
-                                                    UINT64           datasize,
-                                                    ID3D12Resource** ppResource, const wchar_t* resourceName)
-{
-    auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-    auto bufferDesc           = CD3DX12_RESOURCE_DESC::Buffer(datasize);
-
-    pDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &bufferDesc,
-                                     D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-                                     IID_PPV_ARGS(ppResource));
-    if (resourceName)
-    {
-        (*ppResource)->SetName(resourceName);
-    }
-}
-
-ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getRTASDescHeap()
-{
-    return _rtASDescriptorHeap;
-}
-
-std::map<Entity*, AssetTexture*>& RayTracingPipelineShader::getTransparentTextures()
-{
-    return _transparencyTextures;
-}
-
-D3D12_GPU_VIRTUAL_ADDRESS RayTracingPipelineShader::getRTASGPUVA()
-{
-    return _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
-}
-
-std::map<Model*, std::vector<AssetTexture*>>& RayTracingPipelineShader::getSceneTextures() { return _modelTextures; }
-
-void RayTracingPipelineShader::_populateDefaultHeap(GpuToCpuBuffers& resources, UINT64 byteSize)
-{
-    // The output buffer (created below) is on a default heap, so only the GPU can access it.
-
-    D3D12_HEAP_PROPERTIES defaultHeapProperties{CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT)};
-
-    D3D12_RESOURCE_DESC outputBufferDesc{
-        CD3DX12_RESOURCE_DESC::Buffer(byteSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)};
-
-    _dxrDevice->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
-                                        &outputBufferDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                        nullptr, IID_PPV_ARGS(&resources.outputBuffer));
-}
-
-void RayTracingPipelineShader::_gpuToCpuTransfer(GpuToCpuBuffers& resources, UINT64 byteSize)
-{
-    // The readback buffer (created below) is on a readback heap, so that the CPU can access it.
-
-    D3D12_HEAP_PROPERTIES readbackHeapProperties{CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK)};
-
-    D3D12_RESOURCE_DESC readbackBufferDesc{CD3DX12_RESOURCE_DESC::Buffer(byteSize)};
-
-    _dxrDevice->CreateCommittedResource(&readbackHeapProperties, D3D12_HEAP_FLAG_NONE,
-                                        &readbackBufferDesc, D3D12_RESOURCE_STATE_COPY_DEST,
-                                        nullptr, IID_PPV_ARGS(&resources.readbackBuffer));
-
-    auto commandList = DXLayer::instance()->getComputeCmdList();
-
-    D3D12_RESOURCE_BARRIER outputBufferResourceBarrier{CD3DX12_RESOURCE_BARRIER::Transition(
-        resources.outputBuffer.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-        D3D12_RESOURCE_STATE_COPY_SOURCE)};
-    commandList->ResourceBarrier(1, &outputBufferResourceBarrier);
-
-    commandList->CopyResource(resources.readbackBuffer.Get(), resources.outputBuffer.Get());
-}
-
-void RayTracingPipelineShader::_readBackOnCpu(GpuToCpuBuffers& buffers, UINT64 byteSize)
-{
-    buffers.cpuSideData = new unsigned char[byteSize];
-    UINT sizeOfAS       = 0;
-
-    D3D12_RANGE readbackBufferRange{0, byteSize};
-    buffers.readbackBuffer->Map(0, &readbackBufferRange, (void**)&buffers.cpuSideData);
-    memcpy(&sizeOfAS, &(static_cast<unsigned char*>(buffers.cpuSideData))[0], 4);
-}
-
 RayTracingPipelineShader::RayTracingPipelineShader()
 {
-    _descriptorsAllocated = 20;
-
+    _descriptorsAllocated              = 0;
     auto device                        = DXLayer::instance()->getDevice();
-    _descriptorHeapDesc.NumDescriptors = static_cast<UINT>(3 + (200 * 100));
+    _descriptorHeapDesc.NumDescriptors = static_cast<UINT>(MaxBLASSRVsForRayTracing);
     _descriptorHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     _descriptorHeapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     _descriptorHeapDesc.NodeMask       = 0;
     device->CreateDescriptorHeap(&_descriptorHeapDesc, IID_PPV_ARGS(&_descriptorHeap));
 
-    _descriptorSize =
-        device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    _descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-    _deformedVertices[0] = _deformedVertices[1] = nullptr;
-
-    _blUpdateScratchResource = nullptr;
-
-    _unboundedTextureSrvIndex = 0;
-    _unboundedAttributeBufferSrvIndex  = 0;
+    _unboundedTextureSrvIndex         = 0;
+    _unboundedAttributeBufferSrvIndex = 0;
     _unboundedIndexBufferSrvIndex     = 0;
 
-    // This is specific to bindless resource access in a global root signature
-    // so use the maximum bottom level size multiplied by 4 textures per material
-    const UINT descriptorTableEntries = MaxBLASSRVsForRayTracing;
-
-    createUnboundedTextureSrvDescriptorTable(descriptorTableEntries);
-    createUnboundedAttributeBufferSrvDescriptorTable(descriptorTableEntries);
-    createUnboundedIndexBufferSrvDescriptorTable(descriptorTableEntries);
+    createUnboundedTextureSrvDescriptorTable(MaxBLASSRVsForRayTracing);
+    createUnboundedAttributeBufferSrvDescriptorTable(MaxBLASSRVsForRayTracing);
+    createUnboundedIndexBufferSrvDescriptorTable(MaxBLASSRVsForRayTracing);
 }
 
 void RayTracingPipelineShader::init(ComPtr<ID3D12Device> device)
@@ -138,10 +35,6 @@ void RayTracingPipelineShader::init(ComPtr<ID3D12Device> device)
 
     auto commandList = DXLayer::instance()->getComputeCmdList();
     auto dxLayer     = DXLayer::instance();
-
-    _raytracingOutput =
-        new RenderTexture(IOEventDistributor::screenPixelWidth,
-                          IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_FLOAT, "RTPayload");
 
     device->QueryInterface(IID_PPV_ARGS(&_dxrDevice));
 
@@ -175,6 +68,52 @@ void RayTracingPipelineShader::init(ComPtr<ID3D12Device> device)
 
     _doneAdding = false;
 }
+
+inline std::string BlobToUtf8(_In_ IDxcBlob* pBlob)
+{
+    if (pBlob == nullptr)
+    {
+        return std::string();
+    }
+    return std::string((char*)pBlob->GetBufferPointer(), pBlob->GetBufferSize());
+}
+
+void RayTracingPipelineShader::allocateUploadBuffer(ID3D12Device* pDevice, void* pData,
+                                                    UINT64           datasize,
+                                                    ID3D12Resource** ppResource, const wchar_t* resourceName)
+{
+    auto uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+    auto bufferDesc           = CD3DX12_RESOURCE_DESC::Buffer(datasize);
+
+    pDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &bufferDesc,
+                                     D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                     IID_PPV_ARGS(ppResource));
+    if (resourceName)
+    {
+        (*ppResource)->SetName(resourceName);
+    }
+}
+
+ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getRTASDescHeap()
+{
+    return _rtASDescriptorHeap;
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS RayTracingPipelineShader::getRTASGPUVA()
+{
+    return _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
+}
+
+ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getDescHeap()
+{
+    return _descriptorHeap;
+}
+
+std::map<Model*, std::vector<AssetTexture*>>& RayTracingPipelineShader::getSceneTextures()
+{
+    return _modelTextures;
+}
+
 
 void RayTracingPipelineShader::updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes)
 {
@@ -1040,17 +979,6 @@ void RayTracingPipelineShader::updateStructuredIndexBufferUnbounded(int         
     }
 }
 
-void RayTracingPipelineShader::_queryShaderResources(ComPtr<ID3DBlob> shaderBlob)
-{
-
-    ID3D12ShaderReflection* reflectionInterface;
-    D3DReflect(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(),
-               IID_ID3D12ShaderReflection, (void**)&reflectionInterface);
-
-    HRESULT result = S_OK;
-    PipelineShader::_queryShaderResources(shaderBlob);
-}
-
 // Allocate a descriptor and return its index.
 // If the passed descriptorIndexToUse is valid, it will be used instead of allocating a new one.
 UINT RayTracingPipelineShader::_allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
@@ -1096,5 +1024,3 @@ UINT RayTracingPipelineShader::createBufferSRV(D3DBuffer* buffer, UINT numElemen
         _descriptorHeap->GetGPUDescriptorHandleForHeapStart(), descriptorIndex, _descriptorSize);
     return descriptorIndex;
 }
-
-RenderTexture* RayTracingPipelineShader::getRayTracingTarget() { return _raytracingOutput; }

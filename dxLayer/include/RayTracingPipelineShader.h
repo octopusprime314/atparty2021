@@ -1,6 +1,5 @@
 #pragma once
 #include "Entity.h"
-#include "PipelineShader.h"
 #include "RenderTexture.h"
 #include "d3d12.h"
 #include "d3d12_1.h"
@@ -18,49 +17,12 @@
 
 using namespace Microsoft::WRL;
 
-namespace GlobalRootSignatureParams
-{
-enum Value
-{
-    OutputViewSlot = 0,
-    AccelerationStructureSlot,
-    SceneConstantSlot,
-    IndexBuffersSlot,
-    VertexBuffersSlot,
-    Count
-};
-}
-
-namespace LocalRootSignatureParams
-{
-enum Value
-{
-    CubeConstantSlot = 0,
-    Count
-};
-}
-
 struct Viewport
 {
     float left;
     float top;
     float right;
     float bottom;
-};
-
-struct SceneConstantBuffer
-{
-    float projectionToWorld[16];
-    float cameraPosition[4];
-    float lightDirection[4];
-    float projection[16];
-    float lightView[16];
-};
-
-union AlignedSceneConstantBuffer
-{
-    SceneConstantBuffer constants;
-    uint8_t             alignmentPadding[D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT];
 };
 
 struct GpuToCpuBuffers
@@ -72,23 +34,14 @@ struct GpuToCpuBuffers
 
 #define SizeOfInUint32(obj) ((sizeof(obj) - 1) / sizeof(UINT32) + 1)
 #define InitInstancesForRayTracing 256
-#define MaxInstancesForRayTracing 10000
-// 4000 BLAS count using 4 textures each
-#define MaxBLASSRVsForRayTracing 4000 * 4
+#define MaxInstancesForRayTracing  10000
+// 4000 BLAS count using 3 textures each
+#define MaxBLASSRVsForRayTracing   4000 * 3
 
-class RayTracingPipelineShader : public PipelineShader
+class RayTracingPipelineShader
 {
-
-    virtual void _queryShaderResources(ComPtr<ID3DBlob> shaderBlob);
-
-    void _populateDefaultHeap(GpuToCpuBuffers& resources, UINT64 byteSize);
-
     UINT _allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
                              UINT                         descriptorIndexToUse = UINT_MAX);
-
-    void _gpuToCpuTransfer(GpuToCpuBuffers& resources, UINT64 byteSize);
-
-    void _readBackOnCpu(GpuToCpuBuffers& buffers, UINT64 byteSize);
 
     std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS> _bottomLevelBuildDescs;
     std::vector<Model*>                                               _bottomLevelBuildModels;
@@ -97,23 +50,11 @@ class RayTracingPipelineShader : public PipelineShader
     ComPtr<ID3D12Resource>                                            _tlScratchResource[CMD_LIST_NUM];
     ComPtr<ID3D12Resource>                                            _instanceDescs[CMD_LIST_NUM];
     UINT                                                              _descriptorsAllocated;
-    std::map<Entity*, AssetTexture*>                                  _transparencyTextures;
-    ComPtr<ID3D12Resource>                                            _hitGroupShaderTable;
-    AlignedSceneConstantBuffer*                                       _mappedConstantData;
     D3D12_DESCRIPTOR_HEAP_DESC                                        _descriptorHeapDesc;
-    ComPtr<ID3D12Resource>                                            _perFrameConstants;
-    ComPtr<ID3D12Resource>                                            _rayGenShaderTable;
-    RenderTexture*                                                    _raytracingOutput;
-    ComPtr<ID3D12Resource>                                            _missShaderTable;
-    ComPtr<ID3D12Resource>                                            _blUpdateScratchResource;
-    ComPtr<ID3D12StateObjectPrototype>                                _dxrStateObject;
-    CD3DX12_CPU_DESCRIPTOR_HANDLE*                                    _hUAVDescriptor;
     ComPtr<ID3D12DescriptorHeap>                                      _descriptorHeap;
     UINT                                                              _descriptorSize;
-    D3D12_DISPATCH_RAYS_DESC                                          _dispatchDesc;
     std::vector<D3D12_RAYTRACING_INSTANCE_DESC>                       _instanceDesc;
     dxc::DxcDllSupport                                                _dllSupport;
-    SceneConstantBuffer                                               _sceneCB[2];
     ComPtr<ID3D12Device5>                                             _dxrDevice;
     D3D12_UNORDERED_ACCESS_VIEW_DESC                                  _uavDesc;
     D3D12_SHADER_RESOURCE_VIEW_DESC                                   _uvStructuredBuffer;
@@ -128,7 +69,6 @@ class RayTracingPipelineShader : public PipelineShader
     std::vector<float>                                                _prevInstanceTransforms;
     bool                                                              _setTLASRootSRV = true;
     bool                                                              _useCompaction = true;
-    RenderTexture*                                                    _deformedVertices[2];
     int                                                               _topLevelIndex = 0;
     int                                                               _instanceMappingIndex = 0;
 
@@ -169,38 +109,27 @@ class RayTracingPipelineShader : public PipelineShader
 
   public:
     RayTracingPipelineShader();
-
-    void init(ComPtr<ID3D12Device> device);
-
-    void doRayTracing(Entity* entity, Light* light);
-
-    RenderTexture*               getRayTracingTarget();
-    ComPtr<ID3D12DescriptorHeap> getRTASDescHeap();
-    D3D12_GPU_VIRTUAL_ADDRESS    getRTASGPUVA();
-    ComPtr<ID3D12DescriptorHeap> getDescHeap()
-    {
-        return _descriptorHeap;
-    }
-    std::map<Entity*, AssetTexture*>& getTransparentTextures();
+    void                                          init(ComPtr<ID3D12Device> device);
+    ComPtr<ID3D12DescriptorHeap>                  getRTASDescHeap();
+    D3D12_GPU_VIRTUAL_ADDRESS                     getRTASGPUVA();
+    ComPtr<ID3D12DescriptorHeap>                  getDescHeap();
     std::map<Model*, std::vector<AssetTexture*>>& getSceneTextures();
-    std::vector<UINT>&                getMaterialMapping() { return _materialMapping; }
-    std::vector<UINT>&                getAttributeMapping() { return _attributeMapping; }
-    D3DBuffer*                        getMaterialMappingBuffer() { return _instanceIndexToMaterialMappingGPUBuffer; }
-
-    void                                       updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes);
-    void                                       updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes);
-    void                                       updateAndBindTransmissionBuffer(std::map<std::string, UINT> resourceIndexes);
-    void                                       updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes);
-
-    std::map<Model*, std::vector<D3DBuffer*>>& getVertexBuffers() { return _vertexBuffer; }
-    std::map<Model*, std::vector<D3DBuffer*>>& getIndexBuffers() { return _indexBuffer; }
-    float*                                     getInstanceNormalTransforms() { return _instanceNormalMatrixTransforms.data(); }
-    float*                                     getWorldToObjectTransforms() { return _instanceWorldToObjectMatrixTransforms.data(); }
-    float*                                     getPrevInstanceTransforms() { return _prevInstanceTransforms.data(); }
-    int                                        getBLASCount() { return _blas.size(); }
-    void                                       buildAccelerationStructures();
-    UINT                                       createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize);
-    void                                       buildBLAS(Entity* entity);
+    std::vector<UINT>&                            getMaterialMapping() { return _materialMapping; }
+    std::vector<UINT>&                            getAttributeMapping() { return _attributeMapping; }
+    D3DBuffer*                                    getMaterialMappingBuffer() { return _instanceIndexToMaterialMappingGPUBuffer; }
+    void                                          updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes);
+    void                                          updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes);
+    void                                          updateAndBindTransmissionBuffer(std::map<std::string, UINT> resourceIndexes);
+    void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes);
+    std::map<Model*, std::vector<D3DBuffer*>>&    getVertexBuffers() { return _vertexBuffer; }
+    std::map<Model*, std::vector<D3DBuffer*>>&    getIndexBuffers() { return _indexBuffer; }
+    float*                                        getInstanceNormalTransforms() { return _instanceNormalMatrixTransforms.data(); }
+    float*                                        getWorldToObjectTransforms() { return _instanceWorldToObjectMatrixTransforms.data(); }
+    float*                                        getPrevInstanceTransforms() { return _prevInstanceTransforms.data(); }
+    int                                           getBLASCount() { return _blas.size(); }
+    void                                          buildAccelerationStructures();
+    UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize);
+    void                                          buildBLAS(Entity* entity);
 
     void createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries);
     void createUnboundedAttributeBufferSrvDescriptorTable(UINT descriptorTableEntries);
@@ -210,9 +139,9 @@ class RayTracingPipelineShader : public PipelineShader
     void addSRVToUnboundedAttributeBufferDescriptorTable(D3DBuffer* vertexBuffer, UINT vertexCount, UINT offset);
     void addSRVToUnboundedIndexBufferDescriptorTable(D3DBuffer* indexBuffer, UINT indexCount, UINT offset);
 
-    void resetUnboundedTextureDescriptorTable() { _unboundedTextureSrvIndex = 0; }
+    void resetUnboundedTextureDescriptorTable()         { _unboundedTextureSrvIndex = 0; }
     void resetUnboundedAttributeBufferDescriptorTable() { _unboundedAttributeBufferSrvIndex = 0; }
-    void resetUnboundedIndexBufferDescriptorTable() { _unboundedIndexBufferSrvIndex = 0; }
+    void resetUnboundedIndexBufferDescriptorTable()     { _unboundedIndexBufferSrvIndex = 0; }
 
     void updateTextureUnbounded(int descriptorTableIndex,
                                 int textureUnit,
