@@ -101,13 +101,13 @@ ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getRTASDescHeap()
 
 D3D12_GPU_VIRTUAL_ADDRESS RayTracingPipelineShader::getRTASGPUVA()
 {
-    if (_topLevelAccelerationStructure[_topLevelIndex] == nullptr)
+    if (_tlasResultBuffer[_topLevelIndex] == nullptr)
     {
         return 0;
     }
     else
     {
-        return _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
+        return _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
     }
 }
 
@@ -118,9 +118,8 @@ ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getDescHeap()
 
 std::map<Model*, std::vector<AssetTexture*>>& RayTracingPipelineShader::getSceneTextures()
 {
-    return _modelTextures;
+    return _texturesMap;
 }
-
 
 void RayTracingPipelineShader::updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes)
 {
@@ -286,23 +285,23 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
         (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexBuffer.StrideInBytes = sizeof(CompressedAttribute);
 
         Model* bufferModel         = entity->getModel();
-        _indexBuffer[bufferModel] .push_back(new D3DBuffer());
-        _vertexBuffer[bufferModel].push_back(new D3DBuffer());
+        _indexBufferMap[bufferModel].push_back(new D3DBuffer());
+        _vertexBufferMap[bufferModel].push_back(new D3DBuffer());
 
-        _indexBuffer[bufferModel].back()->indexBufferFormat = indexFormat;
+        _indexBufferMap[bufferModel].back()->indexBufferFormat = indexFormat;
 
-        _vertexBuffer[bufferModel].back()->count =
+        _vertexBufferMap[bufferModel].back()->count =
             (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexCount;
-        _indexBuffer[bufferModel].back()->count =
+        _indexBufferMap[bufferModel].back()->count =
             (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexCount;
-        _indexBuffer[bufferModel].back()->resource =
+        _indexBufferMap[bufferModel].back()->resource =
             (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
-        _vertexBuffer[bufferModel].back()->resource =
+        _vertexBufferMap[bufferModel].back()->resource =
             (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
-        _vertexBuffer[bufferModel].back()->nameId = entity->getModel()->getName();
+        _vertexBufferMap[bufferModel].back()->nameId = entity->getModel()->getName();
 
-        _vertexBuffer[bufferModel].back()->offset = vertexAndBufferStrides[i].first;
-        _indexBuffer[bufferModel].back()->offset  = vertexAndBufferStrides[i].second;
+        _vertexBufferMap[bufferModel].back()->offset = vertexAndBufferStrides[i].first;
+        _indexBufferMap[bufferModel].back()->offset = vertexAndBufferStrides[i].second;
 
         auto materialTransmittance = entity->getModel()->getMaterial(i).transmittance;
 
@@ -337,11 +336,11 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
             for (auto textureNames : materialNames)
             {
                 AssetTexture* texture = textureBroker->getTexture(textureNames.albedo);
-                _modelTextures[bufferModel].push_back(texture);
+                _texturesMap[bufferModel].push_back(texture);
                 texture = textureBroker->getTexture(textureNames.normal);
-                _modelTextures[bufferModel].push_back(texture);
+                _texturesMap[bufferModel].push_back(texture);
                 texture = textureBroker->getTexture(textureNames.roughnessMetallic);
-                _modelTextures[bufferModel].push_back(texture);
+                _texturesMap[bufferModel].push_back(texture);
             }
 
             _materialMap[bufferModel] = 0;
@@ -363,7 +362,8 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
     _bottomLevelBuildModels.push_back(entity->getModel());
 }
 
-void RayTracingPipelineShader::_updateTLASData(int tlasCount)
+void RayTracingPipelineShader::_updateTLASData(int                                          tlasCount,
+                                               std::vector<D3D12_RAYTRACING_INSTANCE_DESC>& instanceDescriptionCPUBuffer)
 {
     if (tlasCount == 0)
     {
@@ -388,15 +388,15 @@ void RayTracingPipelineShader::_updateTLASData(int tlasCount)
     _dxrDevice->GetRaytracingAccelerationStructurePrebuildInfo(&topLevelInputs,
                                                                &topLevelPrebuildInfo);
     bool newTopLevelAllocation = false;
-    if ((_tlScratchResource[_topLevelIndex] == nullptr) || 
-        (_topLevelAccelerationStructure[_topLevelIndex] == nullptr) ||
-        (_instanceDescs[_topLevelIndex] == nullptr))
+    if ((_tlasScratchBuffer[_topLevelIndex] == nullptr) || 
+        (_tlasResultBuffer[_topLevelIndex] == nullptr) ||
+        (_instanceDescriptionGPUBuffer[_topLevelIndex] == nullptr))
     {
         newTopLevelAllocation = true;
     }
-    else if ((topLevelPrebuildInfo.ScratchDataSizeInBytes >_tlScratchResource[_topLevelIndex]->GetDesc().Width) ||
-             (topLevelPrebuildInfo.ResultDataMaxSizeInBytes > _topLevelAccelerationStructure[_topLevelIndex]->GetDesc().Width)||
-             (_instanceDescs[_topLevelIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount)))
+    else if ((topLevelPrebuildInfo.ScratchDataSizeInBytes >_tlasScratchBuffer[_topLevelIndex]->GetDesc().Width) ||
+             (topLevelPrebuildInfo.ResultDataMaxSizeInBytes > _tlasResultBuffer[_topLevelIndex]->GetDesc().Width)||
+             (_instanceDescriptionGPUBuffer[_topLevelIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount)))
     {
         newTopLevelAllocation = true;
         _topLevelIndex++;
@@ -410,46 +410,46 @@ void RayTracingPipelineShader::_updateTLASData(int tlasCount)
                                                                    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
         _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-                                            &tlasScratchBufferDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                            nullptr, IID_PPV_ARGS(&_tlScratchResource[_topLevelIndex]));
+                                            &tlasScratchBufferDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+                                            IID_PPV_ARGS(&_tlasScratchBuffer[_topLevelIndex]));
 
         auto tlasBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ResultDataMaxSizeInBytes * TlasAllocationMultiplier,
                                                             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
         _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
                                             &tlasBufferDesc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-                                            nullptr, IID_PPV_ARGS(&_topLevelAccelerationStructure[_topLevelIndex]));
+                                            nullptr, IID_PPV_ARGS(&_tlasResultBuffer[_topLevelIndex]));
 
         // Create view of SRV for shader access
         CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(_rtASDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
         ZeroMemory(&_rtASSrvDesc, sizeof(_rtASSrvDesc));
         _rtASSrvDesc.Shader4ComponentMapping                  = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         _rtASSrvDesc.ViewDimension                            = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-        _rtASSrvDesc.RaytracingAccelerationStructure.Location = _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
+        _rtASSrvDesc.RaytracingAccelerationStructure.Location = _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
         _dxrDevice->CreateShaderResourceView(nullptr, &_rtASSrvDesc, hDescriptor);
 
         allocateUploadBuffer(_dxrDevice.Get(), nullptr,
                                 sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount *
                                     TlasAllocationMultiplier,
-                                &_instanceDescs[_topLevelIndex], L"InstanceDescs");
+                                &_instanceDescriptionGPUBuffer[_topLevelIndex], L"instanceDescriptionGPUBuffer");
     }
 
     BYTE*         mappedData = nullptr;
     CD3DX12_RANGE readRange(0, 0);
-    _instanceDescs[_topLevelIndex]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+    _instanceDescriptionGPUBuffer[_topLevelIndex]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
 
-    memcpy(&mappedData[0], _instanceDesc.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount);
+    memcpy(&mappedData[0], instanceDescriptionCPUBuffer.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount);
 
     // Top Level Acceleration Structure desc
     topLevelBuildDesc.DestAccelerationStructureData =
-        _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
+        _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
     topLevelBuildDesc.ScratchAccelerationStructureData =
-        _tlScratchResource[_topLevelIndex]->GetGPUVirtualAddress();
-    topLevelBuildDesc.Inputs.InstanceDescs = _instanceDescs[_topLevelIndex]->GetGPUVirtualAddress();
+        _tlasScratchBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+    topLevelBuildDesc.Inputs.InstanceDescs = _instanceDescriptionGPUBuffer[_topLevelIndex]->GetGPUVirtualAddress();
 
     commandList->BuildRaytracingAccelerationStructure(&topLevelBuildDesc, 0, nullptr);
     commandList->ResourceBarrier(
-        1, &CD3DX12_RESOURCE_BARRIER::UAV(_topLevelAccelerationStructure[_topLevelIndex].Get()));
+        1, &CD3DX12_RESOURCE_BARRIER::UAV(_tlasResultBuffer[_topLevelIndex].Get()));
 }
 
 void RayTracingPipelineShader::_updateInstanceData()
@@ -548,7 +548,7 @@ void RayTracingPipelineShader::_updateBlasData()
     auto    commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
                                                                 : DXLayer::instance()->getCmdList();
 
-    constexpr bool randomInsertAndRemoveEntities = true;
+    constexpr bool randomInsertAndRemoveEntities = false;
 
     // random floats between -1.0 - 1.0
     std::random_device               rd;
@@ -648,7 +648,7 @@ void RayTracingPipelineShader::_updateBlasData()
                                         rotation, 4000);
 
             // Does a vertex buffer exist for this blas
-            bool isNewBLAS = _vertexBuffer.find((*entity)->getModel()) == _vertexBuffer.end();
+            bool isNewBLAS = _vertexBufferMap.find((*entity)->getModel()) == _vertexBufferMap.end();
 
             if (isNewBLAS)
             {
@@ -659,7 +659,7 @@ void RayTracingPipelineShader::_updateBlasData()
         else
         {
             // Does a vertex buffer exist for this blas
-            bool isNewBLAS = _vertexBuffer.find((*entity)->getModel()) == _vertexBuffer.end();
+            bool isNewBLAS = _vertexBufferMap.find((*entity)->getModel()) == _vertexBufferMap.end();
 
             if (isNewBLAS)
             {
@@ -696,15 +696,15 @@ void RayTracingPipelineShader::_updateBlasData()
     bool blasRemoved = false;
     for (auto model : modelCountsInEntities)
     {
-        if (model.second == 0 && _blas[model.first] != nullptr)
+        if (model.second == 0 && _blasMap[model.first] != nullptr)
         {
-            _vertexBuffer.erase(_vertexBuffer.find(model.first));
-            _indexBuffer.erase(_indexBuffer.find(model.first));
-            _modelTextures.erase(_modelTextures.find(model.first));
+            _vertexBufferMap.erase(_vertexBufferMap.find(model.first));
+            _indexBufferMap.erase(_indexBufferMap.find(model.first));
+            _texturesMap.erase(_texturesMap.find(model.first));
             // Deallocate the memory first
-            RTCompaction::RemoveAccelerationStructures(&_blas[model.first], 1);
+            RTCompaction::RemoveAccelerationStructures(&_blasMap[model.first], 1);
             // Remove the blas entry from the list
-            _blas.erase(model.first);
+            _blasMap.erase(model.first);
             _attributeMap.erase(model.first);
             _transmissionMap.erase(model.first);
             _materialMap.erase(model.first);
@@ -738,7 +738,7 @@ void RayTracingPipelineShader::_updateBlasData()
 
         for (int asBufferIndex = 0; asBufferIndex < _bottomLevelBuildModels.size(); asBufferIndex++)
         {
-            _blas[_bottomLevelBuildModels[asBufferIndex]] = &buffers[asBufferIndex];
+            _blasMap[_bottomLevelBuildModels[asBufferIndex]] = &buffers[asBufferIndex];
         }
 
         commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
@@ -779,16 +779,16 @@ void RayTracingPipelineShader::buildAccelerationStructures()
     memcpy(_prevInstanceTransforms.data(), _instanceTransforms.data(), sizeof(float) * 12 * entityList->size());
 
     // Create an instance desc for the dynamic and static bottom levels
-    _instanceDesc.resize(0);
+    std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescriptionCPUBuffer(entityList->size());
 
     int instanceDescIndex = 0;
     for (auto entity : *entityList)
     {
-        bool isValidBlas = _blas.find(entity->getModel()) != _blas.end();
+        bool isValidBlas = _blasMap.find(entity->getModel()) != _blasMap.end();
 
         if (isValidBlas)
         {
-            _instanceDesc.push_back(D3D12_RAYTRACING_INSTANCE_DESC());
+            instanceDescriptionCPUBuffer.push_back(D3D12_RAYTRACING_INSTANCE_DESC());
 
             auto worldSpaceTransform = entity->getWorldSpaceTransform();
             memcpy(&_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
@@ -806,15 +806,17 @@ void RayTracingPipelineShader::buildAccelerationStructures()
             memcpy(&_instanceNormalMatrixTransforms[offset + 0], normalMatrix.getFlatBuffer() + 0, normalTransformOffset / 3);
             memcpy(&_instanceNormalMatrixTransforms[offset + 3], normalMatrix.getFlatBuffer() + 4, normalTransformOffset / 3);
             memcpy(&_instanceNormalMatrixTransforms[offset + 6], normalMatrix.getFlatBuffer() + 8, normalTransformOffset / 3);
-            memcpy(&_instanceDesc[instanceDescIndex].Transform, &_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))], sizeof(float) * 12);
+            memcpy(&instanceDescriptionCPUBuffer[instanceDescIndex].Transform,
+                   &_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
+                   sizeof(float) * 12);
 
             // do not overwrite geometry flags for bottom levels, this caused the non opaque and
             // opaqueness of bottom levels to be random
-            _instanceDesc[instanceDescIndex].Flags                               = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-            _instanceDesc[instanceDescIndex].InstanceMask                        = 1;
-            _instanceDesc[instanceDescIndex].InstanceID                          = 0;
-            _instanceDesc[instanceDescIndex].InstanceContributionToHitGroupIndex = 0;
-            _instanceDesc[instanceDescIndex].AccelerationStructure               = _blas[entity->getModel()]->GetASBuffer();
+            instanceDescriptionCPUBuffer[instanceDescIndex].Flags                               = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceMask                        = 1;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceID                          = 0;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceContributionToHitGroupIndex = 0;
+            instanceDescriptionCPUBuffer[instanceDescIndex].AccelerationStructure               = _blasMap[entity->getModel()]->GetASBuffer();
 
             instanceDescIndex++;
 
@@ -823,8 +825,19 @@ void RayTracingPipelineShader::buildAccelerationStructures()
         }
     }
 
-    _updateTLASData(instanceDescIndex);
+    _updateTLASData(instanceDescIndex, instanceDescriptionCPUBuffer);
 }
+
+void RayTracingPipelineShader::resetUnboundedTextureDescriptorTable()                   { _unboundedTextureSrvIndex = 0; }
+void RayTracingPipelineShader::resetUnboundedAttributeBufferDescriptorTable()           { _unboundedAttributeBufferSrvIndex = 0; }
+void RayTracingPipelineShader::resetUnboundedIndexBufferDescriptorTable()               { _unboundedIndexBufferSrvIndex = 0; }
+std::map<Model*, std::vector<D3DBuffer*>>& RayTracingPipelineShader::getVertexBuffers() { return _vertexBufferMap; }
+std::map<Model*, std::vector<D3DBuffer*>>& RayTracingPipelineShader::getIndexBuffers()  { return _indexBufferMap; }
+float* RayTracingPipelineShader::getInstanceNormalTransforms()                          { return _instanceNormalMatrixTransforms.data(); }
+float* RayTracingPipelineShader::getWorldToObjectTransforms()                           { return _instanceWorldToObjectMatrixTransforms.data(); }
+float* RayTracingPipelineShader::getPrevInstanceTransforms()                            { return _prevInstanceTransforms.data(); }
+int    RayTracingPipelineShader::getBLASCount()                                         { return _blasMap.size(); }
+
 void RayTracingPipelineShader::createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries)
 {
     auto device = DXLayer::instance()->getDevice();

@@ -874,7 +874,6 @@ void BuildGltfMeshes(const Document*           document,
                     camSettings.position         = cameraPosition;
                     camSettings.rotation =
                         Vector4(GetRoll(quaternion), 180.0 + GetPitch(quaternion), -GetYaw(quaternion));
-                    camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
                 }
             }
 
@@ -926,7 +925,16 @@ void BuildGltfMeshes(const Document*           document,
                 }
 
                 auto viewMan = ModelBroker::getViewManager();
+                camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
                 viewMan->setCamera(camSettings, &waypoints);
+            }
+
+            // If camera has no keyframes then just load camera position with no waypoints
+            if (document->animations.Elements().size() == 0)
+            {
+                auto viewMan = ModelBroker::getViewManager();
+                camSettings.type = ViewEventDistributor::CameraType::GOD;
+                viewMan->setCamera(camSettings, nullptr);
             }
         }
     }

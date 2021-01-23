@@ -1,25 +1,4 @@
 {
-    "camera": {
-        "bobble": false,
-        "lock_offset": {
-            "x": 0.0,
-            "y": 30.0,
-            "z": 2.0
-        },
-        "locked": "BOAT1",
-        "path": "../config/paths/cometrollercoaster_vp.txt",
-        "position": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0
-        },
-        "rotation": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0
-        },
-        "type": "vector"
-    },
     "emitters": [],
     "commented": [
         {
