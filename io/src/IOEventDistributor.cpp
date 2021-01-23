@@ -123,6 +123,30 @@ void IOEventDistributor::_keyboardUpdate(GLFWwindow* window, int key, int scanco
                                          int mods)
 {
 
+    if (action == 1)
+    {
+
+        // Escape key pressed, hard exit no cleanup, TODO FIX THIS!!!!
+        if (key == 27)
+        {
+            _quit = true;
+            exit(0);
+        }
+
+        IOEvents::updateKeyboard(key, 0, 0);
+    }
+    else if (action == 0)
+    {
+        IOEvents::releaseKeyboard(key, 0, 0);
+    }
+    else if (action == 2)
+    {
+        EngineStateFlags engineStateFlags = EngineState::getEngineState();
+        if (engineStateFlags.worldEditorModeEnabled)
+        {
+            IOEvents::updateKeyboard(key, 0, 0);
+        }
+    }
 }
 
 // One frame draw update call

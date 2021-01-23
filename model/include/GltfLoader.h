@@ -42,31 +42,11 @@ enum class ModelLoadType
 
 class GltfLoader
 {
-    using TileTextures   = std::map<std::string, std::vector<std::string>>;
-    using ClonedCount    = std::map<std::string, unsigned int>;
-    using ClonedMatrices = std::map<std::string, Matrix>;
-    using TextureStrides = std::vector<std::pair<int, int>>;
-
-    ClonedMatrices  _clonedWorldTransforms;
-    Matrix          _objectSpaceTransform;
-    ClonedCount     _clonedInstances;
-    bool            _copiedOverFlag;
-    TileTextures    _tileTextures;
-    int             _strideIndex;
-    std::string     _fileName;
-
-    std::vector<float>    _vertices;
-    std::vector<float>    _normals;
-    std::vector<float>    _textures;
-    std::vector<uint32_t> _indices;
+    std::string _fileName;
 
   public:
     GltfLoader(std::string name);
     ~GltfLoader();
 
-    void buildTriangles(Model* model);
-    void buildCollection(Model* model, ModelLoadType loadType);
-
-    std::string getModelName();
-    Matrix      getObjectSpaceTransform();
+    void buildModels(Model* model, ModelLoadType loadType);
 };

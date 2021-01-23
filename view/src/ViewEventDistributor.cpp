@@ -12,6 +12,58 @@
 #include <cmath>
 #include <iostream>
 
+/* Printable keys */
+#define KEY_SPACE 32
+#define KEY_APOSTROPHE 39 /* ' */
+#define KEY_COMMA 44      /* , */
+#define KEY_MINUS 45      /* - */
+#define KEY_PERIOD 46     /* . */
+#define KEY_SLASH 47      /* / */
+#define KEY_0 48
+#define KEY_1 49
+#define KEY_2 50
+#define KEY_3 51
+#define KEY_4 52
+#define KEY_5 53
+#define KEY_6 54
+#define KEY_7 55
+#define KEY_8 56
+#define KEY_9 57
+#define KEY_SEMICOLON 59 /* ; */
+#define KEY_EQUAL 61     /* = */
+#define KEY_A 65
+#define KEY_B 66
+#define KEY_C 67
+#define KEY_D 68
+#define KEY_E 69
+#define KEY_F 70
+#define KEY_G 71
+#define KEY_H 72
+#define KEY_I 73
+#define KEY_J 74
+#define KEY_K 75
+#define KEY_L 76
+#define KEY_M 77
+#define KEY_N 78
+#define KEY_O 79
+#define KEY_P 80
+#define KEY_Q 81
+#define KEY_R 82
+#define KEY_S 83
+#define KEY_T 84
+#define KEY_U 85
+#define KEY_V 86
+#define KEY_W 87
+#define KEY_X 88
+#define KEY_Y 89
+#define KEY_Z 90
+#define KEY_LEFT_BRACKET 91  /* [ */
+#define KEY_BACKSLASH 92     /* \ */
+#define KEY_RIGHT_BRACKET 93 /* ] */
+#define KEY_GRAVE_ACCENT 96  /* ` */
+#define KEY_WORLD_1 161      /* non-US #1 */
+#define KEY_WORLD_2 162      /* non-US #2 */
+
 ViewEventDistributor::ViewEventDistributor() { _viewEvents = new ViewEvents(); }
 
 ViewEventDistributor::ViewEventDistributor(int* argc, char** argv, unsigned int viewportWidth,
@@ -257,6 +309,150 @@ void ViewEventDistributor::_updateKeyboard(int key, int x, int y)
     if (_gameState.gameModeEnabled)
     {
         _currCamera->setViewState(key);
+
+        if (!_trackedState && (key == KEY_W || key == KEY_S || key == KEY_A ||
+                               key == KEY_D || key == KEY_E || key == KEY_C))
+        {
+
+            Vector4     trans;
+            const float velMagnitude = 4000.0f;
+
+            if (key == KEY_W)
+            { // forward w
+                trans = Vector4(_inverseRotation * Vector4(0.0, 0.0, velMagnitude));
+            }
+            else if (key == KEY_S)
+            { // backward s
+                trans = Vector4(_inverseRotation * Vector4(0.0, 0.0, -velMagnitude));
+            }
+            else if (key == KEY_D)
+            { // right d
+                trans = Vector4(_inverseRotation * Vector4(velMagnitude, 0.0, 0.0));
+            }
+            else if (key == KEY_A)
+            { // left a
+                trans = Vector4(_inverseRotation * Vector4(-velMagnitude, 0.0, 0.0));
+            }
+            else if (key == KEY_E)
+            { // up e
+                trans = Vector4(_inverseRotation * Vector4(0.0, velMagnitude, 0.0));
+            }
+            else if (key == KEY_C)
+            { // down c
+                trans = Vector4(_inverseRotation * Vector4(0.0, -velMagnitude, 0.0));
+            }
+
+            StateVector* state = nullptr;
+            // If not in god camera view mode then push view changes to the model
+            // for full control of a model's movements
+            if (!_godState && _entityIndex < _entityList.size())
+            {
+                state = _entityList[_entityIndex]->getStateVector();
+            }
+            else if (_godState)
+            {
+                state = _currCamera->getState();
+                state->setActive(true);
+            }
+
+            // Define lambda equation
+            auto lamdaEq = [=](float t) -> Vector4 {
+                if (t > 1.0f)
+                {
+                    return trans;
+                }
+                else
+                {
+                    return static_cast<Vector4>(trans) * t;
+                }
+            };
+            // lambda function container that manages force model
+            // Last forever in intervals of 5 milliseconds
+            FunctionState* func = new FunctionState(
+                std::bind(&StateVector::setForce, state, std::placeholders::_1), lamdaEq, 5);
+
+            // Keep track to kill function when key is released
+            if (_keyboardState.find(key) != _keyboardState.end())
+            {
+                _keyboardState[key]->kill();
+                delete _keyboardState[key];
+                _keyboardState.erase(key); // erase by key
+            }
+            _keyboardState[key] = func;
+        }
+        else if (key == KEY_Y)
+        {
+            static const double mouseSensitivity = 15.5f;
+            Vector4 newRot = Vector4(0.0, static_cast<float>(mouseSensitivity * 200.0f), 0.0);
+            _currCamera->getState()->setTorque(newRot);
+
+            // If not in god camera view mode then push view changes to the model for full control
+            // of a model's movements
+            if (!_godState)
+            {
+                _currCamera->setViewMatrix(_thirdPersonTranslation * _currCamera->getView());
+            }
+            _currCamera->getState()->setActive(true);
+        }
+        else if (key == KEY_G)
+        { // God's eye view change g
+            _godState     = true;
+            _trackedState = false;
+
+            if (_currCamera == _trackedCamera)
+            {
+                StateVector* state = _trackedCamera->getState();
+                state->setActive(false);
+                state->setContact(true);
+                state->setTorque(Vector4(0, 0, 0));
+                state->setForce(Vector4(0, 0, 0));
+                state->setLinearAcceleration(Vector4(0, 0, 0));
+                state->setLinearVelocity(Vector4(0, 0, 0));
+                state->setAngularAcceleration(Vector4(0, 0, 0));
+                state->setAngularVelocity(Vector4(0, 0, 0));
+                _godCamera.setState(state);
+                _currCamera = &_godCamera;
+            }
+        }
+        else if (key == KEY_T)
+        {
+            std::string vec_file = "../assets/paths/path.txt";
+            _vectorCamera.setVectorsFromFile(vec_file);
+            _trackedState = true;
+            _godState     = false;
+            _waypointCamera.reset();
+            _vectorCamera.reset();
+            _currCamera = _trackedCamera;
+            _currCamera->getState()->setGravity(false);
+            _currCamera->getState()->setActive(true);
+
+            setProjection(IOEventDistributor::screenPixelWidth,
+                          IOEventDistributor::screenPixelHeight, 0.1f, 5000.0f);
+            setView(Matrix::translation(584.0f, -5.0f, 20.0f), Matrix::rotationAroundY(-180.0f),
+                    Matrix());
+
+            StateVector* state = _currCamera->getState();
+            _updateView(_currCamera, state->getLinearPosition(), state->getAngularPosition());
+        }
+        else if (key == KEY_Q)
+        { // Cycle through model's view point q
+
+            if (_entityList.size() > 0)
+            {
+                _entityIndex++; // increment to the next model when q is pressed again
+                if (_entityIndex >= _entityList.size())
+                {
+                    _entityIndex = 0;
+                }
+
+                _trackedState = false;
+                _godState     = false;
+                _currCamera   = &_viewCamera;
+
+                StateVector* state = _entityList[_entityIndex]->getStateVector();
+                _updateView(_currCamera, state->getLinearPosition(), state->getAngularPosition());
+            }
+        }
     }
 }
 

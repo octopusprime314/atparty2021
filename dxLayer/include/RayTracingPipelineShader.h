@@ -37,11 +37,16 @@ struct GpuToCpuBuffers
 #define MaxInstancesForRayTracing  10000
 // 4000 BLAS count using 3 textures each
 #define MaxBLASSRVsForRayTracing   4000 * 3
+#define TlasAllocationMultiplier   10
 
 class RayTracingPipelineShader
 {
     UINT _allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
                              UINT                         descriptorIndexToUse = UINT_MAX);
+
+    void _updateTLASData(int tlasCount);
+    void _updateInstanceData();
+    void _updateBlasData();
 
     std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS> _bottomLevelBuildDescs;
     std::vector<Model*>                                               _bottomLevelBuildModels;

@@ -32,13 +32,13 @@ Model::Model(std::string name, ModelClass classId)
         ModelLoadType loadType = (name.find("scene") != std::string::npos) ? ModelLoadType::Scene :
                                                                              ModelLoadType::Collection;
 
-        auto thread = new std::thread(&GltfLoader::buildCollection, _gltfLoader, this, loadType);
+        auto thread = new std::thread(&GltfLoader::buildModels, _gltfLoader, this, loadType);
         thread->detach();
         _isLoaded = true;
     }
     else
     {
-        auto thread = new std::thread(&GltfLoader::buildTriangles, _gltfLoader, this);
+        auto thread = new std::thread(&GltfLoader::buildModels, _gltfLoader, this, ModelLoadType::SingleModel);
         thread->detach();
     }
 

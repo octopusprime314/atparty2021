@@ -101,7 +101,14 @@ ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getRTASDescHeap()
 
 D3D12_GPU_VIRTUAL_ADDRESS RayTracingPipelineShader::getRTASGPUVA()
 {
-    return _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
+    if (_topLevelAccelerationStructure[_topLevelIndex] == nullptr)
+    {
+        return 0;
+    }
+    else
+    {
+        return _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
+    }
 }
 
 ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getDescHeap()
@@ -356,103 +363,267 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
     _bottomLevelBuildModels.push_back(entity->getModel());
 }
 
-void RayTracingPipelineShader::buildAccelerationStructures()
+void RayTracingPipelineShader::_updateTLASData(int tlasCount)
 {
-    auto viewEventDistributor = EngineManager::instance()->getViewManager();
-    auto entityList    = EngineManager::instance()->getEntityList();
-    auto textureBroker = TextureBroker::instance();
-    auto dxLayer       = DXLayer::instance();
-    auto commandList   = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
-                                                      : DXLayer::instance()->getCmdList();
+    if (tlasCount == 0)
+    {
+        return;
+    }
+    auto dxLayer = DXLayer::instance();
+    auto commandList = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
+                                                    : DXLayer::instance()->getCmdList();
 
-    auto device = dxLayer->getDevice();
-    device->QueryInterface(IID_PPV_ARGS(&_dxrDevice));
+    CD3DX12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 
-    // Increment next frame and let the library internally manage compaction and releasing memory
-    RTCompaction::NextFrame(_dxrDevice.Get(), commandList.Get());
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC    topLevelBuildDesc = {};
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& topLevelInputs = topLevelBuildDesc.Inputs;
+    topLevelInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+    topLevelInputs.Flags    = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+    topLevelInputs.NumDescs = static_cast<UINT>(tlasCount);
+    topLevelInputs.pGeometryDescs = nullptr;
+    topLevelInputs.Type           = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 
-    constexpr int transformOffset          = sizeof(float) * 12;
-    constexpr int normalTransformOffset    = sizeof(float) * 9;
-    constexpr int tlasAllocationMultiplier = 10;
-    Vector4       cameraPos                = viewEventDistributor->getCameraPos();
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO topLevelPrebuildInfo = {};
 
-    _attributeMapping.clear();
-    _materialMapping.clear();
-    _bottomLevelBuildDescs.clear();
-    _bottomLevelBuildModels.clear();
+    _dxrDevice->GetRaytracingAccelerationStructurePrebuildInfo(&topLevelInputs,
+                                                               &topLevelPrebuildInfo);
+    bool newTopLevelAllocation = false;
+    if ((_tlScratchResource[_topLevelIndex] == nullptr) || 
+        (_topLevelAccelerationStructure[_topLevelIndex] == nullptr) ||
+        (_instanceDescs[_topLevelIndex] == nullptr))
+    {
+        newTopLevelAllocation = true;
+    }
+    else if ((topLevelPrebuildInfo.ScratchDataSizeInBytes >_tlScratchResource[_topLevelIndex]->GetDesc().Width) ||
+             (topLevelPrebuildInfo.ResultDataMaxSizeInBytes > _topLevelAccelerationStructure[_topLevelIndex]->GetDesc().Width)||
+             (_instanceDescs[_topLevelIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount)))
+    {
+        newTopLevelAllocation = true;
+        _topLevelIndex++;
+
+        _topLevelIndex %= CMD_LIST_NUM;
+    }
+
+    if (newTopLevelAllocation)
+    {
+        auto tlasScratchBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ScratchDataSizeInBytes * TlasAllocationMultiplier,
+                                                                   D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+        _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                            &tlasScratchBufferDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                            nullptr, IID_PPV_ARGS(&_tlScratchResource[_topLevelIndex]));
+
+        auto tlasBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ResultDataMaxSizeInBytes * TlasAllocationMultiplier,
+                                                            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+        _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                            &tlasBufferDesc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
+                                            nullptr, IID_PPV_ARGS(&_topLevelAccelerationStructure[_topLevelIndex]));
+
+        // Create view of SRV for shader access
+        CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(_rtASDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+        ZeroMemory(&_rtASSrvDesc, sizeof(_rtASSrvDesc));
+        _rtASSrvDesc.Shader4ComponentMapping                  = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        _rtASSrvDesc.ViewDimension                            = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+        _rtASSrvDesc.RaytracingAccelerationStructure.Location = _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
+        _dxrDevice->CreateShaderResourceView(nullptr, &_rtASSrvDesc, hDescriptor);
+
+        allocateUploadBuffer(_dxrDevice.Get(), nullptr,
+                                sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount *
+                                    TlasAllocationMultiplier,
+                                &_instanceDescs[_topLevelIndex], L"InstanceDescs");
+    }
+
+    BYTE*         mappedData = nullptr;
+    CD3DX12_RANGE readRange(0, 0);
+    _instanceDescs[_topLevelIndex]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+
+    memcpy(&mappedData[0], _instanceDesc.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount);
+
+    // Top Level Acceleration Structure desc
+    topLevelBuildDesc.DestAccelerationStructureData =
+        _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
+    topLevelBuildDesc.ScratchAccelerationStructureData =
+        _tlScratchResource[_topLevelIndex]->GetGPUVirtualAddress();
+    topLevelBuildDesc.Inputs.InstanceDescs = _instanceDescs[_topLevelIndex]->GetGPUVirtualAddress();
+
+    commandList->BuildRaytracingAccelerationStructure(&topLevelBuildDesc, 0, nullptr);
+    commandList->ResourceBarrier(
+        1, &CD3DX12_RESOURCE_BARRIER::UAV(_topLevelAccelerationStructure[_topLevelIndex].Get()));
+}
+
+void RayTracingPipelineShader::_updateInstanceData()
+{
+    auto entityList = EngineManager::instance()->getEntityList();
+
+    bool newInstanceMappingAllocation = false;
+    if ((_instanceIndexToMaterialMappingGPUBuffer == nullptr) ||
+        (_instanceIndexToAttributeMappingGPUBuffer == nullptr) ||
+        (_instanceNormalMatrixTransformsGPUBuffer == nullptr) ||
+        (_instanceTransmissionMappingGPUBuffer    == nullptr))
+    {
+        _instanceIndexToMaterialMappingGPUBuffer  = new D3DBuffer();
+        _instanceIndexToAttributeMappingGPUBuffer = new D3DBuffer();
+        _instanceNormalMatrixTransformsGPUBuffer  = new D3DBuffer();
+        _instanceTransmissionMappingGPUBuffer     = new D3DBuffer();
+
+        newInstanceMappingAllocation = true;
+    }
+    else if (_instanceIndexToMaterialMappingGPUBuffer->count < entityList->size())
+    {
+        _instanceMappingIndex++;
+        _instanceMappingIndex %= CMD_LIST_NUM;
+
+        newInstanceMappingAllocation = true;
+    }
+
+    if (newInstanceMappingAllocation)
+    {
+        auto newInstanceSize = (_instanceIndexToMaterialMappingGPUBuffer->count == 0)
+                                   ? entityList->size()
+                                   : _instanceIndexToMaterialMappingGPUBuffer->count * TlasAllocationMultiplier;
+
+        constexpr auto transformOffset                    = 12; // 3x4
+        UINT           instanceTransformSizeInBytes       = newInstanceSize * transformOffset;
+        constexpr auto normalTransformOffset              = 9; // 3x3
+        UINT           instanceNormalTransformSizeInBytes = newInstanceSize * normalTransformOffset;
+
+        _instanceNormalMatrixTransforms.resize(instanceNormalTransformSizeInBytes);
+        _instanceWorldToObjectMatrixTransforms.resize(instanceTransformSizeInBytes);
+        _instanceTransforms.resize(instanceTransformSizeInBytes);
+        _prevInstanceTransforms.resize(instanceTransformSizeInBytes);
+
+        allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
+                             sizeof(UINT) * newInstanceSize,
+                             &_instanceIndexToMaterialMappingUpload[_instanceMappingIndex],
+                             L"instanceIndexToMaterial");
+
+        _instanceIndexToMaterialMappingGPUBuffer->resource =
+            _instanceIndexToMaterialMappingUpload[_instanceMappingIndex];
+        _instanceIndexToMaterialMappingGPUBuffer->count = newInstanceSize;
+
+        createBufferSRV(_instanceIndexToMaterialMappingGPUBuffer, newInstanceSize, sizeof(UINT));
+
+        allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
+                             sizeof(UINT) * newInstanceSize,
+                             &_instanceIndexToAttributeMappingUpload[_instanceMappingIndex],
+                             L"instanceIndexToAttribute");
+
+        _instanceIndexToAttributeMappingGPUBuffer->resource =
+            _instanceIndexToAttributeMappingUpload[_instanceMappingIndex];
+        _instanceIndexToAttributeMappingGPUBuffer->count = newInstanceSize;
+
+        createBufferSRV(_instanceIndexToAttributeMappingGPUBuffer, newInstanceSize, sizeof(UINT));
+
+        allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
+                             sizeof(float) * newInstanceSize,
+                             &_instanceTransmissionMappingUpload[_instanceMappingIndex],
+                             L"instanceTransmission");
+
+        _instanceTransmissionMappingGPUBuffer->resource =
+             _instanceTransmissionMappingUpload[_instanceMappingIndex];
+        _instanceTransmissionMappingGPUBuffer->count = newInstanceSize;
+
+        createBufferSRV(_instanceTransmissionMappingGPUBuffer, newInstanceSize, sizeof(float));
+
+        allocateUploadBuffer(
+            DXLayer::instance()->getDevice().Get(), nullptr, sizeof(float) * 9 * newInstanceSize,
+            &_instanceNormalMatrixTransformsUpload[_instanceMappingIndex], L"instanceNormals");
+
+        _instanceNormalMatrixTransformsGPUBuffer->resource =
+            _instanceNormalMatrixTransformsUpload[_instanceMappingIndex];
+        _instanceNormalMatrixTransformsGPUBuffer->count = newInstanceSize;
+
+        createBufferSRV(_instanceNormalMatrixTransformsGPUBuffer, 9 * newInstanceSize,
+                        sizeof(UINT));
+    }
+}
+
+void RayTracingPipelineShader::_updateBlasData()
+{
+    auto    viewEventDistributor = EngineManager::instance()->getViewManager();
+    auto    entityList           = EngineManager::instance()->getEntityList();
+    Vector4 cameraPos            = viewEventDistributor->getCameraPos();
+    auto    dxLayer              = DXLayer::instance();
+    auto    commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
+                                                                : DXLayer::instance()->getCmdList();
+
+    constexpr bool randomInsertAndRemoveEntities = true;
 
     // random floats between -1.0 - 1.0
     std::random_device               rd;
     std::mt19937                     generator(rd());
     std::uniform_real_distribution<> randomFloats(-1.0, 1.0);
 
-    if (entityList->size() < MaxInstancesForRayTracing)
-    //if (entityList->size() < 0)
+    if (randomInsertAndRemoveEntities)
     {
 
-        int  modelCount = ModelBroker::instance()->getModelNames().size();
-        auto modelNames = ModelBroker::instance()->getModelNames();
-
-        const float radiusRange     = 50.0;
-        float       modelScaleRange = 50.0;
-        const float addEntityRange  = 10.0;
-
-        SceneEntity sceneEntity;
-        int         entitiesToAdd = (((randomFloats(generator) + 1.0) / 2.0) * addEntityRange);
-        if (entityList->size() == 0 && entitiesToAdd == 0)
+        if (entityList->size() < MaxInstancesForRayTracing)
         {
-            entitiesToAdd++;
-        }
+            int  modelCount = ModelBroker::instance()->getModelNames().size();
+            auto modelNames = ModelBroker::instance()->getModelNames();
 
-        for (int i = 0; i < entitiesToAdd; i++)
-        {
-            int randomCollection  = ((randomFloats(generator) + 1.0) / 2.0) * modelCount;
-            sceneEntity.modelname = modelNames[randomCollection];
-            sceneEntity.name      = "";
+            const float radiusRange     = 50.0;
+            float       modelScaleRange = 50.0;
+            const float addEntityRange  = 10.0;
 
-            modelScaleRange = 50.0;
-            if (sceneEntity.modelname.find("DUNGEON") != std::string::npos)
+            SceneEntity sceneEntity;
+            int         entitiesToAdd = (((randomFloats(generator) + 1.0) / 2.0) * addEntityRange);
+            if (entityList->size() == 0 && entitiesToAdd == 0)
             {
-                modelScaleRange = 0.25;
-            }
-            if (sceneEntity.modelname.find("LANTERN") != std::string::npos)
-            {
-                modelScaleRange = 1.5;
-            }
-            if (sceneEntity.modelname.find("AVACADO") != std::string::npos)
-            {
-                modelScaleRange = 500.0;
+                entitiesToAdd++;
             }
 
-            Vector4 randomLocation(randomFloats(generator) * radiusRange * 10.0,
-                                   randomFloats(generator) * radiusRange * 10.0,
-                                   randomFloats(generator) * radiusRange * 10.0);
-
-            randomLocation = randomLocation - cameraPos;
-
-            Vector4 randomRotation(randomFloats(generator) * 360.0, randomFloats(generator) * 360.0,
-                                   randomFloats(generator) * 360.0);
-
-            float   scaleForAll = ((randomFloats(generator) + 1.0) / 2.0) * modelScaleRange;
-            Vector4 randomScale(scaleForAll, scaleForAll, scaleForAll);
-
-            sceneEntity.position = randomLocation;
-            sceneEntity.rotation = randomRotation;
-            sceneEntity.scale =
-                Vector4(modelScaleRange, modelScaleRange, modelScaleRange) + randomScale;
-
-            if (sceneEntity.modelname.find("DUNGEON") != std::string::npos ||
-                sceneEntity.modelname.find("LANTERN") != std::string::npos)
+            for (int i = 0; i < entitiesToAdd; i++)
             {
+                int randomCollection  = ((randomFloats(generator) + 1.0) / 2.0) * modelCount;
+                sceneEntity.modelname = modelNames[randomCollection];
+                sceneEntity.name      = "";
+
                 modelScaleRange = 50.0;
-            }
+                if (sceneEntity.modelname.find("DUNGEON") != std::string::npos)
+                {
+                    modelScaleRange = 0.25;
+                }
+                if (sceneEntity.modelname.find("LANTERN") != std::string::npos)
+                {
+                    modelScaleRange = 1.5;
+                }
+                if (sceneEntity.modelname.find("AVACADO") != std::string::npos)
+                {
+                    modelScaleRange = 500.0;
+                }
 
-            EngineManager::instance()->addEntity(sceneEntity);
+                Vector4 randomLocation(randomFloats(generator) * radiusRange * 10.0,
+                                       randomFloats(generator) * radiusRange * 10.0,
+                                       randomFloats(generator) * radiusRange * 10.0);
+
+                randomLocation = randomLocation - cameraPos;
+
+                Vector4 randomRotation(randomFloats(generator) * 360.0, randomFloats(generator) * 360.0,
+                                       randomFloats(generator) * 360.0);
+
+                float   scaleForAll = ((randomFloats(generator) + 1.0) / 2.0) * modelScaleRange;
+                Vector4 randomScale(scaleForAll, scaleForAll, scaleForAll);
+
+                sceneEntity.position = randomLocation;
+                sceneEntity.rotation = randomRotation;
+                sceneEntity.scale =
+                    Vector4(modelScaleRange, modelScaleRange, modelScaleRange) + randomScale;
+
+                if (sceneEntity.modelname.find("DUNGEON") != std::string::npos ||
+                    sceneEntity.modelname.find("LANTERN") != std::string::npos)
+                {
+                    modelScaleRange = 50.0;
+                }
+
+                EngineManager::instance()->addEntity(sceneEntity);
+            }
         }
-    }
-    else
-    {
-        _doneAdding = true;
+        else
+        {
+            _doneAdding = true;
+        }
     }
 
     float cometTailRadius = 20000;
@@ -559,89 +730,6 @@ void RayTracingPipelineShader::buildAccelerationStructures()
         }
     }
 
-    bool newInstanceMappingAllocation = false;
-    if ((_instanceIndexToMaterialMappingGPUBuffer == nullptr) ||
-        (_instanceIndexToAttributeMappingGPUBuffer == nullptr) ||
-        (_instanceNormalMatrixTransformsGPUBuffer == nullptr) ||
-        (_instanceTransmissionMappingGPUBuffer    == nullptr))
-    {
-        _instanceIndexToMaterialMappingGPUBuffer  = new D3DBuffer();
-        _instanceIndexToAttributeMappingGPUBuffer = new D3DBuffer();
-        _instanceNormalMatrixTransformsGPUBuffer  = new D3DBuffer();
-        _instanceTransmissionMappingGPUBuffer     = new D3DBuffer();
-
-        newInstanceMappingAllocation = true;
-    }
-    else if (_instanceIndexToMaterialMappingGPUBuffer->count < entityList->size())
-    {
-        _instanceMappingIndex++;
-        _instanceMappingIndex %= CMD_LIST_NUM;
-
-        newInstanceMappingAllocation = true;
-    }
-
-    if (newInstanceMappingAllocation)
-    {
-        auto newInstanceSize = (_instanceIndexToMaterialMappingGPUBuffer->count == 0)
-                                   ? entityList->size()
-                                   : _instanceIndexToMaterialMappingGPUBuffer->count * tlasAllocationMultiplier;
-
-        constexpr auto transformOffset                    = 12; // 3x4
-        UINT           instanceTransformSizeInBytes       = newInstanceSize * transformOffset;
-        constexpr auto normalTransformOffset              = 9; // 3x3
-        UINT           instanceNormalTransformSizeInBytes = newInstanceSize * normalTransformOffset;
-
-        _instanceNormalMatrixTransforms.resize(instanceNormalTransformSizeInBytes);
-        _instanceWorldToObjectMatrixTransforms.resize(instanceTransformSizeInBytes);
-        _instanceTransforms.resize(instanceTransformSizeInBytes);
-        _prevInstanceTransforms.resize(instanceTransformSizeInBytes);
-
-        allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(UINT) * newInstanceSize,
-                             &_instanceIndexToMaterialMappingUpload[_instanceMappingIndex],
-                             L"instanceIndexToMaterial");
-
-        _instanceIndexToMaterialMappingGPUBuffer->resource =
-            _instanceIndexToMaterialMappingUpload[_instanceMappingIndex];
-        _instanceIndexToMaterialMappingGPUBuffer->count = newInstanceSize;
-
-        createBufferSRV(_instanceIndexToMaterialMappingGPUBuffer, newInstanceSize, sizeof(UINT));
-
-        allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(UINT) * newInstanceSize,
-                             &_instanceIndexToAttributeMappingUpload[_instanceMappingIndex],
-                             L"instanceIndexToAttribute");
-
-        _instanceIndexToAttributeMappingGPUBuffer->resource =
-            _instanceIndexToAttributeMappingUpload[_instanceMappingIndex];
-        _instanceIndexToAttributeMappingGPUBuffer->count = newInstanceSize;
-
-        createBufferSRV(_instanceIndexToAttributeMappingGPUBuffer, newInstanceSize, sizeof(UINT));
-
-        allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(float) * newInstanceSize,
-                             &_instanceTransmissionMappingUpload[_instanceMappingIndex],
-                             L"instanceTransmission");
-
-        _instanceTransmissionMappingGPUBuffer->resource =
-             _instanceTransmissionMappingUpload[_instanceMappingIndex];
-        _instanceTransmissionMappingGPUBuffer->count = newInstanceSize;
-
-        createBufferSRV(_instanceTransmissionMappingGPUBuffer, newInstanceSize, sizeof(float));
-
-        allocateUploadBuffer(
-            DXLayer::instance()->getDevice().Get(), nullptr, sizeof(float) * 9 * newInstanceSize,
-            &_instanceNormalMatrixTransformsUpload[_instanceMappingIndex], L"instanceNormals");
-
-        _instanceNormalMatrixTransformsGPUBuffer->resource =
-            _instanceNormalMatrixTransformsUpload[_instanceMappingIndex];
-        _instanceNormalMatrixTransformsGPUBuffer->count = newInstanceSize;
-
-        createBufferSRV(_instanceNormalMatrixTransformsGPUBuffer, 9 * newInstanceSize,
-                        sizeof(UINT));
-    }
-
-
     if (newBlasBuilds)
     {
         RTCompaction::ASBuffers* buffers = RTCompaction::BuildAccelerationStructures(
@@ -655,6 +743,37 @@ void RayTracingPipelineShader::buildAccelerationStructures()
 
         commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
     }
+}
+
+
+void RayTracingPipelineShader::buildAccelerationStructures()
+{
+    auto viewEventDistributor = EngineManager::instance()->getViewManager();
+    auto entityList    = EngineManager::instance()->getEntityList();
+    auto textureBroker = TextureBroker::instance();
+    auto dxLayer       = DXLayer::instance();
+    auto commandList   = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
+                                                      : DXLayer::instance()->getCmdList();
+
+    auto device = dxLayer->getDevice();
+    device->QueryInterface(IID_PPV_ARGS(&_dxrDevice));
+
+    // Increment next frame and let the library internally manage compaction and releasing memory
+    RTCompaction::NextFrame(_dxrDevice.Get(), commandList.Get());
+
+    constexpr int transformOffset          = sizeof(float) * 12;
+    constexpr int normalTransformOffset    = sizeof(float) * 9;
+
+    Vector4       cameraPos                = viewEventDistributor->getCameraPos();
+
+    _attributeMapping.clear();
+    _materialMapping.clear();
+    _bottomLevelBuildDescs.clear();
+    _bottomLevelBuildModels.clear();
+
+    _updateBlasData();
+
+    _updateInstanceData();
 
     // Copy over all the previous instance transforms for motion vectors
     memcpy(_prevInstanceTransforms.data(), _instanceTransforms.data(), sizeof(float) * 12 * entityList->size());
@@ -704,80 +823,7 @@ void RayTracingPipelineShader::buildAccelerationStructures()
         }
     }
 
-    CD3DX12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC    topLevelBuildDesc = {};
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& topLevelInputs = topLevelBuildDesc.Inputs;
-    topLevelInputs.DescsLayout    = D3D12_ELEMENTS_LAYOUT_ARRAY;
-    topLevelInputs.Flags          = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-    topLevelInputs.NumDescs       = static_cast<UINT>(instanceDescIndex);
-    topLevelInputs.pGeometryDescs = nullptr;
-    topLevelInputs.Type           = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO topLevelPrebuildInfo = {};
-
-    _dxrDevice->GetRaytracingAccelerationStructurePrebuildInfo(&topLevelInputs,
-                                                               &topLevelPrebuildInfo);
-
-    bool newTopLevelAllocation = false;
-    if ((_tlScratchResource[_topLevelIndex] == nullptr) || 
-        (_topLevelAccelerationStructure[_topLevelIndex] == nullptr) ||
-        (_instanceDescs[_topLevelIndex] == nullptr))
-    {
-        newTopLevelAllocation = true;
-    }
-    else if ((topLevelPrebuildInfo.ScratchDataSizeInBytes >_tlScratchResource[_topLevelIndex]->GetDesc().Width) ||
-             (topLevelPrebuildInfo.ResultDataMaxSizeInBytes > _topLevelAccelerationStructure[_topLevelIndex]->GetDesc().Width)||
-             (_instanceDescs[_topLevelIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instanceDescIndex)))
-    {
-        newTopLevelAllocation = true;
-        _topLevelIndex++;
-
-        _topLevelIndex %= CMD_LIST_NUM;
-    }
-
-    if (newTopLevelAllocation)
-    {
-        auto tlasScratchBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ScratchDataSizeInBytes * tlasAllocationMultiplier,
-                                                                   D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-        _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-                                            &tlasScratchBufferDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                            nullptr, IID_PPV_ARGS(&_tlScratchResource[_topLevelIndex]));
-
-        auto tlasBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ResultDataMaxSizeInBytes * tlasAllocationMultiplier,
-                                                            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-        _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-                                            &tlasBufferDesc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-                                            nullptr, IID_PPV_ARGS(&_topLevelAccelerationStructure[_topLevelIndex]));
-
-        // Create view of SRV for shader access
-        CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(_rtASDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-        ZeroMemory(&_rtASSrvDesc, sizeof(_rtASSrvDesc));
-        _rtASSrvDesc.Shader4ComponentMapping                  = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        _rtASSrvDesc.ViewDimension                            = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-        _rtASSrvDesc.RaytracingAccelerationStructure.Location = _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
-        _dxrDevice->CreateShaderResourceView(nullptr, &_rtASSrvDesc, hDescriptor);
-
-        allocateUploadBuffer(_dxrDevice.Get(), nullptr,
-                             sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instanceDescIndex * tlasAllocationMultiplier,
-                             &_instanceDescs[_topLevelIndex], L"InstanceDescs");
-    }
-
-    BYTE* mappedData = nullptr;
-    CD3DX12_RANGE readRange(0, 0);
-    _instanceDescs[_topLevelIndex]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
-
-    memcpy(&mappedData[0], _instanceDesc.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instanceDescIndex);
-
-    // Top Level Acceleration Structure desc
-    topLevelBuildDesc.DestAccelerationStructureData    = _topLevelAccelerationStructure[_topLevelIndex]->GetGPUVirtualAddress();
-    topLevelBuildDesc.ScratchAccelerationStructureData = _tlScratchResource[_topLevelIndex]->GetGPUVirtualAddress();
-    topLevelBuildDesc.Inputs.InstanceDescs             = _instanceDescs[_topLevelIndex]->GetGPUVirtualAddress();
-
-    commandList->BuildRaytracingAccelerationStructure(&topLevelBuildDesc, 0, nullptr);
-    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(_topLevelAccelerationStructure[_topLevelIndex].Get()));
+    _updateTLASData(instanceDescIndex);
 }
 void RayTracingPipelineShader::createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries)
 {

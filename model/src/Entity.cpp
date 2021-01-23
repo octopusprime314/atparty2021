@@ -224,9 +224,7 @@ void Entity::_updatePathKinematics(int milliSeconds)
         Matrix::translation(linearPos.getx(), linearPos.gety(), linearPos.getz()) * rotation *
         Matrix::scale(_scale.getx(), _scale.gety(), _scale.getz());
 
-    Matrix objectSpaceTransform = (_model->getGltfLoader() != nullptr)
-                                      ? _model->getGltfLoader()->getObjectSpaceTransform()
-                                      : Matrix();
+    Matrix objectSpaceTransform = Matrix();
 
     _worldSpaceTransform = kinematicTransform * objectSpaceTransform;
 
@@ -327,9 +325,7 @@ void Entity::setState(const Vector4& position, const Vector4& rotation, const Ve
 {
     _scale = scale;
 
-    Matrix objectSpaceTransform = (_model->getGltfLoader() != nullptr)
-                                      ? _model->getGltfLoader()->getObjectSpaceTransform()
-                                      : Matrix();
+    Matrix objectSpaceTransform = Matrix();
 
     auto transform = Matrix::translation(position.getx(), position.gety(), position.getz()) *
                      Matrix::rotationAroundY(rotation.gety()) * 
