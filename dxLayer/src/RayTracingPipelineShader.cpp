@@ -543,12 +543,15 @@ void RayTracingPipelineShader::_updateBlasData()
 {
     auto    viewEventDistributor = EngineManager::instance()->getViewManager();
     auto    entityList           = EngineManager::instance()->getEntityList();
-    Vector4 cameraPos            = viewEventDistributor->getCameraPos();
+
+    auto    cameraView = viewEventDistributor->getView();
+    Vector4 cameraPos  = viewEventDistributor->getCameraPos();
+
     auto    dxLayer              = DXLayer::instance();
     auto    commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
                                                                 : DXLayer::instance()->getCmdList();
 
-    constexpr bool randomInsertAndRemoveEntities = false;
+    constexpr bool randomInsertAndRemoveEntities = true;
 
     // random floats between -1.0 - 1.0
     std::random_device               rd;
@@ -632,51 +635,46 @@ void RayTracingPipelineShader::_updateBlasData()
     std::map<Model*, int> modelCountsInEntities;
     for (auto entity = entityList->begin(); entity != entityList->end();)
     {
-        bool    removed        = false;
-        Vector4 entityPosition = (*entity)->getWorldSpaceTransform() * Vector4(0, 0, 0, 1);
-
-        entityPosition = -entityPosition;
-
-        if ((*entity)->getHasEntered() == false)
+        Vector4 entityPosition = -((*entity)->getWorldSpaceTransform() * Vector4(0, 0, 0, 1));
+        if (randomInsertAndRemoveEntities)
         {
-            Vector4 rotation(randomFloats(generator) * 360.0, randomFloats(generator) * 360.0,
-                             randomFloats(generator) * 360.0);
-
-            (*entity)->entranceWaypoint(Vector4(-entityPosition.getx(),
-                                                -entityPosition.gety() - 500.0,
-                                                -entityPosition.getz()),
-                                        rotation, 4000);
-
-            // Does a vertex buffer exist for this blas
-            bool isNewBLAS = _vertexBufferMap.find((*entity)->getModel()) == _vertexBufferMap.end();
-
-            if (isNewBLAS)
+            if ((*entity)->getHasEntered() == false)
             {
-                buildBLAS((*entity));
-                newBlasBuilds = true;
-            }
-        }
-        else
-        {
-            // Does a vertex buffer exist for this blas
-            bool isNewBLAS = _vertexBufferMap.find((*entity)->getModel()) == _vertexBufferMap.end();
+                Vector4 rotation(randomFloats(generator) * 360.0, randomFloats(generator) * 360.0,
+                                 randomFloats(generator) * 360.0);
 
-            if (isNewBLAS)
-            {
-                buildBLAS((*entity));
-                newBlasBuilds = true;
+                (*entity)->entranceWaypoint(Vector4(-entityPosition.getx(),
+                                                    -entityPosition.gety() - 500.0,
+                                                    -entityPosition.getz()),
+                                            rotation, 4000);
             }
         }
 
-        modelCountsInEntities[(*entity)->getModel()]++;
+        // Does a vertex buffer exist for this blas
+        bool isNewBLAS = _vertexBufferMap.find((*entity)->getModel()) == _vertexBufferMap.end();
 
-        auto distance = (cameraPos - entityPosition).getMagnitude();
-        if (distance > cometTailRadius)
+        if (isNewBLAS)
         {
-            modelCountsInEntities[(*entity)->getModel()]--;
-            auto tempEntity = *entity;
-            entity = entityList->erase(entity);
-            delete tempEntity;
+            buildBLAS((*entity));
+            newBlasBuilds = true;
+        }
+
+        if (randomInsertAndRemoveEntities)
+        {
+            modelCountsInEntities[(*entity)->getModel()]++;
+
+            auto distance = (cameraPos - entityPosition).getMagnitude();
+            if (distance > cometTailRadius)
+            {
+                modelCountsInEntities[(*entity)->getModel()]--;
+                auto tempEntity = *entity;
+                entity = entityList->erase(entity);
+                delete tempEntity;
+            }
+            else
+            {
+                ++entity;
+            }
         }
         else
         {
@@ -748,23 +746,16 @@ void RayTracingPipelineShader::_updateBlasData()
 
 void RayTracingPipelineShader::buildAccelerationStructures()
 {
-    auto viewEventDistributor = EngineManager::instance()->getViewManager();
-    auto entityList    = EngineManager::instance()->getEntityList();
-    auto textureBroker = TextureBroker::instance();
-    auto dxLayer       = DXLayer::instance();
-    auto commandList   = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
-                                                      : DXLayer::instance()->getCmdList();
-
-    auto device = dxLayer->getDevice();
-    device->QueryInterface(IID_PPV_ARGS(&_dxrDevice));
+    auto entityList           = EngineManager::instance()->getEntityList();
+    auto dxLayer              = DXLayer::instance();
+    auto commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
+                                                             : DXLayer::instance()->getCmdList();
 
     // Increment next frame and let the library internally manage compaction and releasing memory
     RTCompaction::NextFrame(_dxrDevice.Get(), commandList.Get());
 
     constexpr int transformOffset          = sizeof(float) * 12;
     constexpr int normalTransformOffset    = sizeof(float) * 9;
-
-    Vector4       cameraPos                = viewEventDistributor->getCameraPos();
 
     _attributeMapping.clear();
     _materialMapping.clear();

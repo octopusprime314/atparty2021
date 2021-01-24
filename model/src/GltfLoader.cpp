@@ -846,25 +846,20 @@ void BuildGltfMeshes(const Document*           document,
 
                     SceneEntity sceneEntity;
 
-                    Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z,
-                                       node.rotation.w);
+                    Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
                     sceneEntity.modelname = meshModel->getName();
                     sceneEntity.name      = meshModel->getName() + std::to_string(nodeIndex);
-                    sceneEntity.position =
-                        Vector4(-node.translation.x, node.translation.y, node.translation.z);
-                    sceneEntity.rotation =
-                        Vector4(GetRoll(quaternion), GetPitch(quaternion), -GetYaw(quaternion));
-                    sceneEntity.scale = Vector4(node.scale.x, node.scale.y, node.scale.z);
+                    sceneEntity.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
+                    sceneEntity.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+                    sceneEntity.scale    = Vector4(node.scale.x, node.scale.y, node.scale.z);
 
                     EngineManager::instance()->addEntity(sceneEntity);
                 }
                 // Load camera from child nodes
                 else if (node.children.empty() == false)
                 {
-                    Vector4 cameraPosition(-node.translation.x, node.translation.y, node.translation.z,
-                                           1);
-                    Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z,
-                                       node.rotation.w);
+                    Vector4 cameraPosition(node.translation.x, node.translation.y, node.translation.z);
+                    Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
 
                     camSettings.bobble           = false;
                     camSettings.lockedEntity     = -1;
@@ -872,8 +867,8 @@ void BuildGltfMeshes(const Document*           document,
                     camSettings.lockOffset       = Vector4(0.0, 0.0, 0.0, 0.0);
                     camSettings.path             = "";
                     camSettings.position         = cameraPosition;
-                    camSettings.rotation =
-                        Vector4(GetRoll(quaternion), 180.0 + GetPitch(quaternion), -GetYaw(quaternion));
+                    // Default camera orients in the negative Y direction
+                    camSettings.rotation = Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
                 }
             }
 
@@ -902,14 +897,16 @@ void BuildGltfMeshes(const Document*           document,
                 float previousTime   = 0.0;
                 while (timeIndex < translationTimeFloats.size())
                 {
-                    Vector4 quaternion(rotationVectors[rotationIndex], rotationVectors[rotationIndex + 1],
-                            rotationVectors[rotationIndex + 2], rotationVectors[rotationIndex + 3]);
+                    Vector4 quaternion(rotationVectors[rotationIndex],
+                                       rotationVectors[rotationIndex + 1],
+                                       rotationVectors[rotationIndex + 2],
+                                       rotationVectors[rotationIndex + 3]);
 
-                    Vector4 rotation =
-                        Vector4(GetRoll(quaternion), 180.0 + GetPitch(quaternion), -GetYaw(quaternion));
+                    // Default camera orients in the negative Y direction
+                    Vector4 rotation = Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
 
                     // Way points are in milliseconds
-                    PathWaypoint waypoint(Vector4(-translationVectors[translationIndex],
+                    PathWaypoint waypoint(Vector4(translationVectors[translationIndex],
                                                   translationVectors[translationIndex + 1],
                                                   translationVectors[translationIndex + 2]), 
                                           rotation,

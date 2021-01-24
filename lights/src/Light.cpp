@@ -89,7 +89,7 @@ Vector4 Light::getPosition()
 {
     // Extract light position from model matrix
     float* inverseModel = _lightMVP.getModelMatrix().getFlatBuffer();
-    auto   position     = Vector4(inverseModel[3], inverseModel[7], inverseModel[11], 1.0);
+    auto   position     = Vector4(-inverseModel[3], -inverseModel[7], -inverseModel[11], 1.0);
     return position;
 }
 

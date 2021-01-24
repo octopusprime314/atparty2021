@@ -69,7 +69,10 @@ void Entity::reset(const SceneEntity& sceneEntity, ViewEventDistributor* viewMan
     _name  = sceneEntity.name;
     setState(sceneEntity.position, sceneEntity.rotation, sceneEntity.scale);
 
-    setVectorPaths(sceneEntity.vectorPaths);
+    if (sceneEntity.vectorPaths.empty() == false)
+    {
+        setVectorPaths(sceneEntity.vectorPaths);
+    }
     if (sceneEntity.waypointPath.size() > 0)
     {
         if (_waypointPath != nullptr)

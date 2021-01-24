@@ -277,8 +277,9 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
     std::map<float, int> lightsSorted;
     // Get point light positions
     unsigned int pointLights = 0;
-    Vector4      cameraPos   = viewEventDistributor->getCameraPos();
-    cameraPos                = -cameraPos;
+
+    auto   cameraView  = viewEventDistributor->getView();
+    Vector4 cameraPos  = viewEventDistributor->getCameraPos();
 
     static unsigned int previousTime = 0;
     static constexpr unsigned int lightGenInternalMs = 250;
@@ -294,15 +295,15 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
         std::uniform_real_distribution<> randomFloats(-1.0, 1.0);
 
         float lightIntensityRange = 10.0f;
-        float randomLightIntensity =
-            (((randomFloats(generator) + 1.0) / 2.0) * lightIntensityRange) + 300.0;
+        //float randomLightIntensity = lightIntensityRange;
+        float randomLightIntensity = (((randomFloats(generator) + 1.0) / 2.0) * lightIntensityRange) + 10.0;
 
         Vector4 randomColor(static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
                             static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
                             static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0));
 
-        // Vector4 randomColor(1.0, 1.0, 1.0);
-        // Vector4 randomColor(64.0 / 255.0, 156.0 / 255.0, 255.0 / 255.0);
+        //Vector4 randomColor(1.0, 1.0, 1.0);
+        //Vector4 randomColor(64.0 / 255.0, 156.0 / 255.0, 255.0 / 255.0);
 
         SceneLight light;
         light.name      = "light trail" + std::to_string(lights.size());
@@ -410,8 +411,10 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     auto cameraView        = viewEventDistributor->getView();
     auto inverseCameraView = cameraView.inverse();
+
     auto cameraProj        = viewEventDistributor->getProjection();
     auto inverseCameraProj = cameraProj.inverse();
+
     shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
     shader->updateData("viewTransform", cameraView.getFlatBuffer(), true);
 

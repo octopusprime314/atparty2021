@@ -151,17 +151,20 @@ void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistribut
     // UAVs
     shader->updateData("motionVectorsUAV", 0, _motionVectorsUVCoords, true, true);
 
-    auto cameraView            = viewEventDistributor->getView();
+    auto cameraView       = viewEventDistributor->getView();
+    auto prevCameraView   = viewEventDistributor->getPrevCameraView();
+    Vector4 prevCameraPos = viewEventDistributor->getPrevCameraPos();
+
     auto cameraProj            = viewEventDistributor->getProjection();
     auto inverseCameraView     = cameraView.inverse();
     auto inverseCameraProj     = cameraProj.inverse();
 
     shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
     shader->updateData("inverseProj", inverseCameraProj.getFlatBuffer(), true);
-    shader->updateData("prevFrameCameraPosition", viewEventDistributor->getPrevCameraPos().getFlatBuffer(), true);
+    shader->updateData("prevFrameCameraPosition", prevCameraPos.getFlatBuffer(), true);
 
-    auto prevCameraView = cameraProj * viewEventDistributor->getPrevCameraView();
-    shader->updateData("prevFrameViewProj", prevCameraView.getFlatBuffer(), true);
+    auto prevCameraViewProj = cameraProj * prevCameraView;
+    shader->updateData("prevFrameViewProj", prevCameraViewProj.getFlatBuffer(), true);
 
     float screenSize[] = {static_cast<float>(IOEventDistributor::screenPixelWidth),
                           static_cast<float>(IOEventDistributor::screenPixelHeight)};
@@ -216,7 +219,7 @@ void SVGFDenoiser::denoise(ViewEventDistributor* viewEventDistributor,
     shader->updateData("kernelRadius", &kernelRadius, true);
     shader->updateData("pixelStepY", &pixelStepY, true);
 
-    auto cameraView  = viewEventDistributor->getView();
+    auto cameraView        = viewEventDistributor->getView();
     auto inverseCameraView = cameraView.inverse();
     shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
 

@@ -5,11 +5,9 @@ StateVector::StateVector() : _mass(1.0), _active(false), _gravity(true) {}
 
 void StateVector::update(int milliSeconds)
 {
-
     // Only update kinematics if the state is in motion
     if (_active)
     {
-
         // Update kinematics here...
         float deltaTime = static_cast<float>(milliSeconds) / 1000.0f;
 

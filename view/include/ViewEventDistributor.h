@@ -75,8 +75,7 @@ class ViewEventDistributor : public EventSubscriber
     };
 
   private:
-    Matrix _thirdPersonTranslation;
-    Matrix _inverseRotation; // Manages how to translate based on the inverse of the actual rotation
+    Matrix               _inverseRotation; // Manages how to translate based on the inverse of the actual rotation
     WaypointCamera       _waypointCamera;
     FuncMap              _keyboardState;
     Camera*              _trackedCamera;
