@@ -27,6 +27,7 @@ include_directories("${CMAKE_SOURCE_DIR}/lights/include")
 include_directories("${CMAKE_SOURCE_DIR}/view/include")
 include_directories("${CMAKE_SOURCE_DIR}/dxLayer/include")
 include_directories("${CMAKE_SOURCE_DIR}/imgui")
+include_directories("${CMAKE_SOURCE_DIR}/compaction-lib/include")
 
 FILE(GLOB MODEL_HEADER_FILES        ${CMAKE_SOURCE_DIR}/model/include/*.h)
 FILE(GLOB SHADING_HEADER_FILES      ${CMAKE_SOURCE_DIR}/shading/include/*.h)
@@ -45,6 +46,7 @@ FILE(GLOB HLSL_INCLUDE_SHADER_FILES ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/inc
 FILE(GLOB VIEW_HEADER_FILES         ${CMAKE_SOURCE_DIR}/view/include/*.h)
 FILE(GLOB DX_HEADER_FILES           ${CMAKE_SOURCE_DIR}/dxLayer/include/*.h)
 FILE(GLOB IMGUI_HEADER_FILES        ${CMAKE_SOURCE_DIR}/imgui/*)
+FILE(GLOB COMPACTION_HEADER_FILES   ${CMAKE_SOURCE_DIR}/compaction-lib/include/*.h)
 
 FILE(GLOB MODEL_SRC_FILES           ${CMAKE_SOURCE_DIR}/model/src/*.cpp)
 FILE(GLOB SHADING_SRC_FILES         ${CMAKE_SOURCE_DIR}/shading/src/*.cpp)
@@ -58,6 +60,7 @@ FILE(GLOB IO_SRC_FILES              ${CMAKE_SOURCE_DIR}/io/src/*.cpp)
 FILE(GLOB LIGHTS_SRC_FILES          ${CMAKE_SOURCE_DIR}/lights/src/*.cpp)
 FILE(GLOB VIEW_SRC_FILES            ${CMAKE_SOURCE_DIR}/view/src/*.cpp)
 FILE(GLOB DX_SRC_FILES              ${CMAKE_SOURCE_DIR}/dxLayer/src/*.cpp)
+FILE(GLOB COMPACTION_SRC_FILES      ${CMAKE_SOURCE_DIR}/compaction-lib/src/*.cpp)
 
 source_group("model"                FILES  ${MODEL_HEADER_FILES} ${MODEL_SRC_FILES})
 source_group("shading"              FILES  ${SHADING_HEADER_FILES} ${SHADING_SRC_FILES})
@@ -76,6 +79,7 @@ source_group("shaders/hlsl/cs"      FILES  ${HLSL_CS_SHADER_FILES})
 source_group("view"                 FILES  ${VIEW_HEADER_FILES} ${VIEW_SRC_FILES})
 source_group("dxLayer"              FILES  ${DX_HEADER_FILES} ${DX_SRC_FILES})
 source_group("imgui"                FILES  ${IMGUI_HEADER_FILES})
+source_group("compaction-lib"       FILES  ${COMPACTION_HEADER_FILES} ${COMPACTION_SRC_FILES})
 
 add_executable(compaction-lib-demo
                ${MODEL_SRC_FILES}
@@ -107,7 +111,9 @@ add_executable(compaction-lib-demo
                ${VIEW_SRC_FILES}
                ${DX_HEADER_FILES}
                ${DX_SRC_FILES}
-               ${IMGUI_HEADER_FILES})
+               ${IMGUI_HEADER_FILES}
+               ${COMPACTION_HEADER_FILES}
+               ${COMPACTION_SRC_FILES})
 
 target_compile_features(compaction-lib-demo PRIVATE cxx_range_for)
 
@@ -132,7 +138,7 @@ target_link_libraries(compaction-lib-demo optimized ${CMAKE_SOURCE_DIR}/libs/glt
 #pre fetches assets during cmake -G configuration
 FetchContent_Populate(assets
                       URL        https://www.dropbox.com/s/pm2vsf3bm97hhpm/compaction-demo-assets.zip?dl=0
-                      URL_HASH   MD5=c44ce115fc12c8375c296d10b0a3a15d
+                      URL_HASH   MD5=57d1bfe304197bd4143b91cb2f93efb7
                       SOURCE_DIR assets)
 
 #pre fetches lib dependencies during cmake -G configuration

@@ -836,7 +836,7 @@ void RayTracingPipelineShader::createUnboundedTextureSrvDescriptorTable(UINT des
     // Create descriptor heap
     D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc;
     ZeroMemory(&srvHeapDesc, sizeof(srvHeapDesc));
-    srvHeapDesc.NumDescriptors = descriptorTableEntries; // descriptorTableEntries 2D textures
+    srvHeapDesc.NumDescriptors = descriptorTableEntries;
     srvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srvHeapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     device->CreateDescriptorHeap(&srvHeapDesc,
@@ -850,8 +850,7 @@ void RayTracingPipelineShader::createUnboundedAttributeBufferSrvDescriptorTable(
     // Create descriptor heap
     D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc;
     ZeroMemory(&srvHeapDesc, sizeof(srvHeapDesc));
-    srvHeapDesc.NumDescriptors =
-        descriptorTableEntries; // descriptorTableEntries structured buffers
+    srvHeapDesc.NumDescriptors = descriptorTableEntries;
     srvHeapDesc.Type  = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     device->CreateDescriptorHeap(&srvHeapDesc,
@@ -865,8 +864,7 @@ void RayTracingPipelineShader::createUnboundedIndexBufferSrvDescriptorTable(UINT
     // Create descriptor heap
     D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc;
     ZeroMemory(&srvHeapDesc, sizeof(srvHeapDesc));
-    srvHeapDesc.NumDescriptors =
-        descriptorTableEntries; // descriptorTableEntries structured buffers
+    srvHeapDesc.NumDescriptors = descriptorTableEntries;
     srvHeapDesc.Type  = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     device->CreateDescriptorHeap(&srvHeapDesc,
@@ -876,8 +874,7 @@ void RayTracingPipelineShader::createUnboundedIndexBufferSrvDescriptorTable(UINT
 void RayTracingPipelineShader::addSRVToUnboundedTextureDescriptorTable(Texture* texture)
 {
     auto device = DXLayer::instance()->getDevice();
-    auto descriptorSize =
-        device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    auto descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
     // Create view of SRV for shader access
     CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(
@@ -1048,7 +1045,6 @@ UINT RayTracingPipelineShader::_allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* 
 UINT RayTracingPipelineShader::createBufferSRV(D3DBuffer* buffer, UINT numElements,
                                                UINT elementSize)
 {
-
     auto                            device  = DXLayer::instance()->getDevice();
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
     srvDesc.ViewDimension                   = D3D12_SRV_DIMENSION_BUFFER;
