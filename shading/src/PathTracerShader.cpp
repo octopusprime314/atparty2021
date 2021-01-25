@@ -204,71 +204,6 @@ RenderTexture* PathTracerShader::getCompositedFrame()
     return _compositor;
 }
 
-void PathTracerShader::updateResources()
-{
-    auto buildUnboundedTextureViewsThread =
-        new std::thread(&PathTracerShader::_buildUnboundedTextureViews, this);
-
-    auto buildUnboundedAttributeViewsThread =
-        new std::thread(&PathTracerShader::_buildUnboundedAttributeViews, this);
-
-    auto buildUnboundedIndexBufferViewsThread =
-        new std::thread(&PathTracerShader::_buildUnboundedIndexBufferViews, this);
-
-    buildUnboundedTextureViewsThread->join();
-    buildUnboundedAttributeViewsThread->join();
-    buildUnboundedIndexBufferViewsThread->join();
-}
-
-void PathTracerShader::_buildUnboundedTextureViews()
-{
-    RayTracingPipelineShader* rtPipeline    = EngineManager::getRTPipeline();
-    auto                      sceneTextures = rtPipeline->getSceneTextures();
-
-    rtPipeline->resetUnboundedTextureDescriptorTable();
-    for (auto textureMap : sceneTextures)
-    {
-        for (auto texture : textureMap.second)
-        {
-            rtPipeline->addSRVToUnboundedTextureDescriptorTable(texture);
-        }
-    }
-}
-
-void PathTracerShader::_buildUnboundedAttributeViews()
-{
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
-    auto                      vertexBuffers = rtPipeline->getVertexBuffers();
-
-    rtPipeline->resetUnboundedAttributeBufferDescriptorTable();
-    for (auto vertexBufferMap : vertexBuffers)
-    {
-        for (auto vertexBuffer : vertexBufferMap.second)
-        {
-            rtPipeline->addSRVToUnboundedAttributeBufferDescriptorTable(vertexBuffer,
-                                                                        vertexBuffer->count,
-                                                                        vertexBuffer->offset);
-        }
-    }
-}
-
-void PathTracerShader::_buildUnboundedIndexBufferViews()
-{
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
-    auto                      indexBuffers = rtPipeline->getIndexBuffers();
-
-    rtPipeline->resetUnboundedIndexBufferDescriptorTable();
-    for (auto indexBufferMap : indexBuffers)
-    {
-        for (auto indexBuffer : indexBufferMap.second)
-        {
-            rtPipeline->addSRVToUnboundedIndexBufferDescriptorTable(indexBuffer,
-                                                                    indexBuffer->count,
-                                                                    indexBuffer->offset);
-        }
-    }
-}
-
 void PathTracerShader::_processLights(std::vector<Light*>&  lights,
                                       ViewEventDistributor* viewEventDistributor,
                                       PointLightList&       pointLightList)
@@ -324,7 +259,7 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
         if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
         {
             Vector4 pointLightPos     = light->getPosition();
-            Vector4 pointLightVector  = cameraPos - pointLightPos;
+            Vector4 pointLightVector  = cameraPos + pointLightPos;
             float   distanceFromLight = pointLightVector.getMagnitude();
 
             lightsSorted.insert(std::pair<float, int>(distanceFromLight, pointLightOffset));
@@ -367,9 +302,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     DXLayer::instance()->setTimeStamp();
 
     rtPipeline->buildAccelerationStructures();
-
-    // Builds up bindless resources for material and attribute access
-    updateResources();
 
     HLSLShader* shader = static_cast<HLSLShader*>(_shader);
     auto        cmdList = DXLayer::instance()->getCmdList();

@@ -27,7 +27,9 @@ float3 GetBRDFPointLight(float3 albedo,
 
     float occlusion = 0.0;
 
-    for (int i = 0; i < numPointLights; i++)
+    const uint maxLightsToProcess = 16;
+
+    for (int i = 0; i < maxLightsToProcess; i++)
     {
         // calculate per-light radiance
         float3 lightDirection = normalize(hitPosition - pointLightPositions[i].xyz);

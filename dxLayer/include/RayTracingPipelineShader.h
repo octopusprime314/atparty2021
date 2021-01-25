@@ -41,6 +41,14 @@ struct GpuToCpuBuffers
 
 class RayTracingPipelineShader
 {
+    using TextureDescriptorHeapMap = std::pair<std::vector<AssetTexture*>, int>;
+    using TextureMapping = std::map<Model*, TextureDescriptorHeapMap>;
+
+    using D3DBufferDescriptorHeapMap = std::pair<std::vector<D3DBuffer*>, int>;
+    using AttributeMapping = std::map<Model*, D3DBufferDescriptorHeapMap>;
+
+    using IndexBufferMapping = std::map<Model*, D3DBufferDescriptorHeapMap>;
+
     UINT                                                              _descriptorsAllocated;
     D3D12_DESCRIPTOR_HEAP_DESC                                        _descriptorHeapDesc;
     ComPtr<ID3D12DescriptorHeap>                                      _descriptorHeap;
@@ -56,9 +64,9 @@ class RayTracingPipelineShader
     std::vector<float>                                                _instanceTransforms;
     std::vector<float>                                                _prevInstanceTransforms;
 
-    std::map<Model*, std::vector<D3DBuffer*>>                         _vertexBufferMap;
-    std::map<Model*, std::vector<D3DBuffer*>>                         _indexBufferMap;
-    std::map<Model*, std::vector<AssetTexture*>>                      _texturesMap;
+    AttributeMapping                                                  _vertexBufferMap;
+    IndexBufferMapping                                                _indexBufferMap;
+    TextureMapping                                                    _texturesMap;
     std::map<Model*, RTCompaction::ASBuffers*>                        _blasMap;
 
     std::map<Model*, UINT>                                            _attributeMap;
@@ -69,6 +77,10 @@ class RayTracingPipelineShader
 
     std::map<Model*, UINT>                                            _materialMap;
     std::vector<UINT>                                                 _materialMapping;
+
+    std::queue<UINT>                                                  _reusableMaterialSRVIndices;
+    std::queue<UINT>                                                  _reusableAttributeSRVIndices;
+    std::queue<UINT>                                                  _reusableIndexBufferSRVIndices;
 
     ComPtr<ID3D12Resource>                                            _instanceIndexToMaterialMappingUpload[CMD_LIST_NUM];
     D3DBuffer*                                                        _instanceIndexToMaterialMappingGPUBuffer;
@@ -115,9 +127,9 @@ class RayTracingPipelineShader
     ComPtr<ID3D12DescriptorHeap>                  getRTASDescHeap();
     D3D12_GPU_VIRTUAL_ADDRESS                     getRTASGPUVA();
     ComPtr<ID3D12DescriptorHeap>                  getDescHeap();
-    std::map<Model*, std::vector<AssetTexture*>>& getSceneTextures();
-    std::map<Model*, std::vector<D3DBuffer*>>&    getVertexBuffers();
-    std::map<Model*, std::vector<D3DBuffer*>>&    getIndexBuffers();
+    TextureMapping&                               getSceneTextures();
+    AttributeMapping&                             getVertexBuffers();
+    IndexBufferMapping&                           getIndexBuffers();
     float*                                        getInstanceNormalTransforms();
     float*                                        getWorldToObjectTransforms();
     float*                                        getPrevInstanceTransforms();
@@ -132,13 +144,17 @@ class RayTracingPipelineShader
     void                                          createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries);
     void                                          createUnboundedAttributeBufferSrvDescriptorTable(UINT descriptorTableEntries);
     void                                          createUnboundedIndexBufferSrvDescriptorTable(UINT descriptorTableEntries);
-    void                                          addSRVToUnboundedTextureDescriptorTable(Texture* texture);
-    void                                          addSRVToUnboundedAttributeBufferDescriptorTable(D3DBuffer* vertexBuffer,
+    UINT                                          addSRVToUnboundedTextureDescriptorTable(Texture* texture);
+    UINT                                          addSRVToUnboundedAttributeBufferDescriptorTable(D3DBuffer* vertexBuffer,
                                                                                                   UINT       vertexCount,
                                                                                                   UINT       offset);
-    void                                          addSRVToUnboundedIndexBufferDescriptorTable(D3DBuffer* indexBuffer,
+    UINT                                          addSRVToUnboundedIndexBufferDescriptorTable(D3DBuffer* indexBuffer,
                                                                                               UINT       indexCount,
                                                                                               UINT       offset);
+
+    void removeSRVToUnboundedTextureDescriptorTable(UINT descriptorHeapIndex);
+    void removeSRVToUnboundedAttributeBufferDescriptorTable(UINT descriptorHeapIndex);
+    void removeSRVToUnboundedIndexBufferDescriptorTable(UINT descriptorHeapIndex);
 
     void resetUnboundedTextureDescriptorTable();
     void resetUnboundedAttributeBufferDescriptorTable();

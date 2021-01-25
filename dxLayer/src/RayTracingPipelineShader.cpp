@@ -116,7 +116,7 @@ ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getDescHeap()
     return _descriptorHeap;
 }
 
-std::map<Model*, std::vector<AssetTexture*>>& RayTracingPipelineShader::getSceneTextures()
+RayTracingPipelineShader::TextureMapping& RayTracingPipelineShader::getSceneTextures()
 {
     return _texturesMap;
 }
@@ -285,23 +285,27 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
         (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexBuffer.StrideInBytes = sizeof(CompressedAttribute);
 
         Model* bufferModel         = entity->getModel();
-        _indexBufferMap[bufferModel].push_back(new D3DBuffer());
-        _vertexBufferMap[bufferModel].push_back(new D3DBuffer());
 
-        _indexBufferMap[bufferModel].back()->indexBufferFormat = indexFormat;
+        // Initialize the map values
+        _vertexBufferMap[bufferModel] = RayTracingPipelineShader::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
+        _indexBufferMap[bufferModel] = RayTracingPipelineShader::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
 
-        _vertexBufferMap[bufferModel].back()->count =
-            (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexCount;
-        _indexBufferMap[bufferModel].back()->count =
-            (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexCount;
-        _indexBufferMap[bufferModel].back()->resource =
-            (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
-        _vertexBufferMap[bufferModel].back()->resource =
-            (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
-        _vertexBufferMap[bufferModel].back()->nameId = entity->getModel()->getName();
+        _indexBufferMap[bufferModel].first.push_back(new D3DBuffer());
+        _vertexBufferMap[bufferModel].first.push_back(new D3DBuffer());
 
-        _vertexBufferMap[bufferModel].back()->offset = vertexAndBufferStrides[i].first;
-        _indexBufferMap[bufferModel].back()->offset = vertexAndBufferStrides[i].second;
+        auto indexBuffer  = _indexBufferMap[bufferModel].first.back();
+        auto vertexBuffer = _vertexBufferMap[bufferModel].first.back();
+
+        indexBuffer->indexBufferFormat = indexFormat;
+        vertexBuffer->count = (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexCount;
+        indexBuffer->count = (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexCount;
+        indexBuffer->resource = (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
+
+        vertexBuffer->resource = (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
+        vertexBuffer->nameId   = entity->getModel()->getName();
+
+        vertexBuffer->offset = vertexAndBufferStrides[i].first;
+        indexBuffer->offset                          = vertexAndBufferStrides[i].second;
 
         auto materialTransmittance = entity->getModel()->getMaterial(i).transmittance;
 
@@ -317,14 +321,17 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
         auto mapLocation = _attributeMap.find(entity->getModel());
         if (mapLocation == _attributeMap.end())
         {
-            _attributeMap[entity->getModel()] = 0;
 
-            int offset = 0;
-            for (auto& attMap : _attributeMap)
-            {
-                attMap.second = offset;
-                offset += (*attMap.first->getVAO())[0]->getVertexAndIndexBufferStrides().size();
-            }
+            UINT vertexBufferDescriptorIndex = addSRVToUnboundedAttributeBufferDescriptorTable(
+                vertexBuffer, vertexBuffer->count, vertexBuffer->offset);
+
+            UINT indexBufferDescriptorIndex = addSRVToUnboundedIndexBufferDescriptorTable(
+                indexBuffer, indexBuffer->count, indexBuffer->offset);
+
+            _vertexBufferMap[bufferModel].second = vertexBufferDescriptorIndex;
+            _indexBufferMap[bufferModel].second  = indexBufferDescriptorIndex;
+
+            _attributeMap[bufferModel] = vertexBufferDescriptorIndex;
         }
 
         _transmissionMap[entity->getModel()].push_back(entity->getModel()->getMaterialNames()[i].transmittance);
@@ -333,24 +340,34 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
         {
             auto materialNames = entity->getModel()->getMaterialNames();
 
+            UINT baseModelDescriptorIndex = -1;
             for (auto textureNames : materialNames)
             {
+                // Initialize the map values
+                _texturesMap[bufferModel] = RayTracingPipelineShader::TextureDescriptorHeapMap(std::vector<AssetTexture*>(), 0);
+
+                // Grab the first descriptor heap index into the material's resources
                 AssetTexture* texture = textureBroker->getTexture(textureNames.albedo);
-                _texturesMap[bufferModel].push_back(texture);
+                UINT descriptorIndex = addSRVToUnboundedTextureDescriptorTable(texture);
+
+                if (baseModelDescriptorIndex == -1)
+                {
+                    baseModelDescriptorIndex = descriptorIndex;
+                }
+                _texturesMap[bufferModel].second = descriptorIndex;
+
+                // Build each SRV into the descriptor heap
+                _texturesMap[bufferModel].first.push_back(texture);
                 texture = textureBroker->getTexture(textureNames.normal);
-                _texturesMap[bufferModel].push_back(texture);
+                addSRVToUnboundedTextureDescriptorTable(texture);
+                _texturesMap[bufferModel].first.push_back(texture);
                 texture = textureBroker->getTexture(textureNames.roughnessMetallic);
-                _texturesMap[bufferModel].push_back(texture);
+                addSRVToUnboundedTextureDescriptorTable(texture);
+                _texturesMap[bufferModel].first.push_back(texture);
+
             }
 
-            _materialMap[bufferModel] = 0;
-
-            int offset = 0;
-            for (auto& matMap : _materialMap)
-            {
-                matMap.second = offset;
-                offset += matMap.first->getMaterialNames().size() * Material::TexturesPerMaterial;
-            }
+            _materialMap[bufferModel] = baseModelDescriptorIndex;
         }
     }
 
@@ -696,6 +713,11 @@ void RayTracingPipelineShader::_updateBlasData()
     {
         if (model.second == 0 && _blasMap[model.first] != nullptr)
         {
+
+            removeSRVToUnboundedTextureDescriptorTable(_texturesMap[model.first].second);
+            removeSRVToUnboundedAttributeBufferDescriptorTable(_vertexBufferMap[model.first].second);
+            removeSRVToUnboundedIndexBufferDescriptorTable(_indexBufferMap[model.first].second);
+
             _vertexBufferMap.erase(_vertexBufferMap.find(model.first));
             _indexBufferMap.erase(_indexBufferMap.find(model.first));
             _texturesMap.erase(_texturesMap.find(model.first));
@@ -706,25 +728,9 @@ void RayTracingPipelineShader::_updateBlasData()
             _attributeMap.erase(model.first);
             _transmissionMap.erase(model.first);
             _materialMap.erase(model.first);
+
+
             blasRemoved = true;
-        }
-    }
-
-    if (blasRemoved)
-    {
-        // Recalibrate attribute buffers
-        int offset = 0;
-        for (auto& attMap : _attributeMap)
-        {
-            attMap.second = offset;
-            offset += (*attMap.first->getVAO())[0]->getVertexAndIndexBufferStrides().size();
-        }
-
-        offset = 0;
-        for (auto& materialMap : _materialMap)
-        {
-            materialMap.second = offset;
-            offset += materialMap.first->getMaterialNames().size() * Material::TexturesPerMaterial;
         }
     }
 
@@ -775,59 +781,54 @@ void RayTracingPipelineShader::buildAccelerationStructures()
     int instanceDescIndex = 0;
     for (auto entity : *entityList)
     {
-        bool isValidBlas = _blasMap.find(entity->getModel()) != _blasMap.end();
+        instanceDescriptionCPUBuffer.push_back(D3D12_RAYTRACING_INSTANCE_DESC());
 
-        if (isValidBlas)
-        {
-            instanceDescriptionCPUBuffer.push_back(D3D12_RAYTRACING_INSTANCE_DESC());
+        auto worldSpaceTransform = entity->getWorldSpaceTransform();
+        memcpy(&_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
+                worldSpaceTransform.getFlatBuffer(), sizeof(float) * 12);
 
-            auto worldSpaceTransform = entity->getWorldSpaceTransform();
-            memcpy(&_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
-                   worldSpaceTransform.getFlatBuffer(), sizeof(float) * 12);
+        auto worldToObjectMatrix = entity->getWorldSpaceTransform().inverse();
+            memcpy(&_instanceWorldToObjectMatrixTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
+                worldToObjectMatrix.getFlatBuffer(), sizeof(float) * 12);
 
-            auto worldToObjectMatrix = entity->getWorldSpaceTransform().inverse();
-             memcpy(&_instanceWorldToObjectMatrixTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
-                    worldToObjectMatrix.getFlatBuffer(), sizeof(float) * 12);
+        // Update normal transforms which is for all geometry in both
+        auto normalMatrix = worldToObjectMatrix.transpose();
+        auto offset       = instanceDescIndex * (normalTransformOffset / sizeof(float));
 
-            // Update normal transforms which is for all geometry in both
-            auto normalMatrix = worldToObjectMatrix.transpose();
-            auto offset       = instanceDescIndex * (normalTransformOffset / sizeof(float));
+        // Pointer math works in offset of the type
+        memcpy(&_instanceNormalMatrixTransforms[offset + 0], normalMatrix.getFlatBuffer() + 0, normalTransformOffset / 3);
+        memcpy(&_instanceNormalMatrixTransforms[offset + 3], normalMatrix.getFlatBuffer() + 4, normalTransformOffset / 3);
+        memcpy(&_instanceNormalMatrixTransforms[offset + 6], normalMatrix.getFlatBuffer() + 8, normalTransformOffset / 3);
+        memcpy(&instanceDescriptionCPUBuffer[instanceDescIndex].Transform,
+                &_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
+                sizeof(float) * 12);
 
-            // Pointer math works in offset of the type
-            memcpy(&_instanceNormalMatrixTransforms[offset + 0], normalMatrix.getFlatBuffer() + 0, normalTransformOffset / 3);
-            memcpy(&_instanceNormalMatrixTransforms[offset + 3], normalMatrix.getFlatBuffer() + 4, normalTransformOffset / 3);
-            memcpy(&_instanceNormalMatrixTransforms[offset + 6], normalMatrix.getFlatBuffer() + 8, normalTransformOffset / 3);
-            memcpy(&instanceDescriptionCPUBuffer[instanceDescIndex].Transform,
-                   &_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
-                   sizeof(float) * 12);
+        // do not overwrite geometry flags for bottom levels, this caused the non opaque and
+        // opaqueness of bottom levels to be random
+        instanceDescriptionCPUBuffer[instanceDescIndex].Flags                               = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+        instanceDescriptionCPUBuffer[instanceDescIndex].InstanceMask                        = 1;
+        instanceDescriptionCPUBuffer[instanceDescIndex].InstanceID                          = 0;
+        instanceDescriptionCPUBuffer[instanceDescIndex].InstanceContributionToHitGroupIndex = 0;
+        instanceDescriptionCPUBuffer[instanceDescIndex].AccelerationStructure               = _blasMap[entity->getModel()]->GetASBuffer();
 
-            // do not overwrite geometry flags for bottom levels, this caused the non opaque and
-            // opaqueness of bottom levels to be random
-            instanceDescriptionCPUBuffer[instanceDescIndex].Flags                               = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceMask                        = 1;
-            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceID                          = 0;
-            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceContributionToHitGroupIndex = 0;
-            instanceDescriptionCPUBuffer[instanceDescIndex].AccelerationStructure               = _blasMap[entity->getModel()]->GetASBuffer();
+        instanceDescIndex++;
 
-            instanceDescIndex++;
-
-            _materialMapping.push_back(_materialMap[entity->getModel()]);
-            _attributeMapping.push_back(_attributeMap[entity->getModel()]);
-        }
+        _materialMapping.push_back(_materialMap[entity->getModel()]);
+        _attributeMapping.push_back(_attributeMap[entity->getModel()]);
     }
 
     _updateTLASData(instanceDescIndex, instanceDescriptionCPUBuffer);
 }
 
-void RayTracingPipelineShader::resetUnboundedTextureDescriptorTable()                   { _unboundedTextureSrvIndex = 0; }
-void RayTracingPipelineShader::resetUnboundedAttributeBufferDescriptorTable()           { _unboundedAttributeBufferSrvIndex = 0; }
-void RayTracingPipelineShader::resetUnboundedIndexBufferDescriptorTable()               { _unboundedIndexBufferSrvIndex = 0; }
-std::map<Model*, std::vector<D3DBuffer*>>& RayTracingPipelineShader::getVertexBuffers() { return _vertexBufferMap; }
-std::map<Model*, std::vector<D3DBuffer*>>& RayTracingPipelineShader::getIndexBuffers()  { return _indexBufferMap; }
-float* RayTracingPipelineShader::getInstanceNormalTransforms()                          { return _instanceNormalMatrixTransforms.data(); }
-float* RayTracingPipelineShader::getWorldToObjectTransforms()                           { return _instanceWorldToObjectMatrixTransforms.data(); }
-float* RayTracingPipelineShader::getPrevInstanceTransforms()                            { return _prevInstanceTransforms.data(); }
-int    RayTracingPipelineShader::getBLASCount()                                         { return _blasMap.size(); }
+void RayTracingPipelineShader::resetUnboundedTextureDescriptorTable()                    { _unboundedTextureSrvIndex = 0; }
+void RayTracingPipelineShader::resetUnboundedAttributeBufferDescriptorTable()            { _unboundedAttributeBufferSrvIndex = 0; }
+void RayTracingPipelineShader::resetUnboundedIndexBufferDescriptorTable()                { _unboundedIndexBufferSrvIndex = 0; }
+RayTracingPipelineShader::AttributeMapping& RayTracingPipelineShader::getVertexBuffers() { return _vertexBufferMap; }
+RayTracingPipelineShader::IndexBufferMapping& RayTracingPipelineShader::getIndexBuffers(){ return _indexBufferMap; }
+float* RayTracingPipelineShader::getInstanceNormalTransforms()                           { return _instanceNormalMatrixTransforms.data(); }
+float* RayTracingPipelineShader::getWorldToObjectTransforms()                            { return _instanceWorldToObjectMatrixTransforms.data(); }
+float* RayTracingPipelineShader::getPrevInstanceTransforms()                             { return _prevInstanceTransforms.data(); }
+int    RayTracingPipelineShader::getBLASCount()                                          { return _blasMap.size(); }
 
 void RayTracingPipelineShader::createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries)
 {
@@ -836,7 +837,7 @@ void RayTracingPipelineShader::createUnboundedTextureSrvDescriptorTable(UINT des
     // Create descriptor heap
     D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc;
     ZeroMemory(&srvHeapDesc, sizeof(srvHeapDesc));
-    srvHeapDesc.NumDescriptors = descriptorTableEntries;
+    srvHeapDesc.NumDescriptors = descriptorTableEntries; // descriptorTableEntries 2D textures
     srvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srvHeapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     device->CreateDescriptorHeap(&srvHeapDesc,
@@ -850,7 +851,8 @@ void RayTracingPipelineShader::createUnboundedAttributeBufferSrvDescriptorTable(
     // Create descriptor heap
     D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc;
     ZeroMemory(&srvHeapDesc, sizeof(srvHeapDesc));
-    srvHeapDesc.NumDescriptors = descriptorTableEntries;
+    srvHeapDesc.NumDescriptors =
+        descriptorTableEntries; // descriptorTableEntries structured buffers
     srvHeapDesc.Type  = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     device->CreateDescriptorHeap(&srvHeapDesc,
@@ -864,22 +866,41 @@ void RayTracingPipelineShader::createUnboundedIndexBufferSrvDescriptorTable(UINT
     // Create descriptor heap
     D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc;
     ZeroMemory(&srvHeapDesc, sizeof(srvHeapDesc));
-    srvHeapDesc.NumDescriptors = descriptorTableEntries;
+    srvHeapDesc.NumDescriptors =
+        descriptorTableEntries; // descriptorTableEntries structured buffers
     srvHeapDesc.Type  = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     device->CreateDescriptorHeap(&srvHeapDesc,
                                  IID_PPV_ARGS(_unboundedIndexBufferSrvDescriptorHeap.GetAddressOf()));
 }
 
-void RayTracingPipelineShader::addSRVToUnboundedTextureDescriptorTable(Texture* texture)
+UINT RayTracingPipelineShader::addSRVToUnboundedTextureDescriptorTable(Texture* texture)
 {
     auto device = DXLayer::instance()->getDevice();
-    auto descriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    UINT descriptorHeapIndex = -1;
+    CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor;
 
-    // Create view of SRV for shader access
-    CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(
-        _unboundedTextureSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
-        _unboundedTextureSrvIndex, descriptorSize);
+    if (_reusableMaterialSRVIndices.empty() == false)
+    {
+        UINT reusedSrvIndex = _reusableMaterialSRVIndices.front();
+        _reusableMaterialSRVIndices.pop();
+        // Create view of SRV for shader access
+        hDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(_unboundedTextureSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+                                                    reusedSrvIndex,
+                                                    _descriptorSize);
+
+        descriptorHeapIndex = reusedSrvIndex;
+    }
+    else
+    {
+        // Create view of SRV for shader access
+        hDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(_unboundedTextureSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+                                                    _unboundedTextureSrvIndex,
+                                                    _descriptorSize);
+
+        descriptorHeapIndex = _unboundedTextureSrvIndex;
+        _unboundedTextureSrvIndex++;
+    }
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 
@@ -891,24 +912,56 @@ void RayTracingPipelineShader::addSRVToUnboundedTextureDescriptorTable(Texture* 
     srvDesc.Texture2D.MostDetailedMip     = 0;
     srvDesc.Texture2D.MipLevels           = textureDescriptor.MipLevels;
     srvDesc.Texture2D.ResourceMinLODClamp = 0;
-    device->CreateShaderResourceView(texture->getResource()->getResource().Get(), &srvDesc,
-                                     hDescriptor);
+    device->CreateShaderResourceView(texture->getResource()->getResource().Get(), &srvDesc, hDescriptor);
 
-    _unboundedTextureSrvIndex++;
+    return descriptorHeapIndex;
 }
 
-void RayTracingPipelineShader::addSRVToUnboundedAttributeBufferDescriptorTable(D3DBuffer* vertexBuffer,
+void RayTracingPipelineShader::removeSRVToUnboundedTextureDescriptorTable(UINT descriptorHeapIndex)
+{
+    _reusableMaterialSRVIndices.push(descriptorHeapIndex);
+    _reusableMaterialSRVIndices.push(descriptorHeapIndex + 1);
+    _reusableMaterialSRVIndices.push(descriptorHeapIndex + 2);
+}
+
+void RayTracingPipelineShader::removeSRVToUnboundedAttributeBufferDescriptorTable(UINT descriptorHeapIndex)
+{
+    _reusableAttributeSRVIndices.push(descriptorHeapIndex);
+}
+void RayTracingPipelineShader::removeSRVToUnboundedIndexBufferDescriptorTable(UINT descriptorHeapIndex)
+{
+    _reusableIndexBufferSRVIndices.push(descriptorHeapIndex);
+}
+
+UINT RayTracingPipelineShader::addSRVToUnboundedAttributeBufferDescriptorTable(D3DBuffer* vertexBuffer,
                                                                                UINT vertexCount,
                                                                                UINT offset)
 {
-    auto device = DXLayer::instance()->getDevice();
-    auto descriptorSize =
-        device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    auto                          device              = DXLayer::instance()->getDevice();
+    UINT                          descriptorHeapIndex = -1;
+    CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor;
 
-    // Create view of SRV for shader access
-    CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(
-        _unboundedAttributeBufferSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
-        _unboundedAttributeBufferSrvIndex, descriptorSize);
+    if (_reusableAttributeSRVIndices.empty() == false)
+    {
+        UINT reusedSrvIndex = _reusableAttributeSRVIndices.front();
+        _reusableAttributeSRVIndices.pop();
+        // Create view of SRV for shader access
+        hDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(
+            _unboundedAttributeBufferSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+            reusedSrvIndex, _descriptorSize);
+
+        descriptorHeapIndex = reusedSrvIndex;
+    }
+    else
+    {
+        // Create view of SRV for shader access
+        hDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(
+            _unboundedAttributeBufferSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+            _unboundedAttributeBufferSrvIndex, _descriptorSize);
+
+        descriptorHeapIndex = _unboundedAttributeBufferSrvIndex;
+        _unboundedAttributeBufferSrvIndex++;
+    }
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 
@@ -922,21 +975,38 @@ void RayTracingPipelineShader::addSRVToUnboundedAttributeBufferDescriptorTable(D
 
     device->CreateShaderResourceView(vertexBuffer->resource.Get(), &srvDesc, hDescriptor);
 
-    _unboundedAttributeBufferSrvIndex++;
+    return descriptorHeapIndex;
 }
 
-void RayTracingPipelineShader::addSRVToUnboundedIndexBufferDescriptorTable(D3DBuffer* indexBuffer,
+UINT RayTracingPipelineShader::addSRVToUnboundedIndexBufferDescriptorTable(D3DBuffer* indexBuffer,
                                                                            UINT indexCount,
                                                                            UINT offset)
 {
-    auto device = DXLayer::instance()->getDevice();
-    auto descriptorSize =
-        device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    auto                          device              = DXLayer::instance()->getDevice();
+    UINT                          descriptorHeapIndex = -1;
+    CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor;
 
-    // Create view of SRV for shader access
-    CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(
-        _unboundedIndexBufferSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
-        _unboundedIndexBufferSrvIndex, descriptorSize);
+    if (_reusableIndexBufferSRVIndices.empty() == false)
+    {
+        UINT reusedSrvIndex = _reusableIndexBufferSRVIndices.front();
+        _reusableIndexBufferSRVIndices.pop();
+        // Create view of SRV for shader access
+        hDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(
+            _unboundedIndexBufferSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+            reusedSrvIndex, _descriptorSize);
+
+        descriptorHeapIndex = reusedSrvIndex;
+    }
+    else
+    {
+        // Create view of SRV for shader access
+        hDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(
+            _unboundedIndexBufferSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+            _unboundedIndexBufferSrvIndex, _descriptorSize);
+
+        descriptorHeapIndex = _unboundedIndexBufferSrvIndex;
+        _unboundedIndexBufferSrvIndex++;
+    }
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 
@@ -950,7 +1020,7 @@ void RayTracingPipelineShader::addSRVToUnboundedIndexBufferDescriptorTable(D3DBu
 
     device->CreateShaderResourceView(indexBuffer->resource.Get(), &srvDesc, hDescriptor);
 
-    _unboundedIndexBufferSrvIndex++;
+    return descriptorHeapIndex;
 }
 
 void RayTracingPipelineShader::updateTextureUnbounded(int descriptorTableIndex, int textureUnit, Texture* texture,
@@ -1045,6 +1115,7 @@ UINT RayTracingPipelineShader::_allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* 
 UINT RayTracingPipelineShader::createBufferSRV(D3DBuffer* buffer, UINT numElements,
                                                UINT elementSize)
 {
+
     auto                            device  = DXLayer::instance()->getDevice();
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
     srvDesc.ViewDimension                   = D3D12_SRV_DIMENSION_BUFFER;
