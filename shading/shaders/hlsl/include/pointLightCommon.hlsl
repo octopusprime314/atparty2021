@@ -15,14 +15,14 @@ float3 GetBRDFPointLight(float3 albedo,
 
     // FO is initialized as the hardcoded 0.04 generalized reflectance constanct that interpolates
     // between metallic and albedo for fresnel calculations
-    const float3 reflectance = float3(0.04f, 0.04f, 0.04f);
-    float3       F0          = lerp(reflectance, albedo, metallic);
+    const float3 reflectanceConstant = float3(0.04f, 0.04f, 0.04f);
+    float3       F0                  = lerp(reflectanceConstant, albedo, metallic);
 
     // reflectance equation
-    float3 Lo = float3(0.0f, 0.0f, 0.0f);
+    float3 reflectance = float3(0.0f, 0.0f, 0.0f);
 
     const uint maxLightsToProcess = 16;
-    bool       totalOcclusion      = 0.0;
+    bool       totalOcclusion     = 0.0;
 
     for (int i = 0; i < maxLightsToProcess && i < numPointLights; i++)
     {
@@ -38,7 +38,7 @@ float3 GetBRDFPointLight(float3 albedo,
 
 
         // Use the light radiance to guide whether or not a light is contributing to surface lighting
-        if (length(radiance) > 0.01)
+        if (length(radiance) > 0.1)
         {
             // Occlusion shadow ray from the hit position to the target light
             RayDesc ray;
@@ -47,12 +47,6 @@ float3 GetBRDFPointLight(float3 albedo,
             // but also shorten the ray to make sure it doesn't hit the primary ray target
             ray.TMax = distance;
 
-            // Adding noise to ray
-
-            float lightRadius = lightRange / 400.0f;
-            
-            float2 index = threadId.xy;
-            
             float3 pointLightPosition = pointLightPositions[i].xyz;
 
             ray.Origin                 = hitPosition;
@@ -122,12 +116,12 @@ float3 GetBRDFPointLight(float3 albedo,
             // 2) NdotL basically says that more aligned the normal and light direction is, the more the light
             // will be scattered within the surface (diffuse lighting) rather than get reflected (specular)
             // which will get color from the diffuse surface the reflected light hits after the bounce.
-            Lo += (diffuse + specular) * radiance * NdotL * (1.0f - occlusion);
+            reflectance += (diffuse + specular) * radiance * NdotL * (1.0f - occlusion);
         }
     }
 
     float3 ambient = float3(0.003f, 0.003f, 0.003f) * albedo;
-    float3 color   = Lo;
+    float3 color   = reflectance;
 
     // Gamma correction
     float colorScale = 1.0f / 2.2f;
