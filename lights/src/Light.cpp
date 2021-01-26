@@ -88,8 +88,8 @@ MVP Light::getCameraMVP() { return _cameraMVP; }
 Vector4 Light::getPosition()
 {
     // Extract light position from model matrix
-    float* inverseModel = _lightMVP.getModelMatrix().getFlatBuffer();
-    auto   position     = Vector4(-inverseModel[3], -inverseModel[7], -inverseModel[11], 1.0);
+    float* model = _lightMVP.getModelMatrix().getFlatBuffer();
+    auto position = Vector4(model[3], model[7], model[11], 1.0);
     return position;
 }
 
@@ -200,9 +200,9 @@ void Light::setLightState(const Vector4& position, const Vector4& rotation, cons
     _color    = color;
 
     auto transform = Matrix::translation(position.getx(), position.gety(), position.getz()) *
-                     Matrix::rotationAroundX(rotation.getx()) *
-                     Matrix::rotationAroundY(rotation.gety()) *
-                     Matrix::rotationAroundZ(rotation.getz());
+                     Matrix::rotationAroundY(static_cast<float>(rotation.gety())) *
+                     Matrix::rotationAroundZ(static_cast<float>(rotation.getz())) *
+                     Matrix::rotationAroundX(static_cast<float>(rotation.getx()));
 
     _lightMVP.setModel(transform);
     _lightMVP.setView(ModelBroker::instance()->getViewManager()->getView());

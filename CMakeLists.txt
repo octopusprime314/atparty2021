@@ -138,7 +138,7 @@ target_link_libraries(compaction-lib-demo optimized ${CMAKE_SOURCE_DIR}/libs/glt
 #pre fetches assets during cmake -G configuration
 FetchContent_Populate(assets
                       URL        https://www.dropbox.com/s/pm2vsf3bm97hhpm/compaction-demo-assets.zip?dl=0
-                      URL_HASH   MD5=57d1bfe304197bd4143b91cb2f93efb7
+                      URL_HASH   MD5=9c275003fb5b74f6ea10084cf8eac0b8
                       SOURCE_DIR assets)
 
 #pre fetches lib dependencies during cmake -G configuration

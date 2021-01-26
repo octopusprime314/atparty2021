@@ -177,13 +177,13 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
             // If there is a failure in getting the TBN matrix then use the computed normal without normal mappings
             if (any(isnan(tbnMat[0])))
             {
-                normal = normalize(mul(-tbnMat[2], instanceNormalMatrixTransform));
+                normal = -normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
             }
             else
             {
                 float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
 
-                normal = normalize(mul(-normalMap, tbnMatNormalTransform));
+                normal = -normalize(mul(normalMap, tbnMatNormalTransform));
             }
 
             normalUAV[threadId.xy].xyz   = normal;

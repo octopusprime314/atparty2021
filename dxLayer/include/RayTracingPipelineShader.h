@@ -39,6 +39,9 @@ struct GpuToCpuBuffers
 #define MaxBLASSRVsForRayTracing   4000 * 3
 #define TlasAllocationMultiplier   10
 
+#define RandomInsertAndRemoveEntities 0
+
+
 class RayTracingPipelineShader
 {
     using TextureDescriptorHeapMap = std::pair<std::vector<AssetTexture*>, int>;

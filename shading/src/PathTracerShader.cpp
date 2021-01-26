@@ -206,7 +206,8 @@ RenderTexture* PathTracerShader::getCompositedFrame()
 
 void PathTracerShader::_processLights(std::vector<Light*>&  lights,
                                       ViewEventDistributor* viewEventDistributor,
-                                      PointLightList&       pointLightList)
+                                      PointLightList&       pointLightList,
+                                      bool                  addLights)
 {
     // Use map to sort the lights based on distance from the viewer
     std::map<float, int> lightsSorted;
@@ -220,7 +221,7 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
     static constexpr unsigned int lightGenInternalMs = 250;
 
     auto milliSeconds = MasterClock::instance()->getGameTime();
-    if (((milliSeconds - previousTime) > lightGenInternalMs) /*&& lights.size() < 2*/)
+    if (((milliSeconds - previousTime) > lightGenInternalMs) && addLights)
     {
         // random floats between -1.0 - 1.0
         // Will be used to obtain a seed for the random number engine
@@ -259,7 +260,7 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
         if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
         {
             Vector4 pointLightPos     = light->getPosition();
-            Vector4 pointLightVector  = cameraPos + pointLightPos;
+            Vector4 pointLightVector  = cameraPos - pointLightPos;
             float   distanceFromLight = pointLightVector.getMagnitude();
 
             lightsSorted.insert(std::pair<float, int>(distanceFromLight, pointLightOffset));
@@ -287,7 +288,7 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
                 pointLightList.lightPosArray[lightPosIndex++] = posBuff[i];
                 pointLightList.lightColorsArray[lightColorIndex++] = colorBuff[i];
             }
-            pointLightList.lightRangesArray[lightRangeIndex++] = light->getRange();
+            pointLightList.lightRangesArray[lightRangeIndex++] = light->getScale().getFlatBuffer()[0];
             totalLights++;
         }
     }
@@ -403,7 +404,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     // Process point lights
     PointLightList pointLightList;
-    _processLights(lights, viewEventDistributor, pointLightList);
+    _processLights(lights, viewEventDistributor, pointLightList, RandomInsertAndRemoveEntities);
 
     // Process directional light
     Vector4 sunLightColor  = Vector4(1.0, 1.0, 1.0);
@@ -560,6 +561,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("sunLightRange", &sunLightRange, true);
     shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), true);
     shader->updateData("sunLightRadius", &sunLightRadius, true);
+
+    //auto resourceBindings  = shader->_resourceIndexes;
+    //ID3D12DescriptorHeap* descriptorHeaps[] = {rtPipeline->getDescHeap().Get()};
+    //cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+    //
+    //cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],
+    //                                      _hemisphereSamplesGPUBuffer->gpuDescriptorHandle);
 
     shader->updateData("seed", &seed, true);
     shader->updateData("numSamplesPerSet", &numSamplesPerSet, true);

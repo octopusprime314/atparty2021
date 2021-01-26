@@ -155,13 +155,13 @@ void main(int3 threadId : SV_DispatchThreadID,
         // normal mappings
         if (any(isnan(tbnMat[0])))
         {
-            secondarySurfaceNormal = normalize(mul(-tbnMat[2], instanceNormalMatrixTransform));
+            secondarySurfaceNormal = normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
         }
         else
         {
             float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
         
-            secondarySurfaceNormal = normalize(mul(-secondarySurfaceNormal, tbnMatNormalTransform));
+            secondarySurfaceNormal = normalize(mul(secondarySurfaceNormal, tbnMatNormalTransform));
         }
         
         float3 secondarySurfaceReflectionColor = GetBRDFPointLight(secondarySurfaceAlbedo,

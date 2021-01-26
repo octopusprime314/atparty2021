@@ -568,14 +568,12 @@ void RayTracingPipelineShader::_updateBlasData()
     auto    commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
                                                                 : DXLayer::instance()->getCmdList();
 
-    constexpr bool randomInsertAndRemoveEntities = true;
-
     // random floats between -1.0 - 1.0
     std::random_device               rd;
     std::mt19937                     generator(rd());
     std::uniform_real_distribution<> randomFloats(-1.0, 1.0);
 
-    if (randomInsertAndRemoveEntities)
+    if (RandomInsertAndRemoveEntities)
     {
 
         if (entityList->size() < MaxInstancesForRayTracing)
@@ -653,7 +651,7 @@ void RayTracingPipelineShader::_updateBlasData()
     for (auto entity = entityList->begin(); entity != entityList->end();)
     {
         Vector4 entityPosition = -((*entity)->getWorldSpaceTransform() * Vector4(0, 0, 0, 1));
-        if (randomInsertAndRemoveEntities)
+        if (RandomInsertAndRemoveEntities)
         {
             if ((*entity)->getHasEntered() == false)
             {
@@ -676,7 +674,7 @@ void RayTracingPipelineShader::_updateBlasData()
             newBlasBuilds = true;
         }
 
-        if (randomInsertAndRemoveEntities)
+        if (RandomInsertAndRemoveEntities)
         {
             modelCountsInEntities[(*entity)->getModel()]++;
 

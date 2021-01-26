@@ -11,6 +11,7 @@
 #include <map>
 #include "ModelBroker.h"
 #include "ViewEventDistributor.h"
+#include "json.hpp"
 
 #undef max
 
@@ -858,8 +859,20 @@ void BuildGltfMeshes(const Document*           document,
                 // Load camera from child nodes
                 else if (node.children.empty() == false)
                 {
+                    std::string::size_type        sz; // alias of size_t
+                    auto                          nodeIndex = std::stoi(node.children[0], &sz);
+
+                    auto cameraNode = document->nodes.Elements()[nodeIndex];
+
+                    if(cameraNode.cameraId.empty() == true)
+                    {
+                        continue;
+                    }
                     Vector4 cameraPosition(node.translation.x, node.translation.y, node.translation.z);
-                    Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
+                    Vector4 quaternion(node.rotation.x + cameraNode.rotation.x,
+                                       node.rotation.y + cameraNode.rotation.y,
+                                       node.rotation.z + cameraNode.rotation.z,
+                                       node.rotation.w + cameraNode.rotation.w);
 
                     camSettings.bobble           = false;
                     camSettings.lockedEntity     = -1;
@@ -868,7 +881,7 @@ void BuildGltfMeshes(const Document*           document,
                     camSettings.path             = "";
                     camSettings.position         = cameraPosition;
                     // Default camera orients in the negative Y direction
-                    camSettings.rotation = Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+                    camSettings.rotation = Vector4(GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
                 }
             }
 
@@ -932,6 +945,80 @@ void BuildGltfMeshes(const Document*           document,
                 auto viewMan = ModelBroker::getViewManager();
                 camSettings.type = ViewEventDistributor::CameraType::GOD;
                 viewMan->setCamera(camSettings, nullptr);
+            }
+
+
+            // Use the resource reader to get each mesh primitive's position data
+            int nodeIndex  = 0;
+            int lightIndex = 0;
+            for (const auto& extension : document->extensions)
+            {
+                std::stringstream input_KHR_lights_punctual;
+                input_KHR_lights_punctual << extension.second;
+
+                nlohmann::json jd;
+                input_KHR_lights_punctual >> jd;
+
+                for (auto& light : jd["lights"])
+                {
+                    SceneLight sceneLight;
+
+                    auto color           = light["color"];
+                    auto intensity       = light["intensity"];
+
+                    sceneLight.color     = Vector4(color[0], color[1], color[2]);
+                    sceneLight.lightType = LightType::POINT;
+                    sceneLight.name      = light["name"];
+                    sceneLight.scale     = Vector4(intensity, intensity, intensity);
+                    sceneLight.lockedIdx = -1;
+
+                    bool foundLight = false;
+                    // Use the resource reader to get each mesh primitive's position data
+                    while (nodeIndex < document->nodes.Elements().size())
+                    {
+                        const auto& node = document->nodes.Elements()[nodeIndex];
+                        if (node.children.empty() == false)
+                        {
+                            Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
+                            sceneLight.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
+                            sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+
+                            std::string::size_type sz; // alias of size_t
+                            auto nodeIndex = std::stoi(node.children[0], &sz);
+
+                            auto extensions = document->nodes.Elements()[nodeIndex].extensions;
+
+                            for (const auto& nodeExtension : document->nodes.Elements()[nodeIndex].extensions)
+                            {
+                                std::stringstream data;
+                                data << nodeExtension.second;
+
+                                nlohmann::json nodeLightJd;
+                                data >> nodeLightJd;
+
+                                auto readLightIndex = nodeLightJd["light"];
+
+                                if (readLightIndex == lightIndex)
+                                {
+                                    foundLight = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        nodeIndex++;
+
+                        if (foundLight == true)
+                        {
+                            //if (lightIndex == 3)
+                            //{
+                                EngineManager::instance()->addLight(sceneLight);
+                            //}
+                            break;
+                        }
+                    }
+                    lightIndex++;
+                }
             }
         }
     }

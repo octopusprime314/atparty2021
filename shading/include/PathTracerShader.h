@@ -74,7 +74,8 @@ class PathTracerShader : public ShaderBase
     void _updateKeyboard(int key, int x, int y);
     void _processLights(std::vector<Light*>&  lights,
                         ViewEventDistributor* viewEventDistributor,
-                        PointLightList&       pointLightList);
+                        PointLightList&       pointLightList,
+                        bool                  addLights);
 
   public:
     PathTracerShader(std::string shaderName);

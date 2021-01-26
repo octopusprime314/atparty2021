@@ -125,9 +125,9 @@ Vector4 ViewEventDistributor::getCameraPos()
     cameraView.getFlatBuffer()[10] = -cameraView.getFlatBuffer()[10];
     cameraView.getFlatBuffer()[11] = -cameraView.getFlatBuffer()[11];
 
-     Vector4 cameraPos = Vector4(-cameraView.getFlatBuffer()[3],
-                                 -cameraView.getFlatBuffer()[7],
-                                 -cameraView.getFlatBuffer()[11]);
+     Vector4 cameraPos = Vector4(cameraView.getFlatBuffer()[3],
+                                 cameraView.getFlatBuffer()[7],
+                                 cameraView.getFlatBuffer()[11]);
 
     return cameraPos;
 }
@@ -140,8 +140,8 @@ Vector4 ViewEventDistributor::getPrevCameraPos()
     cameraView.getFlatBuffer()[10] = -cameraView.getFlatBuffer()[10];
     cameraView.getFlatBuffer()[11] = -cameraView.getFlatBuffer()[11];
 
-    Vector4 cameraPos = Vector4(-cameraView.getFlatBuffer()[3], -cameraView.getFlatBuffer()[7],
-                                -cameraView.getFlatBuffer()[11]);
+    Vector4 cameraPos = Vector4(cameraView.getFlatBuffer()[3], cameraView.getFlatBuffer()[7],
+                                cameraView.getFlatBuffer()[11]);
     return cameraPos;
 }
 
