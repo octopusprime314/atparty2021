@@ -33,7 +33,7 @@ float3 GetBRDFPointLight(float3 albedo,
         // Offset distance is a way to compute diffuse indirect lighting
         float  distance       = length(pointLightPositions[i].xyz - hitPosition) + offsetDistance;
         float  attenuation    = 1.0f / (distance * distance);
-        float lightIntensity  = lightRange / 100.0;
+        float lightIntensity  = lightRange;
         float3 radiance       = pointLightColors[i].xyz * lightIntensity * attenuation;
 
 

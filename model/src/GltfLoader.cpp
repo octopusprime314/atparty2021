@@ -969,7 +969,7 @@ void BuildGltfMeshes(const Document*           document,
                     sceneLight.color     = Vector4(color[0], color[1], color[2]);
                     sceneLight.lightType = LightType::POINT;
                     sceneLight.name      = light["name"];
-                    sceneLight.scale     = Vector4(intensity, intensity, intensity);
+                    sceneLight.scale     = Vector4(intensity, intensity, intensity) / 10.0;
                     sceneLight.lockedIdx = -1;
 
                     bool foundLight = false;
@@ -1010,10 +1010,7 @@ void BuildGltfMeshes(const Document*           document,
 
                         if (foundLight == true)
                         {
-                            //if (lightIndex == 3)
-                            //{
-                                EngineManager::instance()->addLight(sceneLight);
-                            //}
+                            EngineManager::instance()->addLight(sceneLight);
                             break;
                         }
                     }

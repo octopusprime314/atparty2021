@@ -563,6 +563,7 @@ void RayTracingPipelineShader::_updateBlasData()
 
     auto    cameraView = viewEventDistributor->getView();
     Vector4 cameraPos  = viewEventDistributor->getCameraPos();
+    cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
 
     auto    dxLayer              = DXLayer::instance();
     auto    commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
@@ -650,7 +651,7 @@ void RayTracingPipelineShader::_updateBlasData()
     std::map<Model*, int> modelCountsInEntities;
     for (auto entity = entityList->begin(); entity != entityList->end();)
     {
-        Vector4 entityPosition = -((*entity)->getWorldSpaceTransform() * Vector4(0, 0, 0, 1));
+        Vector4 entityPosition = ((*entity)->getWorldSpaceTransform() * Vector4(0, 0, 0, 1));
         if (RandomInsertAndRemoveEntities)
         {
             if ((*entity)->getHasEntered() == false)
@@ -658,9 +659,9 @@ void RayTracingPipelineShader::_updateBlasData()
                 Vector4 rotation(randomFloats(generator) * 360.0, randomFloats(generator) * 360.0,
                                  randomFloats(generator) * 360.0);
 
-                (*entity)->entranceWaypoint(Vector4(-entityPosition.getx(),
-                                                    -entityPosition.gety() - 500.0,
-                                                    -entityPosition.getz()),
+                (*entity)->entranceWaypoint(Vector4(entityPosition.getx(),
+                                                    entityPosition.gety() - 500.0,
+                                                    entityPosition.getz()),
                                             rotation, 4000);
             }
         }
@@ -678,7 +679,7 @@ void RayTracingPipelineShader::_updateBlasData()
         {
             modelCountsInEntities[(*entity)->getModel()]++;
 
-            auto distance = (cameraPos - entityPosition).getMagnitude();
+            auto distance = (cameraPos + entityPosition).getMagnitude();
             if (distance > cometTailRadius)
             {
                 modelCountsInEntities[(*entity)->getModel()]--;

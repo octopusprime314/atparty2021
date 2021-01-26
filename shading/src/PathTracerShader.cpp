@@ -214,8 +214,8 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
     // Get point light positions
     unsigned int pointLights = 0;
 
-    auto   cameraView  = viewEventDistributor->getView();
     Vector4 cameraPos  = viewEventDistributor->getCameraPos();
+    cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
 
     static unsigned int previousTime = 0;
     static constexpr unsigned int lightGenInternalMs = 250;
@@ -232,7 +232,7 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
 
         float lightIntensityRange = 10.0f;
         //float randomLightIntensity = lightIntensityRange;
-        float randomLightIntensity = (((randomFloats(generator) + 1.0) / 2.0) * lightIntensityRange) + 10.0;
+        float randomLightIntensity = (((randomFloats(generator) + 1.0) / 2.0) * lightIntensityRange) + 300000.0;
 
         Vector4 randomColor(static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
                             static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
@@ -247,7 +247,7 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
         light.rotation  = Vector4(0.0, 0.0, 0.0, 1.0);
         light.scale     = Vector4(randomLightIntensity, randomLightIntensity, randomLightIntensity);
         light.color     = randomColor;
-        light.position  = cameraPos;
+        light.position  = -cameraPos;
         light.lockedIdx = -1;
         EngineManager::instance()->addLight(light);
 
@@ -260,7 +260,7 @@ void PathTracerShader::_processLights(std::vector<Light*>&  lights,
         if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
         {
             Vector4 pointLightPos     = light->getPosition();
-            Vector4 pointLightVector  = cameraPos - pointLightPos;
+            Vector4 pointLightVector  = cameraPos + pointLightPos;
             float   distanceFromLight = pointLightVector.getMagnitude();
 
             lightsSorted.insert(std::pair<float, int>(distanceFromLight, pointLightOffset));
