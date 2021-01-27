@@ -53,6 +53,11 @@ class RayTracingPipelineShader
 
     using IndexBufferMapping = std::map<Model*, D3DBufferDescriptorHeapMap>;
 
+    using UniformMaterialMap     = std::pair<std::vector<UniformMaterial>, int>;
+    using UniformMaterialMapping = std::vector<std::pair<Model*, UniformMaterialMap>>;
+
+    using BlasMapping= std::map<Model*, RTCompaction::ASBuffers*>;
+
     UINT                                                              _descriptorsAllocated;
     D3D12_DESCRIPTOR_HEAP_DESC                                        _descriptorHeapDesc;
     ComPtr<ID3D12DescriptorHeap>                                      _descriptorHeap;
@@ -71,15 +76,10 @@ class RayTracingPipelineShader
     AttributeMapping                                                  _vertexBufferMap;
     IndexBufferMapping                                                _indexBufferMap;
     TextureMapping                                                    _texturesMap;
-    std::map<Model*, RTCompaction::ASBuffers*>                        _blasMap;
+    UniformMaterialMapping                                            _uniformMaterialMap;
+    BlasMapping                                                       _blasMap;
 
-    std::map<Model*, UINT>                                            _attributeMap;
     std::vector<UINT>                                                 _attributeMapping;
-
-    std::map<Model*, std::vector<UniformMaterial>>                    _uniformMaterialMap;
-    std::vector<UniformMaterial>                                      _uniformMaterialMapping;
-
-    std::map<Model*, UINT>                                            _materialMap;
     std::vector<UINT>                                                 _materialMapping;
 
     std::queue<UINT>                                                  _reusableMaterialSRVIndices;
@@ -139,7 +139,7 @@ class RayTracingPipelineShader
     int                                           getBLASCount();
     void                                          updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes);
     void                                          updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes);
-    void                                          updateAndBindTransmissionBuffer(std::map<std::string, UINT> resourceIndexes);
+    void                                          updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes);
     void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes);
     void                                          buildAccelerationStructures();
     UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize);

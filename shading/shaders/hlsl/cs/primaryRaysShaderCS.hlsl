@@ -7,7 +7,7 @@ Buffer<uint>                          indexBuffer[]                    : registe
 Buffer<uint>                          instanceIndexToMaterialMapping   : register(t4, space0);
 Buffer<uint>                          instanceIndexToAttributesMapping : register(t5, space0);
 Buffer<float>                         instanceNormalMatrixTransforms   : register(t6, space0);
-StructuredBuffer<UniformMaterial>     instanceUniformMaterialMapping   : register(t7, space0);
+StructuredBuffer<UniformMaterial>     uniformMaterials                 : register(t7, space0);
 TextureCube                           skyboxTexture                    : register(t8, space0);
 
 
@@ -93,12 +93,12 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
                 float2 uvCoord = GetTexCoord(rayQuery.CandidateTriangleBarycentrics(), attributeIndex, primitiveIndex);
 
                 // This is a trasmittive material dielectric like glass or water
-                if (instanceUniformMaterialMapping[attributeIndex].transmittance > 0.0)
+                if (uniformMaterials[attributeIndex].transmittance > 0.0)
                 {
                     rayQuery.CommitNonOpaqueTriangleHit();
                 }
                 // Alpha transparency texture that is treated as alpha cutoff for leafs and foliage, etc.
-                else if (instanceUniformMaterialMapping[attributeIndex].transmittance == 0.0)
+                else if (uniformMaterials[attributeIndex].transmittance == 0.0)
                 {
                     float alpha = diffuseTexture[NonUniformResourceIndex(materialIndex)]
                                       .SampleLevel(bilinearWrap, uvCoord, 0)
@@ -155,9 +155,9 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
                              //              hitPosition, threadId.xy, objectToWorldTransform, instanceNormalMatrixTransform);
 
             float3 albedo = float3(0.0, 0.0, 0.0);
-            if (instanceUniformMaterialMapping[attributeIndex].validBits & ColorValidBit)
+            if (uniformMaterials[attributeIndex].validBits & ColorValidBit)
             {
-                albedo = instanceUniformMaterialMapping[attributeIndex].baseColor;
+                albedo = uniformMaterials[attributeIndex].baseColor;
             }
             else
             {
@@ -166,9 +166,9 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
 
             float roughness = 0.0;
 
-            if (instanceUniformMaterialMapping[attributeIndex].validBits & RoughnessValidBit)
+            if (uniformMaterials[attributeIndex].validBits & RoughnessValidBit)
             {
-                roughness = instanceUniformMaterialMapping[attributeIndex].roughness;
+                roughness = uniformMaterials[attributeIndex].roughness;
             }
             else
             {
@@ -178,14 +178,14 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
             }
 
             float metallic = 0.0;
-            if (instanceUniformMaterialMapping[attributeIndex].validBits & MetallicValidBit)
+            if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
             {
-                metallic = instanceUniformMaterialMapping[attributeIndex].metallic;
+                metallic = uniformMaterials[attributeIndex].metallic;
             }
 
             float3 normal = float3(0.0, 0.0, 0.0);
 
-            if (instanceUniformMaterialMapping[attributeIndex].validBits & NormalValidBit)
+            if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
             {
                 normal = -GetNormalCoord(rayQuery.CommittedTriangleBarycentrics(), attributeIndex, primitiveIndex);
             }
@@ -220,11 +220,11 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
 
             normalUAV[threadId.xy].w   = roughness;
             positionUAV[threadId.xy].w = metallic;
-            albedoUAV[threadId.xy].w   = instanceUniformMaterialMapping[attributeIndex].transmittance;
+            albedoUAV[threadId.xy].w   = uniformMaterials[attributeIndex].transmittance;
 
             // If transmittive glass is detected then zero out albedo for now
             // In the future you can have colored glass than can provide a diffuse color component
-            if (instanceUniformMaterialMapping[attributeIndex].transmittance > 0.0)
+            if (uniformMaterials[attributeIndex].transmittance > 0.0)
             {
                 albedoUAV[threadId.xy].xyz = float3(0.0, 0.0, 0.0);
             }

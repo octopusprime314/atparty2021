@@ -10,7 +10,7 @@ Texture2D                                   positionSRV                      : r
 Buffer<uint>                                instanceIndexToMaterialMapping   : register(t7, space0);
 Buffer<uint>                                instanceIndexToAttributesMapping : register(t8, space0);
 Buffer<float>                               instanceNormalMatrixTransforms   : register(t9, space0);
-StructuredBuffer<UniformMaterial>           instanceUniformMaterialMapping   : register(t10, space0);
+StructuredBuffer<UniformMaterial>           uniformMaterials                 : register(t10, space0);
 StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : register(t11, space0);
 
 RWTexture2D<float4> reflectionUAV : register(u0);
@@ -102,13 +102,13 @@ float3 GetLightingColor(float3 position,
                                              attributeIndex, primitiveIndex);
 
                 // This is a trasmittive material dielectric like glass or water
-                if (instanceUniformMaterialMapping[attributeIndex].transmittance > 0.0)
+                if (uniformMaterials[attributeIndex].transmittance > 0.0)
                 {
                     rayQuery.CommitNonOpaqueTriangleHit();
                 }
                 // Alpha transparency texture that is treated as alpha cutoff for leafs and foliage,
                 // etc.
-                else if (instanceUniformMaterialMapping[attributeIndex].transmittance == 0.0)
+                else if (uniformMaterials[attributeIndex].transmittance == 0.0)
                 {
                     float alpha = diffuseTexture[NonUniformResourceIndex(materialIndex)]
                                       .SampleLevel(bilinearWrap, uvCoord, 0)
@@ -140,7 +140,7 @@ float3 GetLightingColor(float3 position,
             float2 uvCoord = GetTexCoord(rayQuery.CommittedTriangleBarycentrics(), attributeIndex,
                                          primitiveIndex);
 
-            transmittance = instanceUniformMaterialMapping[attributeIndex].transmittance;
+            transmittance = uniformMaterials[attributeIndex].transmittance;
 
             // Punch through ray with zero reflection
             if (transmittance > 0.0)
@@ -179,18 +179,18 @@ float3 GetLightingColor(float3 position,
                                //              attributeIndex, primitiveIndex, rayP0, rayP1,
                                //              position, threadId.xy, objectToWorldTransform, instanceNormalMatrixTransform);
 
-            if (instanceUniformMaterialMapping[attributeIndex].validBits & ColorValidBit)
+            if (uniformMaterials[attributeIndex].validBits & ColorValidBit)
             {
-                albedo = instanceUniformMaterialMapping[attributeIndex].baseColor;
+                albedo = uniformMaterials[attributeIndex].baseColor;
             }
             else
             {
                 albedo = pow(diffuseTexture[NonUniformResourceIndex(materialIndex)].SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz, 2.2);
             }
 
-            if (instanceUniformMaterialMapping[attributeIndex].validBits & RoughnessValidBit)
+            if (uniformMaterials[attributeIndex].validBits & RoughnessValidBit)
             {
-                roughness = instanceUniformMaterialMapping[attributeIndex].roughness;
+                roughness = uniformMaterials[attributeIndex].roughness;
             }
             else
             {
@@ -200,14 +200,14 @@ float3 GetLightingColor(float3 position,
             }
 
             float metallic = 0.0;
-            if (instanceUniformMaterialMapping[attributeIndex].validBits & MetallicValidBit)
+            if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
             {
-                metallic = instanceUniformMaterialMapping[attributeIndex].metallic;
+                metallic = uniformMaterials[attributeIndex].metallic;
             }
 
             normal = float3(0.0, 0.0, 0.0);
 
-            if (instanceUniformMaterialMapping[attributeIndex].validBits & NormalValidBit)
+            if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
             {
                 normal = -GetNormalCoord(rayQuery.CommittedTriangleBarycentrics(), attributeIndex,
                                          primitiveIndex);

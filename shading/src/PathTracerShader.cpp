@@ -378,7 +378,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes);
     rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes);
     rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes);
-    rtPipeline->updateAndBindTransmissionBuffer(shader->_resourceIndexes);
+    rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes);
         
     shader->dispatch(
         ceilf(screenSize[0] / static_cast<float>(threadGroupWidth )),
@@ -549,7 +549,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes);
     rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes);
     rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes);
-    rtPipeline->updateAndBindTransmissionBuffer(shader->_resourceIndexes);
+    rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes);
 
     shader->updateData("numPointLights", &pointLightList.lightCount, true);
     shader->updateData("pointLightColors", pointLightList.lightColorsArray, true);
