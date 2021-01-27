@@ -11,6 +11,20 @@ struct CompressedAttribute
     uint16_t padding;
 };
 
+#define ColorValidBit     1
+#define NormalValidBit    2
+#define RoughnessValidBit 4
+#define MetallicValidBit  8
+
+struct UniformMaterial
+{
+    float3 baseColor;
+    float  metallic;
+    float  roughness;
+    float  transmittance;
+    uint   validBits;
+};
+
 struct AlignedHemisphereSample3D
 {
     float3 value;

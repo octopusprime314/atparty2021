@@ -249,281 +249,6 @@ float GetYaw(Vector4 q)
     return z;
 }
 
-void ThreadedBuildGltfMesh(int                       modelIndex,
-                           const Document*           document,
-                           const GLTFResourceReader* resourceReader,
-                           Model*                    model,
-                           ModelLoadType             loadType,
-                           std::string               pathFile)
-{
-
-    static std::mutex     lock;
-
-    std::vector<float>    vertices;
-    std::vector<float>    normals;
-    std::vector<float>    textures;
-    std::vector<uint32_t> indices;
-
-    // Offsets are in vertices
-    std::vector<int> vertexStrides;
-    std::vector<int> indexStrides;
-
-    bool             is32BitIndices = false;
-    std::vector<int> materialIndices;
-    // Use the resource reader to get each mesh primitive's position data
-    for (int meshIndex = modelIndex; meshIndex < document->meshes.Elements().size(); meshIndex++)
-    {
-        const auto& mesh = document->meshes.Elements()[meshIndex];
-
-        std::cout << "Mesh: " << mesh.id << "\n";
-
-        for (int meshPrimIndex = 0; meshPrimIndex < mesh.primitives.size(); meshPrimIndex++)
-        {
-            const auto& meshPrimitive = mesh.primitives[meshPrimIndex];
-
-            std::string accessorId;
-
-            if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_POSITION, accessorId))
-            {
-                vertexStrides.push_back(vertices.size() / 3);
-
-                const Accessor& accessor = document->accessors.Get(accessorId);
-
-                lock.lock();
-                auto tempVerts = resourceReader->ReadBinaryData<float>(*document, accessor);
-                lock.unlock();
-
-                vertices.insert(vertices.end(), tempVerts.begin(), tempVerts.end());
-                const auto dataByteLength = vertices.size() * sizeof(float);
-            }
-            if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_NORMAL, accessorId))
-            {
-                const Accessor& accessor = document->accessors.Get(accessorId);
-
-                lock.lock();
-                auto tempNormals = resourceReader->ReadBinaryData<float>(*document, accessor);
-                lock.unlock();
-
-                normals.insert(normals.end(), tempNormals.begin(), tempNormals.end());
-                const auto dataByteLength = normals.size() * sizeof(float);
-            }
-            if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_TEXCOORD_0, accessorId))
-            {
-                const Accessor& accessor = document->accessors.Get(accessorId);
-
-                lock.lock();
-                auto tempTextures = resourceReader->ReadBinaryData<float>(*document, accessor);
-                lock.unlock();
-
-                textures.insert(textures.end(), tempTextures.begin(), tempTextures.end());
-                const auto dataByteLength = textures.size() * sizeof(float);
-            }
-
-            const Accessor& accessor = document->accessors.Get(meshPrimitive.indicesAccessorId);
-
-            if ((accessor.type == TYPE_SCALAR) &&
-                (accessor.componentType == COMPONENT_UNSIGNED_SHORT))
-            {
-                indexStrides.push_back(indices.size());
-
-                lock.lock();
-                std::vector<uint16_t> uint16Indices = resourceReader->ReadBinaryData<uint16_t>(*document, accessor);
-                lock.unlock();
-
-                for (uint16_t index : uint16Indices)
-                {
-                    indices.push_back(index);
-                }
-            }
-            else if ((accessor.type == TYPE_SCALAR) &&
-                        (accessor.componentType == COMPONENT_UNSIGNED_INT))
-            {
-                indexStrides.push_back(indices.size());
-
-                lock.lock();
-                auto newIndices = resourceReader->ReadBinaryData<uint32_t>(*document, accessor);
-                lock.unlock();
-
-                indices.insert(indices.end(), newIndices.begin(), newIndices.end());
-
-                is32BitIndices = true;
-            }
-            std::string::size_type sz; // alias of size_t
-            materialIndices.push_back(std::stoi(meshPrimitive.materialId, &sz));
-        }
-
-        if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
-        {
-            break;
-        }
-    }
-
-    std::vector<int>   textureIndexing;
-    std::vector<int>   texturesPerMaterial;
-    std::vector<float> materialTransmission;
-
-    // Use the resource reader to get each image's data
-    for (int materialIndex : materialIndices)
-    {
-        const auto& material = document->materials.Elements()[materialIndex];
-
-        auto textureInMaterial = material.GetTextures();
-
-        auto texturesPrevSize = textureIndexing.size();
-
-        bool materialsFound[3] = {false, false, false};
-
-        std::string::size_type sz; // alias of size_t
-        for (auto texture : textureInMaterial)
-        {
-            if (texture.first.empty() == false &&
-                texture.second == Microsoft::glTF::TextureType::BaseColor)
-            {
-                int index = std::stoi(texture.first, &sz);
-                textureIndexing.push_back(index);
-                materialsFound[0] = true;
-            }
-        }
-
-        for (auto texture : textureInMaterial)
-        {
-            if (texture.first.empty() == false &&
-                texture.second == Microsoft::glTF::TextureType::Normal)
-            {
-                int index = std::stoi(texture.first, &sz);
-                textureIndexing.push_back(index);
-                materialsFound[1] = true;
-            }
-        }
-
-        for (auto texture : textureInMaterial)
-        {
-            if (texture.first.empty() == false &&
-                texture.second == Microsoft::glTF::TextureType::MetallicRoughness)
-            {
-                int index = std::stoi(texture.first, &sz);
-                textureIndexing.push_back(index);
-                materialsFound[2] = true;
-            }
-        }
-
-        // If material roughness is supplied then just use albedo
-        if (materialsFound[1] == false || materialsFound[2] == false)
-        {
-            for (auto texture : textureInMaterial)
-            {
-                if (texture.first.empty() == false &&
-                    texture.second == Microsoft::glTF::TextureType::BaseColor)
-                {
-                    int index = std::stoi(texture.first, &sz);
-
-                    if (materialsFound[1] == false)
-                    {
-                        textureIndexing.push_back(index);
-                    }
-                    if (materialsFound[2] == false)
-                    {
-                        textureIndexing.push_back(index);
-                    }
-                }
-            }
-        }
-
-        materialTransmission.push_back(material.metallicRoughness.baseColorFactor.a);
-
-        texturesPerMaterial.push_back(textureIndexing.size() - texturesPrevSize);
-    }
-
-    if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
-    {
-        std::string strippedExtension = pathFile.substr(0, pathFile.find("."));
-        std::string name = strippedExtension + std::to_string(modelIndex) + "collection";
-        model            = ModelBroker::instance()->getModel(name);
-    }
-
-    model->getRenderBuffers()->set32BitIndices(is32BitIndices);
-
-    int                      i             = 0;
-    int                      materialIndex = 0;
-    int                      textureIndex  = 0;
-    std::vector<std::string> materialTextureNames;
-    std::set<std::string>    materialRepeatCount;
-    for (const auto& texture : textureIndexing)
-    {
-        auto modelName            = model->getName();
-        auto lodStrippedModelName = modelName.substr(0, modelName.find_last_of("_"));
-
-        const auto& image = document->images.Elements()[texture];
-
-        std::string filename;
-
-        if (image.uri.empty())
-        {
-            assert(!image.bufferViewId.empty());
-
-            auto& bufferView = document->bufferViews.Get(image.bufferViewId);
-            auto& buffer     = document->buffers.Get(bufferView.bufferId);
-
-            filename +=
-                buffer.uri; // NOTE: buffer uri is empty if image is stored in GLB binary chunk
-        }
-        else if (IsUriBase64(image.uri))
-        {
-            filename = "Data URI";
-        }
-        else
-        {
-            filename = image.uri;
-        }
-        if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
-        {
-            auto textureName = TEXTURE_LOCATION + "collections/" + filename;
-            if (materialRepeatCount.find(textureName) != materialRepeatCount.end())
-            {
-                if (textureIndex % 3 == 1)
-                {
-                    materialTextureNames.push_back(TEXTURE_LOCATION +
-                                                    "collections/DefaultNormal.dds");
-                }
-                else if (textureIndex % 3 == 2)
-                {
-                    materialTextureNames.push_back(TEXTURE_LOCATION +
-                                                    "collections/DefaultAORoughness.dds");
-                }
-            }
-            else
-            {
-                materialTextureNames.push_back(textureName);
-            }
-            materialRepeatCount.insert(textureName);
-        }
-        else
-        {
-            materialTextureNames.push_back(TEXTURE_LOCATION + lodStrippedModelName + "/" +
-                                            filename);
-        }
-
-        materialIndex++;
-        if (materialIndex == texturesPerMaterial[i])
-        {
-            model->addMaterial(materialTextureNames, vertexStrides[i], vertexStrides[i],
-                                indexStrides[i], materialTransmission[i]);
-
-            i++;
-            materialIndex = 0;
-            materialTextureNames.clear();
-        }
-        textureIndex++;
-    }
-
-    buildModel(vertices, normals, textures, indices, model);
-
-    if (loadType == ModelLoadType::SingleModel)
-    {
-        model->_isLoaded = true;
-    }
-}
-
 // Uses the Document and GLTFResourceReader classes to print information about various glTF binary resources
 void BuildGltfMeshes(const Document*           document,
                      const GLTFResourceReader* resourceReader,
@@ -536,8 +261,7 @@ void BuildGltfMeshes(const Document*           document,
     std::vector<float>        textures;
     std::vector<uint32_t>     indices;
     std::vector<Model*>       modelsPending;
-    std::vector<std::thread*> threadWorkerList;
-    bool                      useThreadedCollectionBuild = false;
+
     if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
     {
         Model* saveMaster = model;
@@ -553,201 +277,254 @@ void BuildGltfMeshes(const Document*           document,
 
             modelsPending.push_back(model);
 
-            if (useThreadedCollectionBuild)
-            {
-                threadWorkerList.push_back(new std::thread(&ThreadedBuildGltfMesh, modelWorkerThreadIndex,
-                                                                                   document,
-                                                                                   resourceReader,
-                                                                                   model,
-                                                                                   loadType,
-                                                                                   pathFile));
-                modelWorkerThreadIndex++;
-            }
+           
         }
         saveMaster->setLoadModelCount(modelsPending.size());
     }
-    if (useThreadedCollectionBuild == false)
+    
+    int modelIndex = 0;
+    while (modelIndex < document->meshes.Elements().size())
     {
-        int modelIndex = 0;
-        while (modelIndex < document->meshes.Elements().size())
+        // Offsets are in vertices
+        std::vector<int> vertexStrides;
+        std::vector<int> indexStrides;
+
+        if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
         {
-            // Offsets are in vertices
-            std::vector<int> vertexStrides;
-            std::vector<int> indexStrides;
+            vertices.clear();
+            normals.clear();
+            textures.clear();
+            indices.clear();
+        }
+
+        bool             is32BitIndices = false;
+        std::vector<int> materialIndices;
+        // Use the resource reader to get each mesh primitive's position data
+        for (int meshIndex = modelIndex; meshIndex < document->meshes.Elements().size(); meshIndex++)
+        {
+            const auto& mesh = document->meshes.Elements()[meshIndex];
+
+            std::cout << "Mesh: " << mesh.id << "\n";
+
+            for (int meshPrimIndex = 0; meshPrimIndex < mesh.primitives.size(); meshPrimIndex++)
+            {
+                const auto& meshPrimitive = mesh.primitives[meshPrimIndex];
+
+                std::string accessorId;
+
+                if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_POSITION, accessorId))
+                {
+                    vertexStrides.push_back(vertices.size() / 3);
+
+                    const Accessor& accessor = document->accessors.Get(accessorId);
+
+                    auto tempVerts = resourceReader->ReadBinaryData<float>(*document, accessor);
+                    vertices.insert(vertices.end(), tempVerts.begin(), tempVerts.end());
+                    const auto dataByteLength = vertices.size() * sizeof(float);
+                }
+                if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_NORMAL, accessorId))
+                {
+                    const Accessor& accessor = document->accessors.Get(accessorId);
+
+                    auto tempNormals = resourceReader->ReadBinaryData<float>(*document, accessor);
+                    normals.insert(normals.end(), tempNormals.begin(), tempNormals.end());
+                    const auto dataByteLength = normals.size() * sizeof(float);
+                }
+                if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_TEXCOORD_0, accessorId))
+                {
+                    const Accessor& accessor = document->accessors.Get(accessorId);
+
+                    auto tempTextures = resourceReader->ReadBinaryData<float>(*document, accessor);
+                    textures.insert(textures.end(), tempTextures.begin(), tempTextures.end());
+                    const auto dataByteLength = textures.size() * sizeof(float);
+                }
+
+                const Accessor& accessor = document->accessors.Get(meshPrimitive.indicesAccessorId);
+
+                if ((accessor.type == TYPE_SCALAR) &&
+                    (accessor.componentType == COMPONENT_UNSIGNED_SHORT))
+                {
+                    indexStrides.push_back(indices.size());
+                    std::vector<uint16_t> uint16Indices = resourceReader->ReadBinaryData<uint16_t>(*document, accessor);
+
+                    for (uint16_t index : uint16Indices)
+                    {
+                        indices.push_back(index);
+                    }
+                }
+                else if ((accessor.type == TYPE_SCALAR) &&
+                            (accessor.componentType == COMPONENT_UNSIGNED_INT))
+                {
+                    indexStrides.push_back(indices.size());
+                    auto newIndices = resourceReader->ReadBinaryData<uint32_t>(*document, accessor);
+                    indices.insert(indices.end(), newIndices.begin(), newIndices.end());
+
+                    is32BitIndices = true;
+                }
+                std::string::size_type sz; // alias of size_t
+                materialIndices.push_back(std::stoi(meshPrimitive.materialId, &sz));
+            }
 
             if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
             {
-                vertices.clear();
-                normals.clear();
-                textures.clear();
-                indices.clear();
+                break;
             }
+        }
 
-            bool             is32BitIndices = false;
-            std::vector<int> materialIndices;
-            // Use the resource reader to get each mesh primitive's position data
-            for (int meshIndex = modelIndex; meshIndex < document->meshes.Elements().size(); meshIndex++)
+        std::vector<int> textureIndexing;
+        std::vector<int> texturesPerMaterial;
+        std::vector<UniformMaterial> uniformMaterials;
+
+        // Use the resource reader to get each image's data
+        for (int materialIndex : materialIndices)
+        {
+            const auto& material = document->materials.Elements()[materialIndex];
+
+            auto textureInMaterial = material.GetTextures();
+
+            auto texturesPrevSize = textureIndexing.size();
+
+            bool materialsFound[3] = {false, false, false};
+
+            uniformMaterials.push_back(UniformMaterial());
+
+            std::string::size_type sz; // alias of size_t
+            for (auto texture : textureInMaterial)
             {
-                const auto& mesh = document->meshes.Elements()[meshIndex];
-
-                std::cout << "Mesh: " << mesh.id << "\n";
-
-                for (int meshPrimIndex = 0; meshPrimIndex < mesh.primitives.size(); meshPrimIndex++)
+                if (texture.first.empty() == false &&
+                    texture.second == Microsoft::glTF::TextureType::BaseColor)
                 {
-                    const auto& meshPrimitive = mesh.primitives[meshPrimIndex];
-
-                    std::string accessorId;
-
-                    if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_POSITION, accessorId))
-                    {
-                        vertexStrides.push_back(vertices.size() / 3);
-
-                        const Accessor& accessor = document->accessors.Get(accessorId);
-
-                        auto tempVerts = resourceReader->ReadBinaryData<float>(*document, accessor);
-                        vertices.insert(vertices.end(), tempVerts.begin(), tempVerts.end());
-                        const auto dataByteLength = vertices.size() * sizeof(float);
-                    }
-                    if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_NORMAL, accessorId))
-                    {
-                        const Accessor& accessor = document->accessors.Get(accessorId);
-
-                        auto tempNormals = resourceReader->ReadBinaryData<float>(*document, accessor);
-                        normals.insert(normals.end(), tempNormals.begin(), tempNormals.end());
-                        const auto dataByteLength = normals.size() * sizeof(float);
-                    }
-                    if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_TEXCOORD_0, accessorId))
-                    {
-                        const Accessor& accessor = document->accessors.Get(accessorId);
-
-                        auto tempTextures = resourceReader->ReadBinaryData<float>(*document, accessor);
-                        textures.insert(textures.end(), tempTextures.begin(), tempTextures.end());
-                        const auto dataByteLength = textures.size() * sizeof(float);
-                    }
-
-                    const Accessor& accessor = document->accessors.Get(meshPrimitive.indicesAccessorId);
-
-                    if ((accessor.type == TYPE_SCALAR) &&
-                        (accessor.componentType == COMPONENT_UNSIGNED_SHORT))
-                    {
-                        indexStrides.push_back(indices.size());
-                        std::vector<uint16_t> uint16Indices = resourceReader->ReadBinaryData<uint16_t>(*document, accessor);
-
-                        for (uint16_t index : uint16Indices)
-                        {
-                            indices.push_back(index);
-                        }
-                    }
-                    else if ((accessor.type == TYPE_SCALAR) &&
-                             (accessor.componentType == COMPONENT_UNSIGNED_INT))
-                    {
-                        indexStrides.push_back(indices.size());
-                        auto newIndices = resourceReader->ReadBinaryData<uint32_t>(*document, accessor);
-                        indices.insert(indices.end(), newIndices.begin(), newIndices.end());
-
-                        is32BitIndices = true;
-                    }
-                    std::string::size_type sz; // alias of size_t
-                    materialIndices.push_back(std::stoi(meshPrimitive.materialId, &sz));
-                }
-
-                if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
-                {
-                    break;
+                    int index = std::stoi(document->textures[texture.first].imageId, &sz);
+                    textureIndexing.push_back(index);
+                    materialsFound[0] = true;
                 }
             }
 
-            std::vector<int> textureIndexing;
-            std::vector<int> texturesPerMaterial;
-            std::vector<float> materialTransmission;
-
-            // Use the resource reader to get each image's data
-            for (int materialIndex : materialIndices)
+            for (auto texture : textureInMaterial)
             {
-                const auto& material = document->materials.Elements()[materialIndex];
+                if (texture.first.empty() == false &&
+                    texture.second == Microsoft::glTF::TextureType::Normal)
+                {
+                    int index = std::stoi(document->textures[texture.first].imageId, &sz);
+                    textureIndexing.push_back(index);
+                    materialsFound[1] = true;
+                }
+            }
 
-                auto textureInMaterial = material.GetTextures();
+            for (auto texture : textureInMaterial)
+            {
+                if (texture.first.empty() == false &&
+                    texture.second == Microsoft::glTF::TextureType::MetallicRoughness)
+                {
+                    int index = std::stoi(document->textures[texture.first].imageId, &sz);
+                    textureIndexing.push_back(index);
+                    materialsFound[2] = true;
+                }
+            }
 
-                auto texturesPrevSize = textureIndexing.size();
+            uniformMaterials.back().validBits = 0;
+            if (materialsFound[0] == false)
+            {
+                uniformMaterials.back().validBits |= ColorValidBit; 
+            }
+            if (materialsFound[1] == false)
+            {
+                uniformMaterials.back().validBits |= NormalValidBit;
+            }
+            if (materialsFound[2] == false)
+            {
+                uniformMaterials.back().validBits |= RoughnessValidBit;
+            }
+            // Metal is always valid and never gathered from a texture
+            uniformMaterials.back().validBits |= MetallicValidBit;
 
-                bool materialsFound[3] = {false, false, false};
-
-                std::string::size_type sz; // alias of size_t
+            // If material roughness is supplied then just use albedo
+            if (materialsFound[1] == false ||
+                materialsFound[2] == false)
+            {
                 for (auto texture : textureInMaterial)
                 {
                     if (texture.first.empty() == false &&
                         texture.second == Microsoft::glTF::TextureType::BaseColor)
                     {
-                        int index = std::stoi(texture.first, &sz);
-                        textureIndexing.push_back(index);
-                        materialsFound[0] = true;
-                    }
-                }
+                        int index = std::stoi(document->textures[texture.first].imageId, &sz);
 
-                for (auto texture : textureInMaterial)
-                {
-                    if (texture.first.empty() == false &&
-                        texture.second == Microsoft::glTF::TextureType::Normal)
-                    {
-                        int index = std::stoi(texture.first, &sz);
-                        textureIndexing.push_back(index);
-                        materialsFound[1] = true;
-                    }
-                }
-
-                for (auto texture : textureInMaterial)
-                {
-                    if (texture.first.empty() == false &&
-                        texture.second == Microsoft::glTF::TextureType::MetallicRoughness)
-                    {
-                        int index = std::stoi(texture.first, &sz);
-                        textureIndexing.push_back(index);
-                        materialsFound[2] = true;
-                    }
-                }
-
-                // If material roughness is supplied then just use albedo
-                if (materialsFound[1] == false ||
-                    materialsFound[2] == false)
-                {
-                    for (auto texture : textureInMaterial)
-                    {
-                        if (texture.first.empty() == false &&
-                            texture.second == Microsoft::glTF::TextureType::BaseColor)
+                        if (materialsFound[1] == false)
                         {
-                            int index = std::stoi(texture.first, &sz);
-
-                            if (materialsFound[1] == false)
-                            {
-                                textureIndexing.push_back(index);
-                            }
-                            if (materialsFound[2] == false)
-                            {
-                                textureIndexing.push_back(index);
-                            }
+                            textureIndexing.push_back(index);
+                        }
+                        if (materialsFound[2] == false)
+                        {
+                            textureIndexing.push_back(index);
                         }
                     }
                 }
-
-                materialTransmission.push_back(material.metallicRoughness.baseColorFactor.a);
-                
-                texturesPerMaterial.push_back(textureIndexing.size() - texturesPrevSize);
             }
 
-            if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
+            if (material.extensions.empty() == false)
             {
-                std::string strippedExtension = pathFile.substr(0, pathFile.find("."));
-                std::string name = strippedExtension + std::to_string(modelIndex) + "collection";
-                model = ModelBroker::instance()->getModel(name);
+                for (const auto& extension : material.extensions)
+                {
+                    std::stringstream input_KHR_materials_transmission;
+                    input_KHR_materials_transmission << extension.second;
+
+                    nlohmann::json jd;
+                    input_KHR_materials_transmission >> jd;
+
+                    auto transmissionFactor = jd["transmissionFactor"];
+
+                    uniformMaterials.back().transmittance = transmissionFactor;
+                }
+            }
+            else
+            {
+                uniformMaterials.back().transmittance = 0.0;
             }
 
-            model->getRenderBuffers()->set32BitIndices(is32BitIndices);
+            uniformMaterials.back().baseColor[0] = material.metallicRoughness.baseColorFactor.r;
+            uniformMaterials.back().baseColor[1] = material.metallicRoughness.baseColorFactor.g;
+            uniformMaterials.back().baseColor[2] = material.metallicRoughness.baseColorFactor.b;
+            uniformMaterials.back().metallic     = material.metallicRoughness.metallicFactor;
+            uniformMaterials.back().roughness    = material.metallicRoughness.roughnessFactor;
 
-            int i = 0;
-            int materialIndex = 0;
-            int textureIndex  = 0;
-            std::vector<std::string> materialTextureNames;
-            std::set<std::string> materialRepeatCount;
+            texturesPerMaterial.push_back(textureIndexing.size() - texturesPrevSize);
+        }
+
+        if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
+        {
+            std::string strippedExtension = pathFile.substr(0, pathFile.find("."));
+            std::string name = strippedExtension + std::to_string(modelIndex) + "collection";
+            model = ModelBroker::instance()->getModel(name);
+        }
+
+        model->getRenderBuffers()->set32BitIndices(is32BitIndices);
+
+        int i = 0;
+        int materialIndex = 0;
+        int textureIndex  = 0;
+        std::vector<std::string> materialTextureNames;
+        std::set<std::string> materialRepeatCount;
+
+
+        if (textureIndexing.empty())
+        {
+            if (uniformMaterials.back().validBits & ColorValidBit)
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
+            }
+            if (uniformMaterials.back().validBits & NormalValidBit)
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultNormal.dds");
+            }
+            if (uniformMaterials.back().validBits & RoughnessValidBit)
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
+            }
+
+            model->addMaterial(materialTextureNames, vertexStrides[i], vertexStrides[i], indexStrides[i], uniformMaterials[i]);
+        }
+        else
+        {
             for (const auto& texture : textureIndexing)
             {
                 auto modelName            = model->getName();
@@ -774,6 +551,7 @@ void BuildGltfMeshes(const Document*           document,
                 {
                     filename = image.uri;
                 }
+
                 if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
                 {
                     auto textureName = TEXTURE_LOCATION + "collections/" + filename;
@@ -802,7 +580,11 @@ void BuildGltfMeshes(const Document*           document,
                 materialIndex++;
                 if (materialIndex == texturesPerMaterial[i])
                 {
-                    model->addMaterial(materialTextureNames, vertexStrides[i], vertexStrides[i], indexStrides[i], materialTransmission[i]);
+                    model->addMaterial(materialTextureNames,
+                                        vertexStrides[i],
+                                        vertexStrides[i],
+                                        indexStrides[i],
+                                        uniformMaterials[i]);
 
                     i++;
                     materialIndex = 0;
@@ -810,212 +592,212 @@ void BuildGltfMeshes(const Document*           document,
                 }
                 textureIndex++;
             }
-
-            if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
-            {
-                buildModel(vertices, normals, textures, indices, model);
-                modelIndex++;
-            }
-            else
-            {
-                break;
-            }
         }
 
-        if (loadType == ModelLoadType::SingleModel)
+        if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
         {
             buildModel(vertices, normals, textures, indices, model);
-            model->_isLoaded = true;
+            modelIndex++;
         }
-
-        if (loadType == ModelLoadType::Scene)
+        else
         {
-            ViewEventDistributor::CameraSettings camSettings;
+            break;
+        }
+    }
 
-            // Use the resource reader to get each mesh primitive's position data
-            for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
+    if (loadType == ModelLoadType::SingleModel)
+    {
+        buildModel(vertices, normals, textures, indices, model);
+        model->_isLoaded = true;
+    }
+
+    if (loadType == ModelLoadType::Scene)
+    {
+        ViewEventDistributor::CameraSettings camSettings;
+
+        // Use the resource reader to get each mesh primitive's position data
+        for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
+        {
+            const auto& node = document->nodes.Elements()[nodeIndex];
+
+            // Load instances of geometry using node hierarchy
+            if (node.meshId.empty() == false)
             {
-                const auto& node = document->nodes.Elements()[nodeIndex];
-
-                // Load instances of geometry using node hierarchy
-                if (node.meshId.empty() == false)
-                {
-
-                    std::string::size_type sz; // alias of size_t
-                    int                    meshIndex = std::stoi(node.meshId, &sz);
-                    auto                   meshModel = modelsPending[meshIndex];
-
-                    SceneEntity sceneEntity;
-
-                    Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
-                    sceneEntity.modelname = meshModel->getName();
-                    sceneEntity.name      = meshModel->getName() + std::to_string(nodeIndex);
-                    sceneEntity.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
-                    sceneEntity.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
-                    sceneEntity.scale    = Vector4(node.scale.x, node.scale.y, node.scale.z);
-
-                    EngineManager::instance()->addEntity(sceneEntity);
-                }
-                // Load camera from child nodes
-                else if (node.children.empty() == false)
-                {
-                    std::string::size_type        sz; // alias of size_t
-                    auto                          nodeIndex = std::stoi(node.children[0], &sz);
-
-                    auto cameraNode = document->nodes.Elements()[nodeIndex];
-
-                    if(cameraNode.cameraId.empty() == true)
-                    {
-                        continue;
-                    }
-                    Vector4 cameraPosition(node.translation.x, node.translation.y, node.translation.z);
-                    Vector4 quaternion(node.rotation.x + cameraNode.rotation.x,
-                                       node.rotation.y + cameraNode.rotation.y,
-                                       node.rotation.z + cameraNode.rotation.z,
-                                       node.rotation.w + cameraNode.rotation.w);
-
-                    camSettings.bobble           = false;
-                    camSettings.lockedEntity     = -1;
-                    camSettings.lockedEntityName = "";
-                    camSettings.lockOffset       = Vector4(0.0, 0.0, 0.0, 0.0);
-                    camSettings.path             = "";
-                    camSettings.position         = cameraPosition;
-                    // Default camera orients in the negative Y direction
-                    camSettings.rotation = Vector4(GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
-                }
-            }
-
-            // Use the resource reader to get each mesh primitive's position data
-            for (const auto& animation : document->animations.Elements())
-            {
-                std::vector<PathWaypoint> waypoints;
 
                 std::string::size_type sz; // alias of size_t
-                int                    cameraIndex         = std::stoi(animation.id, &sz);
-                auto                   samplerIds          = document->animations[cameraIndex].samplers.Elements();
+                int                    meshIndex = std::stoi(node.meshId, &sz);
+                auto                   meshModel = modelsPending[meshIndex];
 
-                const Accessor& translationTimeAccessor = document->accessors.Get(samplerIds[0].inputAccessorId);
-                const Accessor& rotationTimeAccessor    = document->accessors.Get(samplerIds[1].inputAccessorId);
-                const Accessor& translationAccessor     = document->accessors.Get(samplerIds[0].outputAccessorId);
-                const Accessor& rotationAccessor        = document->accessors.Get(samplerIds[1].outputAccessorId);
+                SceneEntity sceneEntity;
 
-                auto translationTimeFloats = resourceReader->ReadBinaryData<float>(*document, translationTimeAccessor);
-                auto rotationTimeFloats    = resourceReader->ReadBinaryData<float>(*document, rotationTimeAccessor);
-                auto translationVectors    = resourceReader->ReadBinaryData<float>(*document, translationAccessor);
-                auto rotationVectors       = resourceReader->ReadBinaryData<float>(*document, rotationAccessor);
+                Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
+                sceneEntity.modelname = meshModel->getName();
+                sceneEntity.name      = meshModel->getName() + std::to_string(nodeIndex);
+                sceneEntity.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
+                sceneEntity.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+                sceneEntity.scale    = Vector4(node.scale.x, node.scale.y, node.scale.z);
 
-                int rotationIndex    = 0;
-                int translationIndex = 0;
-                int timeIndex        = 0;
-                float previousTime   = 0.0;
-                while (timeIndex < translationTimeFloats.size())
+                EngineManager::instance()->addEntity(sceneEntity);
+            }
+            // Load camera from child nodes
+            else if (node.children.empty() == false)
+            {
+                std::string::size_type        sz; // alias of size_t
+                auto                          nodeIndex = std::stoi(node.children[0], &sz);
+
+                auto cameraNode = document->nodes.Elements()[nodeIndex];
+
+                if(cameraNode.cameraId.empty() == true)
                 {
-                    Vector4 quaternion(rotationVectors[rotationIndex],
-                                       rotationVectors[rotationIndex + 1],
-                                       rotationVectors[rotationIndex + 2],
-                                       rotationVectors[rotationIndex + 3]);
-
-                    // Default camera orients in the negative Y direction
-                    Vector4 rotation = Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
-
-                    // Way points are in milliseconds
-                    PathWaypoint waypoint(Vector4(translationVectors[translationIndex],
-                                                  translationVectors[translationIndex + 1],
-                                                  translationVectors[translationIndex + 2]), 
-                                          rotation,
-                                          (translationTimeFloats[timeIndex] - previousTime) * 1000.0);
-
-                    previousTime = translationTimeFloats[timeIndex];
-
-                    waypoints.push_back(waypoint);
-
-                    rotationIndex += 4;
-                    translationIndex += 3;
-                    timeIndex++;
+                    continue;
                 }
+                Vector4 cameraPosition(node.translation.x, node.translation.y, node.translation.z);
+                Vector4 quaternion(node.rotation.x + cameraNode.rotation.x,
+                                    node.rotation.y + cameraNode.rotation.y,
+                                    node.rotation.z + cameraNode.rotation.z,
+                                    node.rotation.w + cameraNode.rotation.w);
 
-                auto viewMan = ModelBroker::getViewManager();
-                camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
-                viewMan->setCamera(camSettings, &waypoints);
+                camSettings.bobble           = false;
+                camSettings.lockedEntity     = -1;
+                camSettings.lockedEntityName = "";
+                camSettings.lockOffset       = Vector4(0.0, 0.0, 0.0, 0.0);
+                camSettings.path             = "";
+                camSettings.position         = cameraPosition;
+                // Default camera orients in the negative Y direction
+                camSettings.rotation = Vector4(GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+            }
+        }
+
+        // Use the resource reader to get each mesh primitive's position data
+        for (const auto& animation : document->animations.Elements())
+        {
+            std::vector<PathWaypoint> waypoints;
+
+            std::string::size_type sz; // alias of size_t
+            int                    cameraIndex         = std::stoi(animation.id, &sz);
+            auto                   samplerIds          = document->animations[cameraIndex].samplers.Elements();
+
+            const Accessor& translationTimeAccessor = document->accessors.Get(samplerIds[0].inputAccessorId);
+            const Accessor& rotationTimeAccessor    = document->accessors.Get(samplerIds[1].inputAccessorId);
+            const Accessor& translationAccessor     = document->accessors.Get(samplerIds[0].outputAccessorId);
+            const Accessor& rotationAccessor        = document->accessors.Get(samplerIds[1].outputAccessorId);
+
+            auto translationTimeFloats = resourceReader->ReadBinaryData<float>(*document, translationTimeAccessor);
+            auto rotationTimeFloats    = resourceReader->ReadBinaryData<float>(*document, rotationTimeAccessor);
+            auto translationVectors    = resourceReader->ReadBinaryData<float>(*document, translationAccessor);
+            auto rotationVectors       = resourceReader->ReadBinaryData<float>(*document, rotationAccessor);
+
+            int rotationIndex    = 0;
+            int translationIndex = 0;
+            int timeIndex        = 0;
+            float previousTime   = 0.0;
+            while (timeIndex < translationTimeFloats.size())
+            {
+                Vector4 quaternion(rotationVectors[rotationIndex],
+                                    rotationVectors[rotationIndex + 1],
+                                    rotationVectors[rotationIndex + 2],
+                                    rotationVectors[rotationIndex + 3]);
+
+                // Default camera orients in the negative Y direction
+                Vector4 rotation = Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+
+                // Way points are in milliseconds
+                PathWaypoint waypoint(Vector4(translationVectors[translationIndex],
+                                                translationVectors[translationIndex + 1],
+                                                translationVectors[translationIndex + 2]), 
+                                        rotation,
+                                        (translationTimeFloats[timeIndex] - previousTime) * 1000.0);
+
+                previousTime = translationTimeFloats[timeIndex];
+
+                waypoints.push_back(waypoint);
+
+                rotationIndex += 4;
+                translationIndex += 3;
+                timeIndex++;
             }
 
-            // If camera has no keyframes then just load camera position with no waypoints
-            if (document->animations.Elements().size() == 0)
+            auto viewMan = ModelBroker::getViewManager();
+            camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
+            viewMan->setCamera(camSettings, &waypoints);
+        }
+
+        // If camera has no keyframes then just load camera position with no waypoints
+        if (document->animations.Elements().size() == 0)
+        {
+            auto viewMan = ModelBroker::getViewManager();
+            camSettings.type = ViewEventDistributor::CameraType::GOD;
+            viewMan->setCamera(camSettings, nullptr);
+        }
+
+
+        // Use the resource reader to get each mesh primitive's position data
+        int nodeIndex  = 0;
+        int lightIndex = 0;
+        for (const auto& extension : document->extensions)
+        {
+            std::stringstream input_KHR_lights_punctual;
+            input_KHR_lights_punctual << extension.second;
+
+            nlohmann::json jd;
+            input_KHR_lights_punctual >> jd;
+
+            for (auto& light : jd["lights"])
             {
-                auto viewMan = ModelBroker::getViewManager();
-                camSettings.type = ViewEventDistributor::CameraType::GOD;
-                viewMan->setCamera(camSettings, nullptr);
-            }
+                SceneLight sceneLight;
 
+                auto color           = light["color"];
+                auto intensity       = light["intensity"];
 
-            // Use the resource reader to get each mesh primitive's position data
-            int nodeIndex  = 0;
-            int lightIndex = 0;
-            for (const auto& extension : document->extensions)
-            {
-                std::stringstream input_KHR_lights_punctual;
-                input_KHR_lights_punctual << extension.second;
+                sceneLight.color     = Vector4(color[0], color[1], color[2]);
+                sceneLight.lightType = LightType::POINT;
+                sceneLight.name      = light["name"];
+                sceneLight.scale     = Vector4(intensity, intensity, intensity) / 10.0;
+                sceneLight.lockedIdx = -1;
 
-                nlohmann::json jd;
-                input_KHR_lights_punctual >> jd;
-
-                for (auto& light : jd["lights"])
+                bool foundLight = false;
+                // Use the resource reader to get each mesh primitive's position data
+                while (nodeIndex < document->nodes.Elements().size())
                 {
-                    SceneLight sceneLight;
-
-                    auto color           = light["color"];
-                    auto intensity       = light["intensity"];
-
-                    sceneLight.color     = Vector4(color[0], color[1], color[2]);
-                    sceneLight.lightType = LightType::POINT;
-                    sceneLight.name      = light["name"];
-                    sceneLight.scale     = Vector4(intensity, intensity, intensity) / 10.0;
-                    sceneLight.lockedIdx = -1;
-
-                    bool foundLight = false;
-                    // Use the resource reader to get each mesh primitive's position data
-                    while (nodeIndex < document->nodes.Elements().size())
+                    const auto& node = document->nodes.Elements()[nodeIndex];
+                    if (node.children.empty() == false)
                     {
-                        const auto& node = document->nodes.Elements()[nodeIndex];
-                        if (node.children.empty() == false)
+                        Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
+                        sceneLight.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
+                        sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+
+                        std::string::size_type sz; // alias of size_t
+                        auto nodeIndex = std::stoi(node.children[0], &sz);
+
+                        auto extensions = document->nodes.Elements()[nodeIndex].extensions;
+
+                        for (const auto& nodeExtension : document->nodes.Elements()[nodeIndex].extensions)
                         {
-                            Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
-                            sceneLight.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
-                            sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+                            std::stringstream data;
+                            data << nodeExtension.second;
 
-                            std::string::size_type sz; // alias of size_t
-                            auto nodeIndex = std::stoi(node.children[0], &sz);
+                            nlohmann::json nodeLightJd;
+                            data >> nodeLightJd;
 
-                            auto extensions = document->nodes.Elements()[nodeIndex].extensions;
+                            auto readLightIndex = nodeLightJd["light"];
 
-                            for (const auto& nodeExtension : document->nodes.Elements()[nodeIndex].extensions)
+                            if (readLightIndex == lightIndex)
                             {
-                                std::stringstream data;
-                                data << nodeExtension.second;
-
-                                nlohmann::json nodeLightJd;
-                                data >> nodeLightJd;
-
-                                auto readLightIndex = nodeLightJd["light"];
-
-                                if (readLightIndex == lightIndex)
-                                {
-                                    foundLight = true;
-                                    break;
-                                }
+                                foundLight = true;
+                                break;
                             }
                         }
-
-                        nodeIndex++;
-
-                        if (foundLight == true)
-                        {
-                            EngineManager::instance()->addLight(sceneLight);
-                            break;
-                        }
                     }
-                    lightIndex++;
+
+                    nodeIndex++;
+
+                    if (foundLight == true)
+                    {
+                        EngineManager::instance()->addLight(sceneLight);
+                        break;
+                    }
                 }
+                lightIndex++;
             }
         }
     }
@@ -1023,12 +805,6 @@ void BuildGltfMeshes(const Document*           document,
     int threadIndex = 0;
     for (auto modelPending : modelsPending)
     {
-        if (useThreadedCollectionBuild)
-        {
-            threadWorkerList[threadIndex]->join();
-            threadIndex++;
-        }
-
         modelPending->_isLoaded = true;
     }
 }

@@ -38,7 +38,7 @@ float3 GetBRDFPointLight(float3 albedo,
 
 
         // Use the light radiance to guide whether or not a light is contributing to surface lighting
-        if (length(radiance) > 0.1)
+        if (length(radiance) > 0.01)
         {
             // Occlusion shadow ray from the hit position to the target light
             RayDesc ray;
@@ -63,7 +63,51 @@ float3 GetBRDFPointLight(float3 albedo,
 
             rayQuery.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, ray);
 
-            rayQuery.Proceed();
+            // transparency processing
+            while (rayQuery.Proceed())
+            {
+                //if (rayQuery.CandidateTriangleRayT() < rayQuery.CommittedRayT())
+                //{
+                //    float3 hitPosition =
+                //        rayQuery.WorldRayOrigin() +
+                //        (rayQuery.CandidateTriangleRayT() * rayQuery.WorldRayDirection());
+                //
+                //    int geometryIndex  = rayQuery.CandidateGeometryIndex();
+                //    int primitiveIndex = rayQuery.CandidatePrimitiveIndex();
+                //    int instanceIndex  = rayQuery.CandidateInstanceIndex();
+                //
+                //    int materialIndex = instanceIndexToMaterialMapping[instanceIndex] +
+                //                        (geometryIndex * texturesPerMaterial);
+                //
+                //    int attributeIndex =
+                //        instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
+                //
+                //    float2 uvCoord = GetTexCoord(rayQuery.CandidateTriangleBarycentrics(),
+                //                                 attributeIndex, primitiveIndex);
+                //
+                //    // This is a trasmittive material dielectric like glass or water
+                //    if (instanceUniformMaterialMapping[attributeIndex].transmittance > 0.0)
+                //    {
+                //        rayQuery.CommitNonOpaqueTriangleHit();
+                //    }
+                //    // Alpha transparency texture that is treated as alpha cutoff for leafs and
+                //    // foliage, etc.
+                //    else if (instanceUniformMaterialMapping[attributeIndex].transmittance == 0.0)
+                //    {
+                //        float alpha = diffuseTexture[NonUniformResourceIndex(materialIndex)]
+                //                          .SampleLevel(bilinearWrap, uvCoord, 0)
+                //                          .w;
+                //
+                //        if (alpha >= 0.9)
+                //        {
+                //            rayQuery.CommitNonOpaqueTriangleHit();
+                //        }
+                //    }
+                //}
+
+                // Don't worry about non opaque shadow processing for now
+                rayQuery.CommitNonOpaqueTriangleHit();
+            }
 
             float  occlusion = 0.0;
 

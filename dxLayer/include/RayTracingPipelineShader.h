@@ -14,6 +14,7 @@
 #include "HLSLShader.h"
 #include "RTCompaction.h"
 #include "DXDefines.h"
+#include "Model.h"
 
 using namespace Microsoft::WRL;
 
@@ -75,8 +76,8 @@ class RayTracingPipelineShader
     std::map<Model*, UINT>                                            _attributeMap;
     std::vector<UINT>                                                 _attributeMapping;
 
-    std::map<Model*, std::vector<float>>                              _transmissionMap;
-    std::vector<float>                                                _transmissionMapping;
+    std::map<Model*, std::vector<UniformMaterial>>                    _uniformMaterialMap;
+    std::vector<UniformMaterial>                                      _uniformMaterialMapping;
 
     std::map<Model*, UINT>                                            _materialMap;
     std::vector<UINT>                                                 _materialMapping;
@@ -91,8 +92,8 @@ class RayTracingPipelineShader
     ComPtr<ID3D12Resource>                                            _instanceIndexToAttributeMappingUpload[CMD_LIST_NUM];
     D3DBuffer*                                                        _instanceIndexToAttributeMappingGPUBuffer;
 
-    ComPtr<ID3D12Resource>                                            _instanceTransmissionMappingUpload[CMD_LIST_NUM];
-    D3DBuffer*                                                        _instanceTransmissionMappingGPUBuffer;
+    ComPtr<ID3D12Resource>                                            _instanceUniformMaterialMappingUpload[CMD_LIST_NUM];
+    D3DBuffer*                                                        _instanceUniformMaterialMappingGPUBuffer;
 
     ComPtr<ID3D12Resource>                                            _instanceNormalMatrixTransformsUpload[CMD_LIST_NUM];
     D3DBuffer*                                                        _instanceNormalMatrixTransformsGPUBuffer;
@@ -115,7 +116,6 @@ class RayTracingPipelineShader
     bool                                                              _useCompaction        = true;
     int                                                               _topLevelIndex        = 0;
     int                                                               _instanceMappingIndex = 0;
-
     
     UINT _allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
                              UINT descriptorIndexToUse = UINT_MAX);

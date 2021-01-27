@@ -42,13 +42,28 @@ enum class ModelClass
     AnimatedModelType
 };
 
+const uint32_t ColorValidBit     = 1;
+const uint32_t NormalValidBit    = 2;
+const uint32_t RoughnessValidBit = 4;
+const uint32_t MetallicValidBit  = 8;
+
+struct UniformMaterial
+{
+    float baseColor[3];
+    float metallic;
+    float roughness;
+    float transmittance;
+    uint32_t validBits;
+};
+
 struct Material
 {
     static constexpr int TexturesPerMaterial = 3;
     std::string albedo;
     std::string normal;
     std::string roughnessMetallic;
-    float       transmittance;
+
+    UniformMaterial uniformMaterial;
 };
 
 class Model
@@ -62,7 +77,7 @@ class Model
     void                     addLayeredTexture(std::vector<std::string> textureNames, int stride);
     void                     addTexture(std::string textureName, int textureStride, int vertexStride, int indexStride);
     void                     addMaterial(std::vector<std::string> materialTextures, int textureStride,
-                                         int vertexStride, int indexStride, float transmittance);
+                                         int vertexStride, int indexStride, UniformMaterial uniformMaterial);
     void                     setInstances(std::vector<Vector4> offsets);
     LayeredTexture*          getLayeredTexture(std::string textureName);
     AssetTexture*            getTexture(std::string textureName);

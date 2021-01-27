@@ -7,7 +7,7 @@ Buffer<uint>                          indexBuffer[]                    : registe
 Buffer<uint>                          instanceIndexToMaterialMapping   : register(t4, space0);
 Buffer<uint>                          instanceIndexToAttributesMapping : register(t5, space0);
 Buffer<float>                         instanceNormalMatrixTransforms   : register(t6, space0);
-Buffer<float>                         instanceTransmissionMapping      : register(t7, space0);
+StructuredBuffer<UniformMaterial>     instanceUniformMaterialMapping   : register(t7, space0);
 TextureCube                           skyboxTexture                    : register(t8, space0);
 
 
@@ -56,9 +56,8 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
 [numthreads(8, 8, 1)]
 
     void
-    main(int3 threadId
-       : SV_DispatchThreadID, int3 threadGroupThreadId
-       : SV_GroupThreadID) {
+    main(int3 threadId           : SV_DispatchThreadID,
+         int3 threadGroupThreadId : SV_GroupThreadID) {
         float3 rayDir;
         float3 origin;
 
@@ -94,12 +93,12 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
                 float2 uvCoord = GetTexCoord(rayQuery.CandidateTriangleBarycentrics(), attributeIndex, primitiveIndex);
 
                 // This is a trasmittive material dielectric like glass or water
-                if (instanceTransmissionMapping[attributeIndex] < 1.0)
+                if (instanceUniformMaterialMapping[attributeIndex].transmittance > 0.0)
                 {
                     rayQuery.CommitNonOpaqueTriangleHit();
                 }
                 // Alpha transparency texture that is treated as alpha cutoff for leafs and foliage, etc.
-                else if (instanceTransmissionMapping[attributeIndex] == 1.0)
+                else if (instanceUniformMaterialMapping[attributeIndex].transmittance == 0.0)
                 {
                     float alpha = diffuseTexture[NonUniformResourceIndex(materialIndex)]
                                       .SampleLevel(bilinearWrap, uvCoord, 0)
@@ -155,35 +154,64 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
                              //              attributeIndex, primitiveIndex, rayP0, rayP1,
                              //              hitPosition, threadId.xy, objectToWorldTransform, instanceNormalMatrixTransform);
 
-            float3 albedo    = pow(diffuseTexture[NonUniformResourceIndex(materialIndex)].SampleLevel(
-                              bilinearWrap, uvCoord, mipLevel).xyz, 2.2);
-
-            float roughness  = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
-                              .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                              .y;
-
-            float3 normal = float3(0.0, 0.0, 0.0);
-
-            float3 normalMap = diffuseTexture[NonUniformResourceIndex(materialIndex + 1)]
-                                    .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                                    .xyz;
-
-            // Converts from [0,1] space to [-1,1] space
-            normalMap = normalMap * 2.0f - 1.0f;
-
-            // Compute the normal from loading the triangle vertices
-            float3x3 tbnMat = GetTBN(rayQuery.CommittedTriangleBarycentrics(), attributeIndex, primitiveIndex);
-
-            // If there is a failure in getting the TBN matrix then use the computed normal without normal mappings
-            if (any(isnan(tbnMat[0])))
+            float3 albedo = float3(0.0, 0.0, 0.0);
+            if (instanceUniformMaterialMapping[attributeIndex].validBits & ColorValidBit)
             {
-                normal = -normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
+                albedo = instanceUniformMaterialMapping[attributeIndex].baseColor;
             }
             else
             {
-                float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
+                albedo = pow(diffuseTexture[NonUniformResourceIndex(materialIndex)].SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz, 2.2);
+            }
 
-                normal = -normalize(mul(normalMap, tbnMatNormalTransform));
+            float roughness = 0.0;
+
+            if (instanceUniformMaterialMapping[attributeIndex].validBits & RoughnessValidBit)
+            {
+                roughness = instanceUniformMaterialMapping[attributeIndex].roughness;
+            }
+            else
+            {
+                roughness = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
+                                .SampleLevel(bilinearWrap, uvCoord, mipLevel)
+                                .y;
+            }
+
+            float metallic = 0.0;
+            if (instanceUniformMaterialMapping[attributeIndex].validBits & MetallicValidBit)
+            {
+                metallic = instanceUniformMaterialMapping[attributeIndex].metallic;
+            }
+
+            float3 normal = float3(0.0, 0.0, 0.0);
+
+            if (instanceUniformMaterialMapping[attributeIndex].validBits & NormalValidBit)
+            {
+                normal = -GetNormalCoord(rayQuery.CommittedTriangleBarycentrics(), attributeIndex, primitiveIndex);
+            }
+            else
+            {
+                float3 normalMap = diffuseTexture[NonUniformResourceIndex(materialIndex + 1)]
+                                        .SampleLevel(bilinearWrap, uvCoord, mipLevel)
+                                        .xyz;
+
+                // Converts from [0,1] space to [-1,1] space
+                normalMap = normalMap * 2.0f - 1.0f;
+
+                // Compute the normal from loading the triangle vertices
+                float3x3 tbnMat = GetTBN(rayQuery.CommittedTriangleBarycentrics(), attributeIndex, primitiveIndex);
+
+                // If there is a failure in getting the TBN matrix then use the computed normal without normal mappings
+                if (any(isnan(tbnMat[0])))
+                {
+                    normal = -normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
+                }
+                else
+                {
+                    float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
+
+                    normal = -normalize(mul(normalMap, tbnMatNormalTransform));
+                }
             }
 
             normalUAV[threadId.xy].xyz   = normal;
@@ -191,12 +219,12 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
             albedoUAV[threadId.xy].xyz   = albedo.xyz;
 
             normalUAV[threadId.xy].w   = roughness;
-            positionUAV[threadId.xy].w = instanceIndex;
-            albedoUAV[threadId.xy].w   = instanceTransmissionMapping[attributeIndex];
+            positionUAV[threadId.xy].w = metallic;
+            albedoUAV[threadId.xy].w   = instanceUniformMaterialMapping[attributeIndex].transmittance;
 
             // If transmittive glass is detected then zero out albedo for now
             // In the future you can have colored glass than can provide a diffuse color component
-            if (instanceTransmissionMapping[attributeIndex] < 1.0)
+            if (instanceUniformMaterialMapping[attributeIndex].transmittance > 0.0)
             {
                 albedoUAV[threadId.xy].xyz = float3(0.0, 0.0, 0.0);
             }

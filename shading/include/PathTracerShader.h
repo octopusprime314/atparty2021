@@ -23,6 +23,7 @@
 #include "ViewEventDistributor.h"
 #include "Sampler.h"
 #include "ShaderBase.h"
+#include "DXRStateObject.h"
 
 class HLSLShader;
 
@@ -69,6 +70,7 @@ class PathTracerShader : public ShaderBase
     Samplers::MultiJittered      _randomSampler;
     std::mt19937                 _generatorURNG;
     bool                         _denoising;
+    DXRStateObject*              _dxrStateObject;
 
     void _updateGameState(EngineStateFlags state);
     void _updateKeyboard(int key, int x, int y);

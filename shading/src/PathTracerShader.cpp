@@ -185,6 +185,8 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     barrierDesc[6].Transition.pResource = _compositor->getResource()->getResource().Get();
 
     computeCmdList->ResourceBarrier(7, barrierDesc);
+
+    _dxrStateObject = new DXRStateObject(_primaryRaysShader->getRootSignature());
 }
 
 PathTracerShader::~PathTracerShader() {}

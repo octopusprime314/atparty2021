@@ -71,8 +71,10 @@ class HLSLShader : public Shader
     UINT                                   _threadGroupSizeX;
     UINT                                   _threadGroupSizeY;
     UINT                                   _threadGroupSizeZ;
+    bool                                   _isDXR;
 
   public:
+    HLSLShader(std::string pipelineShaderName, bool isDXR);
     HLSLShader(std::string vertexShaderName, std::string fragmentShaderName = "",
                std::vector<DXGI_FORMAT>* rtvs = nullptr);
     virtual ~HLSLShader();
@@ -87,6 +89,8 @@ class HLSLShader : public Shader
     void updateRTAS(std::string id, ComPtr<ID3D12DescriptorHeap> rtASDescriptorHeap,
                     D3D12_GPU_VIRTUAL_ADDRESS gpuva, bool isCompute = false);
  
+    ComPtr<ID3D12RootSignature> getRootSignature();
+    std::wstring                getName();
 
     static void setOM(std::vector<RenderTexture> targets, int width, int height);
     static void releaseOM(std::vector<RenderTexture> targets);
@@ -94,9 +98,6 @@ class HLSLShader : public Shader
     void        buildDXC(ComPtr<IDxcBlob>& pResultBlob, std::wstring shaderString,
                          std::wstring shaderProfile, std::wstring entryPoint,
                          std::vector<uint8_t>& stream);
-
-  
-    std::map<std::string, UINT> _resourceIndexes;
 
     void bindAttributes(VAO* vao);
     void unbindAttributes(){};
@@ -108,4 +109,6 @@ class HLSLShader : public Shader
     void updateDataAsyncCompute(std::string id, void* data, bool isCompute);
     void updateDataAsyncCompute(std::string dataName, int textureUnit, Texture* texture,
                                 bool isCompute, bool isUAV);
+
+    std::map<std::string, UINT> _resourceIndexes;
 };

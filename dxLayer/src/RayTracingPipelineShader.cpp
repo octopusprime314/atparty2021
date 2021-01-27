@@ -31,7 +31,7 @@ void RayTracingPipelineShader::init(ComPtr<ID3D12Device> device)
 {
     _materialMapping.reserve(InitInstancesForRayTracing);
     _attributeMapping.reserve(InitInstancesForRayTracing);
-    _transmissionMapping.reserve(InitInstancesForRayTracing);
+    _uniformMaterialMapping.reserve(InitInstancesForRayTracing);
 
     auto commandList = DXLayer::instance()->getComputeCmdList();
     auto dxLayer     = DXLayer::instance();
@@ -64,7 +64,7 @@ void RayTracingPipelineShader::init(ComPtr<ID3D12Device> device)
     _instanceIndexToMaterialMappingGPUBuffer  = nullptr;
     _instanceIndexToAttributeMappingGPUBuffer = nullptr;
     _instanceNormalMatrixTransformsGPUBuffer  = nullptr;
-    _instanceTransmissionMappingGPUBuffer     = nullptr;
+    _instanceUniformMaterialMappingGPUBuffer  = nullptr;
 
     _doneAdding = false;
 }
@@ -154,26 +154,16 @@ void RayTracingPipelineShader::updateAndBindAttributeBuffer(std::map<std::string
 
 void RayTracingPipelineShader::updateAndBindTransmissionBuffer(std::map<std::string, UINT> resourceIndexes)
 {
-    _transmissionMapping.clear();
-    for(auto transmissionVector : _transmissionMap)
-    {
-        for (auto transmission : transmissionVector.second)
-        {
-            _transmissionMapping.push_back(transmission);
-        }
-    }
-
     BYTE* mappedData                           = nullptr;
-    _instanceTransmissionMappingGPUBuffer->resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
-    memcpy(&mappedData[0], _transmissionMapping.data(), sizeof(UINT) * _transmissionMapping.size());
+    _instanceUniformMaterialMappingGPUBuffer->resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+
+    memcpy(&mappedData[0], _uniformMaterialMapping.data(), sizeof(UniformMaterial) * _uniformMaterialMapping.size());
 
     auto                  cmdList           = DXLayer::instance()->getCmdList();
     auto                  resourceBindings  = resourceIndexes;
     ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
     cmdList->SetDescriptorHeaps(1, descriptorHeaps);
-    cmdList->SetComputeRootDescriptorTable(
-        resourceBindings["instanceTransmissionMapping"],
-        _instanceTransmissionMappingGPUBuffer->gpuDescriptorHandle);
+    cmdList->SetComputeRootDescriptorTable(resourceBindings["instanceUniformMaterialMapping"], _instanceUniformMaterialMappingGPUBuffer->gpuDescriptorHandle);
 }
 
 void RayTracingPipelineShader::updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes)
@@ -305,11 +295,11 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
         vertexBuffer->nameId   = entity->getModel()->getName();
 
         vertexBuffer->offset = vertexAndBufferStrides[i].first;
-        indexBuffer->offset                          = vertexAndBufferStrides[i].second;
+        indexBuffer->offset  = vertexAndBufferStrides[i].second;
 
-        auto materialTransmittance = entity->getModel()->getMaterial(i).transmittance;
+        auto materialTransmittance = entity->getModel()->getMaterial(i).uniformMaterial.transmittance;
 
-        if (materialTransmittance < 1.0f)
+        if (materialTransmittance > 0.0f)
         {
             (*staticGeometryDesc)[staticGeomIndex].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
         }
@@ -334,7 +324,7 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
             _attributeMap[bufferModel] = vertexBufferDescriptorIndex;
         }
 
-        _transmissionMap[entity->getModel()].push_back(entity->getModel()->getMaterialNames()[i].transmittance);
+        _uniformMaterialMap[entity->getModel()].push_back(entity->getModel()->getMaterialNames()[i].uniformMaterial);
 
         if (_materialMap.find(entity->getModel()) == _materialMap.end())
         {
@@ -477,12 +467,12 @@ void RayTracingPipelineShader::_updateInstanceData()
     if ((_instanceIndexToMaterialMappingGPUBuffer == nullptr) ||
         (_instanceIndexToAttributeMappingGPUBuffer == nullptr) ||
         (_instanceNormalMatrixTransformsGPUBuffer == nullptr) ||
-        (_instanceTransmissionMappingGPUBuffer    == nullptr))
+        (_instanceUniformMaterialMappingGPUBuffer == nullptr))
     {
         _instanceIndexToMaterialMappingGPUBuffer  = new D3DBuffer();
         _instanceIndexToAttributeMappingGPUBuffer = new D3DBuffer();
         _instanceNormalMatrixTransformsGPUBuffer  = new D3DBuffer();
-        _instanceTransmissionMappingGPUBuffer     = new D3DBuffer();
+        _instanceUniformMaterialMappingGPUBuffer  = new D3DBuffer();
 
         newInstanceMappingAllocation = true;
     }
@@ -533,15 +523,14 @@ void RayTracingPipelineShader::_updateInstanceData()
         createBufferSRV(_instanceIndexToAttributeMappingGPUBuffer, newInstanceSize, sizeof(UINT));
 
         allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(float) * newInstanceSize,
-                             &_instanceTransmissionMappingUpload[_instanceMappingIndex],
+                             sizeof(UniformMaterial) * newInstanceSize,
+                             &_instanceUniformMaterialMappingUpload[_instanceMappingIndex],
                              L"instanceTransmission");
 
-        _instanceTransmissionMappingGPUBuffer->resource =
-             _instanceTransmissionMappingUpload[_instanceMappingIndex];
-        _instanceTransmissionMappingGPUBuffer->count = newInstanceSize;
+        _instanceUniformMaterialMappingGPUBuffer->resource = _instanceUniformMaterialMappingUpload[_instanceMappingIndex];
+        _instanceUniformMaterialMappingGPUBuffer->count = newInstanceSize;
 
-        createBufferSRV(_instanceTransmissionMappingGPUBuffer, newInstanceSize, sizeof(float));
+        createBufferSRV(_instanceUniformMaterialMappingGPUBuffer, newInstanceSize, sizeof(UniformMaterial));
 
         allocateUploadBuffer(
             DXLayer::instance()->getDevice().Get(), nullptr, sizeof(float) * 9 * newInstanceSize,
@@ -725,7 +714,7 @@ void RayTracingPipelineShader::_updateBlasData()
             // Remove the blas entry from the list
             _blasMap.erase(model.first);
             _attributeMap.erase(model.first);
-            _transmissionMap.erase(model.first);
+            _uniformMaterialMap.erase(model.first);
             _materialMap.erase(model.first);
 
 
@@ -764,6 +753,7 @@ void RayTracingPipelineShader::buildAccelerationStructures()
 
     _attributeMapping.clear();
     _materialMapping.clear();
+    _uniformMaterialMapping.clear();
     _bottomLevelBuildDescs.clear();
     _bottomLevelBuildModels.clear();
 
@@ -814,6 +804,7 @@ void RayTracingPipelineShader::buildAccelerationStructures()
 
         _materialMapping.push_back(_materialMap[entity->getModel()]);
         _attributeMapping.push_back(_attributeMap[entity->getModel()]);
+        _uniformMaterialMapping.push_back(_uniformMaterialMap[entity->getModel()][0]);
     }
 
     _updateTLASData(instanceDescIndex, instanceDescriptionCPUBuffer);

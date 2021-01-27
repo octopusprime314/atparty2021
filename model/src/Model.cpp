@@ -112,8 +112,8 @@ void Model::addTexture(std::string textureName, int textureStride, int vertexStr
     _textureRecorder.push_back(textureName);
 }
 
-void Model::addMaterial(std::vector<std::string> materialTextures,
-                         int textureStride, int vertexStride, int indexStride, float transmittance)
+void Model::addMaterial(std::vector<std::string> materialTextures, int textureStride,
+                        int vertexStride, int indexStride, UniformMaterial uniformMaterial)
 {
     struct Material material;
     std::string amalgamatedTextureName = "";
@@ -145,7 +145,7 @@ void Model::addMaterial(std::vector<std::string> materialTextures,
     _vao[_vao.size() - 1]->addTextureStride(std::pair<std::string, int>(amalgamatedTextureName, textureStride),
                                             vertexStride, indexStride);
 
-    material.transmittance = transmittance;
+    material.uniformMaterial = uniformMaterial;
     _materialRecorder.push_back(material);
 }
 

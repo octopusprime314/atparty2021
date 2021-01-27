@@ -25,6 +25,7 @@ static volatile bool g_VerboseShaders = false;
 HLSLShader::HLSLShader(std::string pipelineShaderName, std::string fragmentShaderName,
                        std::vector<DXGI_FORMAT>* rtvs)
 {
+    _isDXR = false;
     // set vertex name
     _pipelineShaderName = pipelineShaderName;
     _isASHeapCreated    = false;
@@ -42,6 +43,11 @@ HLSLShader::HLSLShader(std::string pipelineShaderName, std::string fragmentShade
 
 }
 
+HLSLShader::HLSLShader(std::string pipelineShaderName, bool isDXR)
+{
+    _pipelineShaderName = pipelineShaderName;
+    _isDXR              = isDXR;
+}
 HLSLShader::~HLSLShader() {}
 
 std::wstring HLSLShader::_stringToLPCWSTR(const std::string& s)
@@ -55,6 +61,12 @@ std::wstring HLSLShader::_stringToLPCWSTR(const std::string& s)
     delete[] buf;
     return r;
 }
+
+std::wstring HLSLShader::getName()
+{
+    return _stringToLPCWSTR(_pipelineShaderName);
+}
+
 
 void HLSLShader::buildDXC(ComPtr<IDxcBlob>& pResultBlob, std::wstring shaderString,
                           std::wstring shaderProfile, std::wstring entryPoint,
@@ -180,6 +192,11 @@ void HLSLShader::buildDXC(ComPtr<IDxcBlob>& pResultBlob, std::wstring shaderStri
     has_digest |= header->hash_digest[3] != 0x0;
 
     if (has_digest == false)
+    {
+        return;
+    }
+
+    if (_isDXR)
     {
         return;
     }
@@ -677,6 +694,11 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
         HRESULT result = device->CreateComputePipelineState(&pso, IID_PPV_ARGS(&_psoState));
         _psoState->SetName(_stringToLPCWSTR(baseName).c_str());
     }
+}
+
+ComPtr<ID3D12RootSignature> HLSLShader::getRootSignature()
+{
+    return _rootSignature;
 }
 
 void HLSLShader::setOM(std::vector<RenderTexture> targets, int width, int height)
