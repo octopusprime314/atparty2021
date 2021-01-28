@@ -186,7 +186,8 @@ PathTracerShader::PathTracerShader(std::string shaderName)
 
     computeCmdList->ResourceBarrier(7, barrierDesc);
 
-    _dxrStateObject = new DXRStateObject(_primaryRaysShader->getRootSignature());
+    _dxrStateObject = new DXRStateObject(_primaryRaysShader->getRootSignature(),
+                                         _reflectionRaysShader->getRootSignature());
 }
 
 PathTracerShader::~PathTracerShader() {}
@@ -379,10 +380,16 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes);
     rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes);
     rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes);
-        
-    shader->dispatch(
-        ceilf(screenSize[0] / static_cast<float>(threadGroupWidth )),
-        ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
+
+    if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
+    {
+        shader->dispatch(ceilf(screenSize[0] / static_cast<float>(threadGroupWidth)),
+                         ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
+    }
+    else if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_0_PATHTRACER)
+    {
+        _dxrStateObject->dispatchPrimaryRays();
+    }
 
     shader->unbind();
 
@@ -537,6 +544,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("reflectionUAV", 0, _reflectionRays, true, true);
     shader->updateData("pointLightOcclusionUAV", 0, _pointLightOcclusion, true, true);
     shader->updateData("pointLightOcclusionHistoryUAV", 0, _pointLightOcclusionHistory, true, true);
+    shader->updateData("debugUAV", 0, _occlusionRays, true, true);
 
     shader->updateRTAS("rtAS", rtPipeline->getRTASDescHeap(), rtPipeline->getRTASGPUVA(), true);
 
@@ -576,8 +584,15 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("numSampleSets", &numSampleSets, true);
     shader->updateData("numPixelsPerDimPerSet", &numPixelsPerDimPerSet, true);
 
-    shader->dispatch(ceilf(screenSize[0] / static_cast<float>(threadGroupWidth)),
-                     ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
+    if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
+    {
+        shader->dispatch(ceilf(screenSize[0] / static_cast<float>(threadGroupWidth)),
+                         ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
+    }
+    else if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_0_PATHTRACER)
+    {
+        _dxrStateObject->dispatchReflectionRays();
+    }
 
     shader->unbind();
 

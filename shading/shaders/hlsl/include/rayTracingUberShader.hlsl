@@ -80,7 +80,7 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
     // Set TMin to a non-zero small val(ue to avoid aliasing issues due to floating - point errors.
     // TMin should be kept small to prevent missing geometry at close contact areas.
     ray.TMin           = 0.001;
-    ray.TMax           = 100000000.0f;
+    ray.TMax           = MAX_RAY_LENGTH;
     RayPayload payload = {float4(0, 0, 0, 0)};
 
     TraceRay(Scene, RAY_FLAG_FORCE_OPAQUE, ~0, 0, 0, 0, ray, payload);

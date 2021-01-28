@@ -10,7 +10,8 @@ Texture2D                                   positionSRV                      : r
 Buffer<uint>                                instanceIndexToMaterialMapping   : register(t7, space0);
 Buffer<uint>                                instanceIndexToAttributesMapping : register(t8, space0);
 Buffer<float>                               instanceNormalMatrixTransforms   : register(t9, space0);
-StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : register(t10, space0);
+StructuredBuffer<UniformMaterial>           uniformMaterials                 : register(t10, space0);
+StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : register(t11, space0);
 
 
 
@@ -69,7 +70,7 @@ void main(int3 threadId : SV_DispatchThreadID,
     float3 normal    = normalSRV[threadId.xy].xyz;
     float3 albedo    = albedoSRV[threadId.xy].xyz;
     float  roughness = normalSRV[threadId.xy].w;
-    float  metallic  = 0.0; // Find a place to store the metalness
+    float  metallic  = positionSRV[threadId.xy].w;
 
     float3 sunLighting =
         GetBRDFSunLight(albedo, normal, position, roughness, metallic, threadId.xy);
@@ -80,95 +81,67 @@ void main(int3 threadId : SV_DispatchThreadID,
     // Random indirect light ray from the hit position
 
     RayDesc ray;
-    ray.TMax      = 100000.0;
+    ray.TMax      = MAX_RAY_LENGTH;
     ray.Origin    = position;
     ray.Direction = GetRandomRayDirection(threadId.xy, -normal.xyz, (uint2)screenSize, 0);
-    ray.TMin      = 0.1;
+    ray.TMin      = MIN_RAY_LENGTH;
 
-    // Cull non opaque here occludes the light sources holders from casting shadows
-    RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> rayQuery;
+    RayQuery<RAY_FLAG_NONE> rayQuery;
+    rayQuery.TraceRayInline(rtAS, RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, ~0, ray);
 
-    rayQuery.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, ray);
+    while (rayQuery.Proceed())
+    {
+        RayTraversalData rayData;
+        rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
+        rayData.currentRayT       = rayQuery.CandidateTriangleRayT();
+        rayData.closestRayT       = rayQuery.CommittedRayT();
+        rayData.worldRayDirection = rayQuery.WorldRayDirection();
+        rayData.geometryIndex     = rayQuery.CandidateGeometryIndex();
+        rayData.primitiveIndex    = rayQuery.CandidatePrimitiveIndex();
+        rayData.instanceIndex     = rayQuery.CandidateInstanceIndex();
+        rayData.barycentrics      = rayQuery.CandidateTriangleBarycentrics();
+        rayData.objectToWorld     = rayQuery.CandidateObjectToWorld4x3();
 
-    rayQuery.Proceed();
+        bool isHit = ProcessTransparentTriangle(rayData);
+        if (isHit)
+        {
+            rayQuery.CommitNonOpaqueTriangleHit();
+        }
+    }
 
     if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
     {
-        float3 secondarySurfaceHitPosition = rayQuery.WorldRayOrigin() +
-                                             (rayQuery.CommittedRayT() * rayQuery.WorldRayDirection());
-        
-        int geometryIndex  = rayQuery.CommittedGeometryIndex();
-        int primitiveIndex = rayQuery.CommittedPrimitiveIndex();
-        int instanceIndex  = rayQuery.CommittedInstanceIndex();
-        
-        int materialIndex  = instanceIndexToMaterialMapping[instanceIndex] + (geometryIndex * texturesPerMaterial);
-        int attributeIndex = instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
-        
-        float2 uvCoord =
-            GetTexCoord(rayQuery.CommittedTriangleBarycentrics(), attributeIndex, primitiveIndex);
-        
-        float3 rayP0 = rayQuery.WorldRayOrigin() + (rayQuery.WorldRayDirection() * ray.TMin);
-        float3 rayP1 = rayQuery.WorldRayOrigin() + (rayQuery.WorldRayDirection() * ray.TMax);
-        
-        int      offset                        = instanceIndex * 9;
-        float3x3 instanceNormalMatrixTransform = {
-            float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset)],
-                   instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 3)],
-                   instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 6)]),
-            float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 1)],
-                   instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 4)],
-                   instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 7)]),
-            float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 2)],
-                   instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 5)],
-                   instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 8)])};
-        
-        // FUCK THIS MATRIX DECOMPOSITION BULLSHIT!!!!
-        float4x3 cachedTransform        = rayQuery.CommittedObjectToWorld4x3();
-        float4x4 objectToWorldTransform = {
-            float4(cachedTransform[0].xyz, 0.0), float4(cachedTransform[1].xyz, 0.0),
-            float4(cachedTransform[2].xyz, 0.0), float4(cachedTransform[3].xyz, 1.0)};
-        
-        float mipLevel = 0;//ComputeMipLevel(rayQuery.CommittedTriangleBarycentrics(), attributeIndex,
-                           //              primitiveIndex, rayP0, rayP1, secondarySurfaceHitPosition, threadId.xy,
-                           //              objectToWorldTransform, instanceNormalMatrixTransform);
-        
-        float3 secondarySurfaceAlbedo = pow(diffuseTexture[NonUniformResourceIndex(materialIndex)]
-                                           .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                                           .xyz, 2.2);
-        
-        float secondarySurfaceRoughness = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
-                                                         .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                                                         .y;
-        
-        float3 secondarySurfaceNormalMap = diffuseTexture[NonUniformResourceIndex(materialIndex + 1)]
-                                                         .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                                                         .xyz;
-        
-        // Converts from [0,1] space to [-1,1] space
-        float3 secondarySurfaceNormal = secondarySurfaceNormalMap * 2.0f - 1.0f;
-        
-        // Compute the normal from loading the triangle vertices
-        float3x3 tbnMat =
-            GetTBN(rayQuery.CommittedTriangleBarycentrics(), attributeIndex, primitiveIndex);
-        
-        // If there is a failure in getting the TBN matrix then use the computed normal without
-        // normal mappings
-        if (any(isnan(tbnMat[0])))
-        {
-            secondarySurfaceNormal = normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
-        }
-        else
-        {
-            float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
-        
-            secondarySurfaceNormal = normalize(mul(secondarySurfaceNormal, tbnMatNormalTransform));
-        }
-        
-        float3 secondarySurfaceReflectionColor = GetBRDFPointLight(secondarySurfaceAlbedo,
-                                                                   secondarySurfaceNormal,
-                                                                   secondarySurfaceHitPosition,
-                                                                   secondarySurfaceRoughness,
-                                                                   0.0,
+        float3 albedo;
+        float  roughness;
+        float  metallic;
+        float3 normal;
+        float3 hitPosition;
+        float  transmittance;
+
+        RayTraversalData rayData;
+        rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
+        rayData.closestRayT       = rayQuery.CommittedRayT();
+        rayData.worldRayDirection = rayQuery.WorldRayDirection();
+        rayData.geometryIndex     = rayQuery.CommittedGeometryIndex();
+        rayData.primitiveIndex    = rayQuery.CommittedPrimitiveIndex();
+        rayData.instanceIndex     = rayQuery.CommittedInstanceIndex();
+        rayData.barycentrics      = rayQuery.CommittedTriangleBarycentrics();
+        rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
+
+        ProcessOpaqueTriangle(rayData,
+                              ray,
+                              albedo,
+                              roughness,
+                              metallic,
+                              normal,
+                              hitPosition,
+                              transmittance);
+
+        float3 secondarySurfaceReflectionColor = GetBRDFPointLight(albedo,
+                                                                   normal,
+                                                                   hitPosition,
+                                                                   roughness,
+                                                                   metallic,
                                                                    threadId.xy,
                                                                    false,
                                                                    rayQuery.CommittedRayT());
@@ -180,7 +153,7 @@ void main(int3 threadId : SV_DispatchThreadID,
         indirectLightRaysHistoryUAV[threadId.xy].xyz = (temporalFade * indirectLightRaysUAV[threadId.xy].xyz) +
                                                        ((1.0 - temporalFade) * indirectLightRaysHistoryUAV[threadId.xy].xyz);
 
-        debug0UAV[threadId.xy].xyz = secondarySurfaceAlbedo;
+        debug0UAV[threadId.xy].xyz = albedo;
         debug1UAV[threadId.xy].xyz = secondarySurfaceReflectionColor;
         debug2UAV[threadId.xy].xyz = ray.Direction;
     }

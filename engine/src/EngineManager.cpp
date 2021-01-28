@@ -28,7 +28,7 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
 
     // initialize engine manager pointer so it can be used a singleton
     _engineManager = this;
-    _graphicsLayer = GraphicsLayer::DXR_PATHTRACER;
+    _graphicsLayer = GraphicsLayer::DXR_1_0_PATHTRACER;
     _generatorMode = false;
     _shadowEntity  = nullptr;
 
@@ -159,7 +159,8 @@ void EngineManager::_postDraw()
 {
     auto& lightList  = _scene->lightList;
 
-    if (_graphicsLayer == GraphicsLayer::DXR_PATHTRACER)
+    if (_graphicsLayer == GraphicsLayer::DXR_1_1_PATHTRACER ||
+        _graphicsLayer == GraphicsLayer::DXR_1_0_PATHTRACER)
     {
         _pathTracerShader->runShader(lightList, _viewManager);
 

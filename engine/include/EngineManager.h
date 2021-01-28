@@ -44,7 +44,8 @@ enum class GraphicsLayer
     DX12,
     DXR,
     DXR_TRACERAYINLINE,
-    DXR_PATHTRACER
+    DXR_1_0_PATHTRACER,
+    DXR_1_1_PATHTRACER
 };
 
 class EngineManager

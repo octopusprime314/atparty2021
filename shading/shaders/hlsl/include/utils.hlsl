@@ -269,4 +269,218 @@ float TriUVInfoFromRayCone(float3 pos0, float3 pos1, float3 pos2,
 //    return TriUVInfoFromRayCone(p0, p1, p2, uv0, uv1, uv2, normalize(rayDest-rayOrigin), 0.1, surfaceNormal);
 //}
 
+
+// Camera ray with projective rays eminating from a single point being the eye location
+void GenerateCameraRay(uint2 index, out float3 origin, out float3 direction, in float4x4 viewTransform)
+{
+    // Projection ray
+    float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
+    origin                = cameraPosition;
+
+    float fov              = 45.0f;
+    float imageAspectRatio = screenSize.x / screenSize.y; // assuming width > height
+    float Px = (2.0 * ((index.x + 0.5) / screenSize.x) - 1.0) * tan(fov / 2.0 * PI / 180.0) *
+               imageAspectRatio;
+    float Py = (1.0 - 2.0 * ((index.y + 0.5) / screenSize.y)) * tan(fov / 2.0 * PI / 180.0);
+
+    float4 rayDirection   = float4(Px, Py, 1.0, 1.0);
+    float4 rayOrigin      = float4(0, 0, 0, 1.0);
+    float3 rayOriginWorld = mul(viewTransform, rayOrigin).xyz;
+    float3 rayPWorld      = mul(viewTransform, rayDirection).xyz;
+    direction             = normalize(rayPWorld - rayOriginWorld);
+}
+
+void ProcessTransparentTriangleShadow(inout RayQuery<RAY_FLAG_NONE> rayQuery)
+{
+
+    // if (rayQuery.CandidateTriangleRayT() < rayQuery.CommittedRayT())
+    //{
+    //    float3 hitPosition =
+    //        rayQuery.WorldRayOrigin() +
+    //        (rayQuery.CandidateTriangleRayT() * rayQuery.WorldRayDirection());
+    //
+    //    int geometryIndex  = rayQuery.CandidateGeometryIndex();
+    //    int primitiveIndex = rayQuery.CandidatePrimitiveIndex();
+    //    int instanceIndex  = rayQuery.CandidateInstanceIndex();
+    //
+    //    int materialIndex = instanceIndexToMaterialMapping[instanceIndex] +
+    //                        (geometryIndex * texturesPerMaterial);
+    //
+    //    int attributeIndex =
+    //        instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
+    //
+    //    float2 uvCoord = GetTexCoord(rayQuery.CandidateTriangleBarycentrics(),
+    //                                 attributeIndex, primitiveIndex);
+    //
+    //    // This is a trasmittive material dielectric like glass or water
+    //    if (instanceUniformMaterialMapping[attributeIndex].transmittance > 0.0)
+    //    {
+    //        rayQuery.CommitNonOpaqueTriangleHit();
+    //    }
+    //    // Alpha transparency texture that is treated as alpha cutoff for leafs and
+    //    // foliage, etc.
+    //    else if (instanceUniformMaterialMapping[attributeIndex].transmittance == 0.0)
+    //    {
+    //        float alpha = diffuseTexture[NonUniformResourceIndex(materialIndex)]
+    //                          .SampleLevel(bilinearWrap, uvCoord, 0)
+    //                          .w;
+    //
+    //        if (alpha >= 0.9)
+    //        {
+    //            rayQuery.CommitNonOpaqueTriangleHit();
+    //        }
+    //    }
+    //}
+
+    // Don't worry about non opaque shadow processing for now
+    rayQuery.CommitNonOpaqueTriangleHit();
+}
+
+bool ProcessTransparentTriangle(in RayTraversalData rayData)
+{
+    if (rayData.currentRayT < rayData.closestRayT)
+    {
+        float3 hitPosition = rayData.worldRayOrigin + (rayData.currentRayT * rayData.worldRayDirection);
+
+        int geometryIndex  = rayData.geometryIndex;
+        int primitiveIndex = rayData.primitiveIndex;
+        int instanceIndex  = rayData.instanceIndex;
+        float2 barycentrics  = rayData.instanceIndex;
+
+        int materialIndex = instanceIndexToMaterialMapping[instanceIndex] + (geometryIndex * texturesPerMaterial);
+        int attributeIndex = instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
+
+        float2 uvCoord = GetTexCoord(barycentrics, attributeIndex, primitiveIndex);
+
+        // This is a trasmittive material dielectric like glass or water
+        if (uniformMaterials[attributeIndex].transmittance > 0.0)
+        {
+            return true;
+        }
+        // Alpha transparency texture that is treated as alpha cutoff for leafs and foliage, etc.
+        else if (uniformMaterials[attributeIndex].transmittance == 0.0)
+        {
+            float alpha = diffuseTexture[NonUniformResourceIndex(materialIndex)]
+                              .SampleLevel(bilinearWrap, uvCoord, 0)
+                              .w;
+
+            if (alpha >= 0.9)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
+                           in  RayDesc                 ray,
+                           out float3                  albedo,
+                           out float                   roughness,
+                           out float                   metallic,
+                           out float3                  normal,
+                           out float3                  hitPosition,
+                           out float                   transmittance)
+{
+    hitPosition = rayData.worldRayOrigin + (rayData.closestRayT * rayData.worldRayDirection);
+
+    int    geometryIndex   = rayData.geometryIndex;
+    int    primitiveIndex  = rayData.primitiveIndex;
+    int    instanceIndex   = rayData.instanceIndex;
+    float2 barycentrics    = rayData.barycentrics;
+
+    int materialIndex = instanceIndexToMaterialMapping[instanceIndex] + (geometryIndex * texturesPerMaterial);
+    int attributeIndex = instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
+
+    float2 uvCoord = GetTexCoord(barycentrics, attributeIndex, primitiveIndex);
+
+    float3 rayP0 = rayData.worldRayOrigin + (rayData.worldRayDirection * ray.TMin);
+    float3 rayP1 = rayData.worldRayOrigin + (rayData.worldRayDirection * ray.TMax);
+
+    // FUCK THIS MATRIX DECOMPOSITION BULLSHIT!!!!
+    float4x3 cachedTransform        = rayData.objectToWorld;
+    float4x4 objectToWorldTransform = {float4(cachedTransform[0].xyz, 0.0),
+                                        float4(cachedTransform[1].xyz, 0.0),
+                                        float4(cachedTransform[2].xyz, 0.0),
+                                        float4(cachedTransform[3].xyz, 1.0)};
+
+    int offset = instanceIndex * 9;
+  
+    float3x3 instanceNormalMatrixTransform = {
+        float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 3)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 6)]),
+        float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 1)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 4)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 7)]),
+        float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 2)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 5)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 8)])};
+
+    float mipLevel = 0; // ComputeMipLevel(rayQuery.CommittedTriangleBarycentrics(),
+                        //              attributeIndex, primitiveIndex, rayP0, rayP1,
+                        //              hitPosition, threadId.xy, objectToWorldTransform, instanceNormalMatrixTransform);
+
+    albedo = float3(0.0, 0.0, 0.0);
+    if (uniformMaterials[attributeIndex].validBits & ColorValidBit)
+    {
+        albedo = uniformMaterials[attributeIndex].baseColor;
+    }
+    else
+    {
+        albedo = pow(diffuseTexture[NonUniformResourceIndex(materialIndex)].SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz, 2.2);
+    }
+
+    roughness = 0.0;
+
+    if (uniformMaterials[attributeIndex].validBits & RoughnessValidBit)
+    {
+        roughness = uniformMaterials[attributeIndex].roughness;
+    }
+    else
+    {
+        roughness = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
+                        .SampleLevel(bilinearWrap, uvCoord, mipLevel)
+                        .y;
+    }
+
+    metallic = 0.0;
+    if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
+    {
+        metallic = uniformMaterials[attributeIndex].metallic;
+    }
+
+    normal = float3(0.0, 0.0, 0.0);
+
+    if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
+    {
+        normal = -GetNormalCoord(barycentrics, attributeIndex, primitiveIndex);
+    }
+    else
+    {
+        float3 normalMap = diffuseTexture[NonUniformResourceIndex(materialIndex + 1)]
+                                .SampleLevel(bilinearWrap, uvCoord, mipLevel)
+                                .xyz;
+
+        // Converts from [0,1] space to [-1,1] space
+        normalMap = normalMap * 2.0f - 1.0f;
+
+        // Compute the normal from loading the triangle vertices
+        float3x3 tbnMat = GetTBN(barycentrics, attributeIndex, primitiveIndex);
+
+        // If there is a failure in getting the TBN matrix then use the computed normal without normal mappings
+        if (any(isnan(tbnMat[0])))
+        {
+            normal = -normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
+        }
+        else
+        {
+            float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
+
+            normal = -normalize(mul(normalMap, tbnMatNormalTransform));
+        }
+    }
+
+    transmittance = uniformMaterials[attributeIndex].transmittance;
+}
 #endif

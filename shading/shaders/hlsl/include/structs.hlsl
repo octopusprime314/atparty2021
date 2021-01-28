@@ -31,7 +31,28 @@ struct AlignedHemisphereSample3D
     uint   padding; // Padding to 16B
 };
 
-#define MAX_LIGHTS 1024
+struct RayTraversalData
+{
+    int      geometryIndex;
+    int      primitiveIndex;
+    int      instanceIndex;
+    float2   barycentrics;
+    float    closestRayT;
+    float    currentRayT;
+    float3   worldRayOrigin;
+    float3   worldRayDirection;
+    float4x3 objectToWorld;
+};
 
+struct Payload
+{
+    float3 color;
+    uint   recursionCount;
+};
+
+#define MAX_LIGHTS 1024
+#define MAX_RAY_LENGTH 100000.0
+#define MIN_RAY_LENGTH 0.1
+#define RECURSION_LIMIT 10
 
 #endif

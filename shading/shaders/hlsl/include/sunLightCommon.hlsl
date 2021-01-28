@@ -60,7 +60,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
         float frontOrBack = dot(-normal, penumbraLightVector);
 
         // Always edge out ray min value towards the sun to prevent self occlusion
-        ray.TMin = 1.0;
+        ray.TMin = MIN_RAY_LENGTH;
 
         // Cull non opaque here occludes the light sources holders from casting shadows
         RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH |
@@ -127,7 +127,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     ray.TMax      = aoHemisphereRadius;
     ray.Origin    = hitPosition;
     ray.Direction = GetRandomRayDirection(threadId, -normal.xyz, (uint2)screenSize, 0);
-    ray.TMin      = 0.1;
+    ray.TMin      = MIN_RAY_LENGTH;
 
     // Cull non opaque here occludes the light sources holders from casting shadows
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |

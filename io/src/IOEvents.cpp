@@ -134,7 +134,8 @@ void IOEvents::updateDraw(GLFWwindow* _window)
     // Call scene manager to go any global operations before drawing
     _preDrawCallback();
 
-    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DXR_PATHTRACER)
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DXR_1_1_PATHTRACER &&
+        EngineManager::getGraphicsLayer() != GraphicsLayer::DXR_1_0_PATHTRACER)
     {
         _eventLock.lock();
         for (auto func : _drawFuncs)

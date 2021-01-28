@@ -16,6 +16,7 @@ StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : r
 RWTexture2D<float4> reflectionUAV : register(u0);
 RWTexture2D<float4> pointLightOcclusionUAV : register(u1);
 RWTexture2D<float4> pointLightOcclusionHistoryUAV : register(u2);
+RWTexture2D<float4> debugUAV : register(u3);
 
 SamplerState bilinearWrap : register(s0);
 
@@ -43,104 +44,52 @@ cbuffer globalData : register(b0)
 static float reflectionIndex = 0.5;
 static float refractionIndex = 1.0 - reflectionIndex;
 
-float3 GetLightingColor(float3 position,
-                        float3 rayDirection,
-                        float3 normal,
-                        int2   threadId,
-                        float3 albedo,
-                        float  roughness,
-                        float  metallic,
-                        float  transmittance)
+[numthreads(8, 8, 1)]
+
+void main(int3 threadId            : SV_DispatchThreadID,
+          int3 threadGroupThreadId : SV_GroupThreadID)
 {
-    float3 reflectionColor =
-        GetBRDFPointLight(albedo, normal, position, roughness, metallic, threadId.xy, false, 0.0);
+    float3 normal = normalSRV[threadId.xy].xyz;
 
-    uint maxReflectionBounces = 1000;
-    uint bounceIndex          = 0;
-    while (roughness < 0.25 && bounceIndex < maxReflectionBounces)
+    if (normal.x == 0.0 &&
+        normal.y == 0.0 &&
+        normal.z == 0.0)
     {
-        // Trace the ray.
-        // Set the ray's extents.
-        RayDesc ray;
-        ray.TMin   = 0.1;
-        ray.TMax   = 100000.0;
-        ray.Origin = position;
+        reflectionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, 0.0);
+    }
+    else
+    {
+        float3 hitPosition   = positionSRV[threadId.xy].xyz;
+        float3 albedo        = albedoSRV[threadId.xy].xyz;
 
-        // Punch through ray with zero reflection
-        if (transmittance > 0.0)
+        float  transmittance = albedoSRV[threadId.xy].w;
+        float  metallic      = positionSRV[threadId.xy].w;
+        float  roughness     = normalSRV[threadId.xy].w;
+
+        // Reconstruct primary ray by taking the camera position and subtracting it from hit
+        // position
+        float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
+        float3 rayDirection   = normalize(hitPosition - cameraPosition);
+
+        float3 reflectionColor = GetBRDFPointLight(albedo,
+                                                   normal,
+                                                   hitPosition,
+                                                   roughness,
+                                                   metallic,
+                                                   threadId.xy,
+                                                   false,
+                                                   0.0);
+
+        uint bounceIndex = 0;
+
+        while (roughness < 0.25 && bounceIndex < RECURSION_LIMIT)
         {
-            ray.Direction = rayDirection;
-        }
-        // Opaque materials make a reflected ray
-        else
-        {
-            ray.Direction = rayDirection - (2.0f * dot(rayDirection, normal) * normal);
-        }
-
-        RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> rayQuery;
-        rayQuery.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, ray);
-
-        // transparency processing
-        while (rayQuery.Proceed())
-        {
-            if (rayQuery.CandidateTriangleRayT() < rayQuery.CommittedRayT())
-            {
-                float3 hitPosition = rayQuery.WorldRayOrigin() + (rayQuery.CandidateTriangleRayT() *
-                                                                  rayQuery.WorldRayDirection());
-
-                int geometryIndex  = rayQuery.CandidateGeometryIndex();
-                int primitiveIndex = rayQuery.CandidatePrimitiveIndex();
-                int instanceIndex  = rayQuery.CandidateInstanceIndex();
-
-                int materialIndex =
-                    instanceIndexToMaterialMapping[instanceIndex] + (geometryIndex * texturesPerMaterial);
-
-                int attributeIndex =
-                    instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
-
-                float2 uvCoord = GetTexCoord(rayQuery.CandidateTriangleBarycentrics(),
-                                             attributeIndex, primitiveIndex);
-
-                // This is a trasmittive material dielectric like glass or water
-                if (uniformMaterials[attributeIndex].transmittance > 0.0)
-                {
-                    rayQuery.CommitNonOpaqueTriangleHit();
-                }
-                // Alpha transparency texture that is treated as alpha cutoff for leafs and foliage,
-                // etc.
-                else if (uniformMaterials[attributeIndex].transmittance == 0.0)
-                {
-                    float alpha = diffuseTexture[NonUniformResourceIndex(materialIndex)]
-                                      .SampleLevel(bilinearWrap, uvCoord, 0)
-                                      .w;
-
-                    if (alpha >= 0.9)
-                    {
-                        rayQuery.CommitNonOpaqueTriangleHit();
-                    }
-                }
-            }
-        }
-
-        if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
-        {
-
-            float3 newPosition =
-                rayQuery.WorldRayOrigin() + (rayQuery.CommittedRayT() * rayQuery.WorldRayDirection());
-
-            position = newPosition;
-
-            int geometryIndex  = rayQuery.CommittedGeometryIndex();
-            int primitiveIndex = rayQuery.CommittedPrimitiveIndex();
-            int instanceIndex  = rayQuery.CommittedInstanceIndex();
-
-            int materialIndex  = instanceIndexToMaterialMapping[instanceIndex] + (geometryIndex * texturesPerMaterial);
-            int attributeIndex = instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
-
-            float2 uvCoord = GetTexCoord(rayQuery.CommittedTriangleBarycentrics(), attributeIndex,
-                                         primitiveIndex);
-
-            transmittance = uniformMaterials[attributeIndex].transmittance;
+            // Trace the ray.
+            // Set the ray's extents.
+            RayDesc ray;
+            ray.TMin   = MIN_RAY_LENGTH;
+            ray.TMax   = MAX_RAY_LENGTH;
+            ray.Origin = hitPosition;
 
             // Punch through ray with zero reflection
             if (transmittance > 0.0)
@@ -150,132 +99,72 @@ float3 GetLightingColor(float3 position,
             // Opaque materials make a reflected ray
             else
             {
-                rayDirection = normalize(newPosition - position);
+                ray.Direction = rayDirection - (2.0f * dot(rayDirection, normal) * normal);
             }
 
-            float3 rayP0 = rayQuery.WorldRayOrigin() + (rayQuery.WorldRayDirection() * ray.TMin);
-            float3 rayP1 = rayQuery.WorldRayOrigin() + (rayQuery.WorldRayDirection() * ray.TMax);
+            RayQuery<RAY_FLAG_NONE> rayQuery;
+            rayQuery.TraceRayInline(rtAS, RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, ~0, ray);
 
-            int      offset                        = instanceIndex * 9;
-            float3x3 instanceNormalMatrixTransform = {
-                float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset)],
-                       instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 3)],
-                       instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 6)]),
-                float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 1)],
-                       instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 4)],
-                       instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 7)]),
-                float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 2)],
-                       instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 5)],
-                       instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 8)])};
-
-            // FUCK THIS MATRIX DECOMPOSITION BULLSHIT!!!!
-            float4x3 cachedTransform = rayQuery.CommittedObjectToWorld4x3();
-            float4x4 objectToWorldTransform = {float4(cachedTransform[0].xyz, 0.0),
-                                               float4(cachedTransform[1].xyz, 0.0),
-                                               float4(cachedTransform[2].xyz, 0.0),
-                                               float4(cachedTransform[3].xyz, 1.0)};
-
-            float mipLevel = 0;//ComputeMipLevel(rayQuery.CommittedTriangleBarycentrics(),
-                               //              attributeIndex, primitiveIndex, rayP0, rayP1,
-                               //              position, threadId.xy, objectToWorldTransform, instanceNormalMatrixTransform);
-
-            if (uniformMaterials[attributeIndex].validBits & ColorValidBit)
+            while (rayQuery.Proceed())
             {
-                albedo = uniformMaterials[attributeIndex].baseColor;
-            }
-            else
-            {
-                albedo = pow(diffuseTexture[NonUniformResourceIndex(materialIndex)].SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz, 2.2);
-            }
+                RayTraversalData rayData;
+                rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
+                rayData.currentRayT       = rayQuery.CandidateTriangleRayT();
+                rayData.closestRayT       = rayQuery.CommittedRayT();
+                rayData.worldRayDirection = rayQuery.WorldRayDirection();
+                rayData.geometryIndex     = rayQuery.CandidateGeometryIndex();
+                rayData.primitiveIndex    = rayQuery.CandidatePrimitiveIndex();
+                rayData.instanceIndex     = rayQuery.CandidateInstanceIndex();
+                rayData.barycentrics      = rayQuery.CandidateTriangleBarycentrics();
+                rayData.objectToWorld     = rayQuery.CandidateObjectToWorld4x3();
 
-            if (uniformMaterials[attributeIndex].validBits & RoughnessValidBit)
-            {
-                roughness = uniformMaterials[attributeIndex].roughness;
-            }
-            else
-            {
-                roughness = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
-                                .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                                .y;
-            }
-
-            float metallic = 0.0;
-            if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
-            {
-                metallic = uniformMaterials[attributeIndex].metallic;
-            }
-
-            normal = float3(0.0, 0.0, 0.0);
-
-            if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
-            {
-                normal = -GetNormalCoord(rayQuery.CommittedTriangleBarycentrics(), attributeIndex,
-                                         primitiveIndex);
-            }
-            else
-            {
-                float3 normalMap = diffuseTexture[NonUniformResourceIndex(materialIndex + 1)]
-                                       .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                                       .xyz;
-
-                // Converts from [0,1] space to [-1,1] space
-                normalMap = normalMap * 2.0f - 1.0f;
-
-                // Compute the normal from loading the triangle vertices
-                float3x3 tbnMat = GetTBN(rayQuery.CommittedTriangleBarycentrics(), attributeIndex,
-                                         primitiveIndex);
-
-                // If there is a failure in getting the TBN matrix then use the computed normal
-                // without normal mappings
-                if (any(isnan(tbnMat[0])))
+                bool isHit = ProcessTransparentTriangle(rayData);
+                if (isHit)
                 {
-                    normal = -normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
-                }
-                else
-                {
-                    float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
-
-                    normal = -normalize(mul(normalMap, tbnMatNormalTransform));
+                    rayQuery.CommitNonOpaqueTriangleHit();
                 }
             }
 
-            reflectionColor += GetBRDFPointLight(albedo, normal, position, roughness, metallic,
-                                                 threadId.xy, false, 0.0);
-            bounceIndex++;
+            if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+            {
+                float3 prevPosition = hitPosition;
+
+                RayTraversalData rayData;
+                rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
+                rayData.closestRayT       = rayQuery.CommittedRayT();
+                rayData.worldRayDirection = rayQuery.WorldRayDirection();
+                rayData.geometryIndex     = rayQuery.CommittedGeometryIndex();
+                rayData.primitiveIndex    = rayQuery.CommittedPrimitiveIndex();
+                rayData.instanceIndex     = rayQuery.CommittedInstanceIndex();
+                rayData.barycentrics      = rayQuery.CommittedTriangleBarycentrics();
+                rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
+
+                ProcessOpaqueTriangle(rayData,
+                                      ray,
+                                      albedo,
+                                      roughness,
+                                      metallic,
+                                      normal,
+                                      hitPosition,
+                                      transmittance);
+
+                debugUAV[threadId.xy].xyz = hitPosition;
+
+                // Reflection ray direction
+                if (transmittance == 0.0)
+                {
+                    rayDirection = normalize(rayQuery.WorldRayOrigin() - hitPosition);
+                }
+
+                reflectionColor += GetBRDFPointLight(albedo, normal, hitPosition, roughness,
+                                                     metallic, threadId.xy, false, 0.0);
+                bounceIndex++;
+            }
+            else
+            {
+                break;
+            }
         }
-        else
-        {
-            return reflectionColor;
-        }
-    }
-    return reflectionColor;
-}
-
-[numthreads(8, 8, 1)]
-
-void main(int3 threadId : SV_DispatchThreadID,
-        int3 threadGroupThreadId: SV_GroupThreadID)
-{
-    float3 normal = normalSRV[threadId.xy].xyz;
-
-    if (normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0)
-    {
-        reflectionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, 0.0);
-    }
-    else
-    {
-        float  metallic      = positionSRV[threadId.xy].w;
-        float  roughness     = normalSRV[threadId.xy].w;
-        float3 position      = positionSRV[threadId.xy].xyz;
-        float  transmittance = albedoSRV[threadId.xy].w;
-        // Reconstruct primary ray by taking the camera position and subtracting it from hit
-        // position
-        float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
-        float3 rayDirection   = normalize(position - cameraPosition);
-
-        float3 lightingColor = GetLightingColor(position, rayDirection, normal, threadId.xy,
-                             albedoSRV[threadId.xy].xyz, roughness, metallic, transmittance);
-
-        reflectionUAV[threadId.xy] = float4(lightingColor, 1.0);
+        reflectionUAV[threadId.xy] = float4(reflectionColor, 1.0);
     }
 }
