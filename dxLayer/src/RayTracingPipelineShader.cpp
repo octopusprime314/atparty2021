@@ -120,7 +120,7 @@ RayTracingPipelineShader::TextureMapping& RayTracingPipelineShader::getSceneText
     return _texturesMap;
 }
 
-void RayTracingPipelineShader::updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes)
+void RayTracingPipelineShader::updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
 {
     BYTE* mappedData                           = nullptr;
     _instanceIndexToMaterialMappingGPUBuffer->resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
@@ -130,12 +130,21 @@ void RayTracingPipelineShader::updateAndBindMaterialBuffer(std::map<std::string,
     auto                  resourceBindings  = resourceIndexes;
     ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
     cmdList->SetDescriptorHeaps(1, descriptorHeaps);
-    cmdList->SetComputeRootDescriptorTable(
-        resourceBindings["instanceIndexToMaterialMapping"],
-        _instanceIndexToMaterialMappingGPUBuffer->gpuDescriptorHandle);
+    if (isCompute)
+    {
+        cmdList->SetComputeRootDescriptorTable(
+            resourceBindings["instanceIndexToMaterialMapping"],
+            _instanceIndexToMaterialMappingGPUBuffer->gpuDescriptorHandle);
+    }
+    else
+    {
+        cmdList->SetGraphicsRootDescriptorTable(
+            resourceBindings["instanceIndexToMaterialMapping"],
+            _instanceIndexToMaterialMappingGPUBuffer->gpuDescriptorHandle);
+    }
 }
 
-void RayTracingPipelineShader::updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes)
+void RayTracingPipelineShader::updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
 {
     BYTE* mappedData                           = nullptr;
     _instanceIndexToAttributeMappingGPUBuffer->resource->Map(0, nullptr,
@@ -146,12 +155,21 @@ void RayTracingPipelineShader::updateAndBindAttributeBuffer(std::map<std::string
     auto                  resourceBindings  = resourceIndexes;
     ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
     cmdList->SetDescriptorHeaps(1, descriptorHeaps);
-    cmdList->SetComputeRootDescriptorTable(
-        resourceBindings["instanceIndexToAttributesMapping"],
-        _instanceIndexToAttributeMappingGPUBuffer->gpuDescriptorHandle);
+    if (isCompute)
+    {
+        cmdList->SetComputeRootDescriptorTable(
+            resourceBindings["instanceIndexToAttributesMapping"],
+            _instanceIndexToAttributeMappingGPUBuffer->gpuDescriptorHandle);
+    }
+    else
+    {
+        cmdList->SetGraphicsRootDescriptorTable(
+            resourceBindings["instanceIndexToAttributesMapping"],
+            _instanceIndexToAttributeMappingGPUBuffer->gpuDescriptorHandle);
+    }
 }
 
-void RayTracingPipelineShader::updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes)
+void RayTracingPipelineShader::updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
 {
     BYTE* mappedData                           = nullptr;
     _instanceUniformMaterialMappingGPUBuffer->resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
@@ -171,10 +189,21 @@ void RayTracingPipelineShader::updateAndBindUniformMaterialBuffer(std::map<std::
     auto                  resourceBindings  = resourceIndexes;
     ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
     cmdList->SetDescriptorHeaps(1, descriptorHeaps);
-    cmdList->SetComputeRootDescriptorTable(resourceBindings["uniformMaterials"], _instanceUniformMaterialMappingGPUBuffer->gpuDescriptorHandle);
+    if (isCompute)
+    {
+        cmdList->SetComputeRootDescriptorTable(
+            resourceBindings["uniformMaterials"],
+            _instanceUniformMaterialMappingGPUBuffer->gpuDescriptorHandle);
+    }
+    else
+    {
+        cmdList->SetGraphicsRootDescriptorTable(
+            resourceBindings["uniformMaterials"],
+            _instanceUniformMaterialMappingGPUBuffer->gpuDescriptorHandle);
+    }
 }
 
-void RayTracingPipelineShader::updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes)
+void RayTracingPipelineShader::updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
 {
     BYTE* mappedData                           = nullptr;
     _instanceNormalMatrixTransformsGPUBuffer->resource->Map(0, nullptr,
@@ -185,9 +214,18 @@ void RayTracingPipelineShader::updateAndBindNormalMatrixBuffer(std::map<std::str
     auto                  resourceBindings  = resourceIndexes;
     ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
     cmdList->SetDescriptorHeaps(1, descriptorHeaps);
-    cmdList->SetComputeRootDescriptorTable(
-        resourceBindings["instanceNormalMatrixTransforms"],
-        _instanceNormalMatrixTransformsGPUBuffer->gpuDescriptorHandle);
+    if (isCompute)
+    {
+        cmdList->SetComputeRootDescriptorTable(
+            resourceBindings["instanceNormalMatrixTransforms"],
+            _instanceNormalMatrixTransformsGPUBuffer->gpuDescriptorHandle);
+    }
+    else
+    {
+        cmdList->SetGraphicsRootDescriptorTable(
+            resourceBindings["instanceNormalMatrixTransforms"],
+            _instanceNormalMatrixTransformsGPUBuffer->gpuDescriptorHandle);
+    }
 }
 
 void RayTracingPipelineShader::buildBLAS(Entity* entity)
@@ -242,30 +280,29 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
             indexTypeSize = 2;
         }
 
-        int indexCount  = 0;
-        int vertexCount = 0;
-        if (i + 1 == vertexAndBufferStrides.size())
+        int indexCount  = vertexAndBufferStrides[i].second;
+        int vertexCount = vertexAndBufferStrides[i].first;
+
+        int indexOffset  = 0;
+        int vertexOffset = 0;
+
+        if (i > 0)
         {
-            indexCount = (indexDesc.Width / indexTypeSize) - vertexAndBufferStrides[i].second;
-            vertexCount = (vertexDesc.Width / sizeof(CompressedAttribute)) - vertexAndBufferStrides[i].first;
-        }
-        else
-        {
-            indexCount = vertexAndBufferStrides[i + 1].second - vertexAndBufferStrides[i].second;
-            vertexCount = vertexAndBufferStrides[i + 1].first - vertexAndBufferStrides[i].first;
+            indexCount  = vertexAndBufferStrides[i].second - vertexAndBufferStrides[i - 1].second;
+            vertexCount = vertexAndBufferStrides[i].first - vertexAndBufferStrides[i - 1].first;
         }
 
         auto indexGPUAddress = (*entity->getFrustumVAO())[0]
                                    ->getIndexResource()
                                    ->getResource()
                                    ->GetGPUVirtualAddress() +
-                               (vertexAndBufferStrides[i].second * indexTypeSize);
+                               (indexOffset * indexTypeSize);
 
         auto vertexGPUAddress = (*entity->getFrustumVAO())[0]
                                     ->getVertexResource()
                                     ->getResource()
                                     ->GetGPUVirtualAddress() + 
-                                 (vertexAndBufferStrides[i].first * sizeof(CompressedAttribute));
+                                 vertexOffset;
 
         int staticGeomIndex = staticGeometryDesc->size();
         staticGeometryDesc->push_back(D3D12_RAYTRACING_GEOMETRY_DESC());
@@ -303,8 +340,8 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
         vertexBuffer->resource = (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
         vertexBuffer->nameId   = entity->getModel()->getName();
 
-        vertexBuffer->offset = vertexAndBufferStrides[i].first;
-        indexBuffer->offset  = vertexAndBufferStrides[i].second;
+        vertexBuffer->offset = vertexOffset;
+        indexBuffer->offset  = indexOffset;
 
         auto materialTransmittance = entity->getModel()->getMaterial(i).uniformMaterial.transmittance;
 
@@ -1025,6 +1062,13 @@ void RayTracingPipelineShader::updateTextureUnbounded(int descriptorTableIndex, 
         cmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
         cmdList->SetComputeRootDescriptorTable(descriptorTableIndex, descriptorTableOffset);
+    }
+    else if (isCompute == false && !isUAV)
+    {
+        ID3D12DescriptorHeap* descriptorHeaps[] = {_unboundedTextureSrvDescriptorHeap.Get()};
+        cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+        cmdList->SetGraphicsRootDescriptorTable(descriptorTableIndex, descriptorTableOffset);
     }
 }
 

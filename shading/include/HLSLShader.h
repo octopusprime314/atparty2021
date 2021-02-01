@@ -99,7 +99,7 @@ class HLSLShader : public Shader
                          std::wstring shaderProfile, std::wstring entryPoint,
                          std::vector<uint8_t>& stream);
 
-    void bindAttributes(VAO* vao);
+    void bindAttributes(VAO* vao, bool bindVertexBuffer);
     void unbindAttributes(){};
     void unbind();
     void bind();
@@ -109,6 +109,4 @@ class HLSLShader : public Shader
     void updateDataAsyncCompute(std::string id, void* data, bool isCompute);
     void updateDataAsyncCompute(std::string dataName, int textureUnit, Texture* texture,
                                 bool isCompute, bool isUAV);
-
-    std::map<std::string, UINT> _resourceIndexes;
 };

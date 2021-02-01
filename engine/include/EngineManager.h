@@ -37,13 +37,14 @@ class IOEventDistributor;
 class DXLayer;
 class RayTracingPipelineShader;
 class PathTracerShader;
+class StaticShader;
+class RenderTexture;
+class MRTFrameBuffer;
+class DeferredShader;
 
 enum class GraphicsLayer
 {
-    OPENGL,
     DX12,
-    DXR,
-    DXR_TRACERAYINLINE,
     DXR_1_0_PATHTRACER,
     DXR_1_1_PATHTRACER
 };
@@ -70,6 +71,14 @@ class EngineManager
     SSAO*                        _ssaoPass;
     Bloom*                       _bloom;
     SSCompute*                   _add;
+    StaticShader*                _singleDrawRaster;
+    RenderTexture*               _singleDrawRasterRenderTarget;
+
+    MRTFrameBuffer*              _gBuffers;
+    DeferredShader*              _deferredShader;
+    RenderTexture*               _renderTexture;
+    RenderTexture*               _depthTexture;
+
 
     // Post of drawing objects call this function
     void _postDraw();

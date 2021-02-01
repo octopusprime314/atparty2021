@@ -4,6 +4,8 @@
 #include "EngineManager.h"
 #include "Logger.h"
 #include "PathTracerShader.h"
+#include "StaticShader.h"
+#include "DeferredShader.h"
 #include <algorithm>
 #include <cctype>
 
@@ -77,21 +79,9 @@ void ShaderBroker::_gatherShaderNames()
     std::string shaderTypes[] = {"cs/", "vs/"};
     int shaderTypeCount = sizeof(shaderTypes) / sizeof(std::string);
 
-    if(EngineManager::getGraphicsLayer() == GraphicsLayer::OPENGL)
-    {
-        shaderTypeCount = 1;
-    }
-
     for (int i = 0; i < shaderTypeCount; i++)
     {
-        if (EngineManager::getGraphicsLayer() == GraphicsLayer::OPENGL)
-        {
-            shadersLocation = SHADERS_LOCATION + "glsl/";
-        }
-        else
-        {
-            shadersLocation = SHADERS_LOCATION + "hlsl/" + shaderTypes[i];
-        }
+        shadersLocation = SHADERS_LOCATION + "hlsl/" + shaderTypes[i];
 
         if ((dir = opendir(shadersLocation.c_str())) != nullptr)
         {
@@ -127,6 +117,14 @@ void ShaderBroker::_gatherShaderNames()
                             mapName.find("mipGen"                  ) != std::string::npos)
                         {
                             _shaders[upperCaseMapName] = new ComputeShader(mapName);
+                        }
+                        else if (mapName.find("staticShader") != std::string::npos)
+                        {
+                            _shaders[upperCaseMapName] = new StaticShader(mapName);
+                        }
+                        else if (mapName.find("deferredShader") != std::string::npos)
+                        {
+                            _shaders[upperCaseMapName] = new DeferredShader(mapName);
                         }
                         else if (mapName.find("pathTracerShader") != std::string::npos)
                         {

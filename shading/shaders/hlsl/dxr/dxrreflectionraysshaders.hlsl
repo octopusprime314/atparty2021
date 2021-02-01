@@ -1,4 +1,5 @@
 #include "../include/structs.hlsl"
+#include "../include/dxr1_0_defines.hlsl"
 
 RaytracingAccelerationStructure             rtAS : register(t0, space0);
 Texture2D                                   diffuseTexture[] : register(t1, space1);
@@ -75,8 +76,7 @@ void ReflectionRaygen()
                                                    roughness,
                                                    metallic,
                                                    DispatchRaysIndex().xy,
-                                                   false,
-                                                   0.0);
+                                                   false);
 
         if (roughness < 0.25)
         {
@@ -85,22 +85,29 @@ void ReflectionRaygen()
             ray.TMin      = MIN_RAY_LENGTH;
             ray.TMax      = MAX_RAY_LENGTH;
 
-            // Punch through ray with zero reflection
+            Payload payload;
+            payload.color          = float3(0.0, 0.0, 0.0);
+            payload.recursionCount = 0;
+
+            // Generate reflection/refraction ray pair with half light energy for each ray
             if (transmittance > 0.0)
             {
-                ray.Direction = rayDirection;
+                LaunchReflectionRefractionRayPair(payload,
+                                                  rayDirection,
+                                                  normal,
+                                                  ray,
+                                                  GLASS_IOR,
+                                                  reflectionColor);
             }
-            // Opaque materials make a reflected ray
             else
             {
+                // All light goes into reflection ray
+                payload.color.xyz += reflectionColor;
+                payload.recursionCount++;
+
                 ray.Direction = rayDirection - (2.0f * dot(rayDirection, normal) * normal);
+                TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payload);
             }
-
-            Payload payload;
-            payload.color          = reflectionColor.xyz;
-            payload.recursionCount = 1;
-
-            TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payload);
         }
         else
         {
@@ -145,10 +152,6 @@ void ReflectionRaygen()
     rayData.barycentrics      = attr.barycentrics;
     rayData.objectToWorld     = ObjectToWorld4x3();
 
-    RayDesc ray;
-    ray.TMin      = MIN_RAY_LENGTH;
-    ray.TMax      = MAX_RAY_LENGTH;
-
     float3 albedo;
     float  roughness;
     float  metallic;
@@ -157,7 +160,6 @@ void ReflectionRaygen()
     float  transmittance;
 
     ProcessOpaqueTriangle(rayData,
-                          ray,
                           albedo,
                           roughness,
                           metallic,
@@ -173,10 +175,7 @@ void ReflectionRaygen()
                                                roughness,
                                                metallic,
                                                DispatchRaysIndex().xy,
-                                               false,
-                                               0.0);
-
-    payload.color.xyz += reflectionColor;
+                                               false);
 
     if (roughness < 0.25 && payload.recursionCount < RECURSION_LIMIT)
     {
@@ -186,30 +185,30 @@ void ReflectionRaygen()
         ray.TMax   = MAX_RAY_LENGTH;
 
         // Generate reflection/refraction ray pair with half light energy for each ray
-        if (transmittance > 0.0)
+        if (transmittance > 0.0 && payload.recursionCount + 1 < RECURSION_LIMIT)
         {
-            payload.color /= 2.0;
-
-            ray.Direction = WorldRayDirection();
-            payload.recursionCount++;
-            TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payload);
-
-            ray.Direction = WorldRayDirection() - (2.0f * dot(WorldRayDirection(), normal) * normal);
-            payload.recursionCount++;
-            TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payload);
+            LaunchReflectionRefractionRayPair(payload,
+                                              WorldRayDirection(),
+                                              normal,
+                                              ray,
+                                              GLASS_IOR,
+                                              reflectionColor);
         }
         // Opaque materials make a reflected ray
         else
         {
             ray.Direction = WorldRayDirection() - (2.0f * dot(WorldRayDirection(), normal) * normal);
 
+            // All light goes into reflection ray
+            payload.color.xyz += reflectionColor;
             payload.recursionCount++;
+
             TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payload);
         }
     }
     else
     {
-        reflectionUAV[DispatchRaysIndex().xy] = float4(payload.color.xyz, 1.0);
+        reflectionUAV[DispatchRaysIndex().xy] = float4(payload.color.xyz + reflectionColor, 1.0);
     }
 }
 
@@ -217,4 +216,25 @@ void ReflectionRaygen()
 void ReflectionMiss(inout Payload payload)
 {
     reflectionUAV[DispatchRaysIndex().xy] = float4(payload.color.xyz, 1.0);
+}
+
+// Shadow occlusion hit group and miss shader
+[shader("anyhit")]
+void ShadowAnyHit(inout Payload                            payload,
+                  in BuiltInTriangleIntersectionAttributes attr)
+{
+    payload.occlusion = 1.0;
+}
+
+[shader("closesthit")]
+void ShadowClosestHit(inout Payload                            payload,
+                      in BuiltInTriangleIntersectionAttributes attr) 
+{
+    payload.occlusion = 1.0;
+}
+
+[shader("miss")]
+void ShadowMiss(inout Payload payload)
+{
+    payload.occlusion = 0.0;
 }

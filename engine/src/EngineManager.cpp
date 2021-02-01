@@ -15,6 +15,9 @@
 #include "SceneBuilder.h"
 #include "ShaderBroker.h"
 #include "ViewEventDistributor.h"
+#include "StaticShader.h"
+#include "MRTFrameBuffer.h"
+#include "DeferredShader.h"
 #include <chrono>
 
 RayTracingPipelineShader* EngineManager::_rayTracingPipeline = nullptr;
@@ -28,7 +31,7 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
 
     // initialize engine manager pointer so it can be used a singleton
     _engineManager = this;
-    _graphicsLayer = GraphicsLayer::DXR_1_0_PATHTRACER;
+    _graphicsLayer = GraphicsLayer::DX12;
     _generatorMode = false;
     _shadowEntity  = nullptr;
 
@@ -72,9 +75,22 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
                                        IOEventDistributor::screenPixelHeight,
                                        TextureFormat::RGBA_UNSIGNED_BYTE);
 
+    _singleDrawRaster             = static_cast<StaticShader*>(ShaderBroker::instance()->getShader("staticShader"));
+    _singleDrawRasterRenderTarget = new RenderTexture(IOEventDistributor::screenPixelWidth,
+                                                      IOEventDistributor::screenPixelHeight,
+                                                      TextureFormat::RGBA_UNSIGNED_BYTE,
+                                                      "SingleDrawRaster");
+
+    _renderTexture = new RenderTexture(IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_UNSIGNED_BYTE);
+    _depthTexture = new RenderTexture(IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight, TextureFormat::DEPTH32_FLOAT);
+
+    _gBuffers = new MRTFrameBuffer();
+
     // Setup pre and post draw callback events received when a draw call is issued
     IOEvents::setPreDrawCallback(std::bind(&EngineManager::_preDraw, this));
     IOEvents::setPostDrawCallback(std::bind(&EngineManager::_postDraw, this));
+
+    _deferredShader = static_cast<DeferredShader*>(ShaderBroker::instance()->getShader("deferredShader"));
 
     MasterClock::instance()->run();
     _viewManager->triggerEvents();
@@ -159,16 +175,50 @@ void EngineManager::_postDraw()
 {
     auto& lightList  = _scene->lightList;
 
+    RenderTexture* finalRender = nullptr;
+
     if (_graphicsLayer == GraphicsLayer::DXR_1_1_PATHTRACER ||
         _graphicsLayer == GraphicsLayer::DXR_1_0_PATHTRACER)
     {
         _pathTracerShader->runShader(lightList, _viewManager);
 
-        DXLayer::instance()->addCmdListIndex();
-        auto albedoUAV = _pathTracerShader->getCompositedFrame();
-        auto thread    = new std::thread(&DXLayer::flushCommandList, DXLayer::instance(), albedoUAV);
-        thread->detach();
+        finalRender = _pathTracerShader->getCompositedFrame();
     }
+    else
+    {
+        HLSLShader::setOM(_gBuffers->getTextures(), IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight);
+
+        _pathTracerShader->runShader(lightList, _viewManager);
+        _singleDrawRaster->startEntity();
+
+        for (auto entity : _scene->entityList)
+        {
+            _singleDrawRaster->runShader(entity);
+        }
+
+        finalRender = _singleDrawRasterRenderTarget;
+
+        HLSLShader::releaseOM(_gBuffers->getTextures());
+
+        std::vector<RenderTexture> rts;
+        rts.push_back(*_renderTexture);
+        rts.push_back(*_depthTexture);
+        HLSLShader::setOM(rts, IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight);
+
+        // Process point lights
+        PointLightList pointLightList;
+        _pathTracerShader->processLights(lightList, _viewManager, pointLightList, RandomInsertAndRemoveEntities);
+
+        _deferredShader->runShader(pointLightList, _viewManager, *_gBuffers);
+
+        HLSLShader::releaseOM(rts);
+
+        finalRender = _renderTexture;
+    }
+
+    DXLayer::instance()->addCmdListIndex();
+    auto thread = new std::thread(&DXLayer::flushCommandList, DXLayer::instance(), finalRender);
+    thread->detach();
 
     _audioManager->update();
 }

@@ -51,6 +51,11 @@ DXRStateObject::DXRStateObject(ComPtr<ID3D12RootSignature> primaryRaysRootSignat
     auto reflectionMissShaderImport       = L"ReflectionMiss";
     auto reflectionRaygenImport           = L"ReflectionRaygen";
 
+    auto shadowClosestHitShaderImport = L"ShadowClosestHit";
+    auto shadowAnyHitShaderImport     = L"ShadowAnyHit";
+    auto shadowHitGroupExport         = L"ShadowHitGroup";
+    auto shadowMissShaderImport       = L"ShadowMiss";
+
     _buildStateObject(reflectionRaygenImport,
                       reflectionMissShaderImport,
                       reflectionHitGroupExport,
@@ -74,7 +79,11 @@ void DXRStateObject::_buildStateObject(const wchar_t*              raygenImport,
                                        ComPtr<ID3D12Resource>&     hitGroupShaderTableResource,
                                        ComPtr<IDxcBlob>            pResultBlob,
                                        ComPtr<ID3D12RootSignature> rootSignature,
-                                       ComPtr<ID3D12StateObject>&  stateObject)
+                                       ComPtr<ID3D12StateObject>&  stateObject,
+                                       const wchar_t*              secondMissShaderImport,
+                                       const wchar_t*              secondHitGroupExport,
+                                       const wchar_t*              secondClosestHitImport,
+                                       const wchar_t*              secondAnyHitImport)
 {
     auto device = DXLayer::instance()->getDevice();
 
@@ -98,6 +107,13 @@ void DXRStateObject::_buildStateObject(const wchar_t*              raygenImport,
         lib->DefineExport(closestHitImport);
         lib->DefineExport(anyHitImport);
         lib->DefineExport(missShaderImport);
+
+        if (secondClosestHitImport != nullptr)
+        {
+            lib->DefineExport(secondClosestHitImport);
+            lib->DefineExport(secondAnyHitImport);
+            lib->DefineExport(secondMissShaderImport);
+        }
     }
 
     // Triangle hit group
@@ -107,10 +123,19 @@ void DXRStateObject::_buildStateObject(const wchar_t*              raygenImport,
     primaryHitGroup->SetAnyHitShaderImport(anyHitImport);
     primaryHitGroup->SetHitGroupType(D3D12_HIT_GROUP_TYPE_TRIANGLES);
 
+    if (secondClosestHitImport != nullptr)
+    {
+        auto secondaryHitGroup = raytracingPipeline.CreateSubobject<CD3D12_HIT_GROUP_SUBOBJECT>();
+        secondaryHitGroup->SetClosestHitShaderImport(secondClosestHitImport);
+        secondaryHitGroup->SetHitGroupExport(secondHitGroupExport);
+        secondaryHitGroup->SetAnyHitShaderImport(secondAnyHitImport);
+        secondaryHitGroup->SetHitGroupType(D3D12_HIT_GROUP_TYPE_TRIANGLES);
+    }
+
     // Shader config
     // Defines the maximum sizes in bytes for the ray payload and attribute structure.
     auto shaderConfig = raytracingPipeline.CreateSubobject<CD3D12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
-    UINT payloadSize   = 4 * sizeof(float); // float4 color
+    UINT payloadSize   = (4 * sizeof(float)) + (1 * sizeof(uint32_t)); // float3 color + float occlusion + uint recursion count
     UINT attributeSize = 2 * sizeof(float); // float2 barycentrics
     shaderConfig->Config(payloadSize, attributeSize);
 
@@ -126,14 +151,25 @@ void DXRStateObject::_buildStateObject(const wchar_t*              raygenImport,
     
     // PERFOMANCE TIP: Set max recursion depth as low as needed
     // as drivers may apply optimization strategies for low recursion depths.
-    UINT maxRecursionDepth = 10;
+    UINT maxRecursionDepth = 31;
     
     pipelineConfig->Config(maxRecursionDepth);
 
     dxrDevice->CreateStateObject(raytracingPipeline, IID_PPV_ARGS(&stateObject));
 
-    _buildShaderTables(raygenImport, missShaderImport, hitGroupExport, rayGenShaderTableResource,
-                       missShaderTableResource, hitGroupShaderTableResource, stateObject);
+    if (secondMissShaderImport != nullptr)
+    {
+        _buildShaderTables(raygenImport, missShaderImport, hitGroupExport,
+                           rayGenShaderTableResource, missShaderTableResource,
+                           hitGroupShaderTableResource, stateObject, secondMissShaderImport,
+                           secondHitGroupExport);
+    }
+    else
+    {
+        _buildShaderTables(raygenImport, missShaderImport, hitGroupExport,
+                           rayGenShaderTableResource, missShaderTableResource,
+                           hitGroupShaderTableResource, stateObject);
+    }
 }
 
 void DXRStateObject::_buildShaderTables(const wchar_t *            raygenImport,
@@ -142,7 +178,9 @@ void DXRStateObject::_buildShaderTables(const wchar_t *            raygenImport,
                                         ComPtr<ID3D12Resource>&    rayGenShaderTableResource,
                                         ComPtr<ID3D12Resource>&    missShaderTableResource,
                                         ComPtr<ID3D12Resource>&    hitGroupShaderTableResource,
-                                        ComPtr<ID3D12StateObject>& stateObject)
+                                        ComPtr<ID3D12StateObject>& stateObject,
+                                        const wchar_t *            secondMissShaderImport,
+                                        const wchar_t*             secondHitGroupExport)
 {
     auto device = DXLayer::instance()->getDevice();
 
@@ -152,12 +190,19 @@ void DXRStateObject::_buildShaderTables(const wchar_t *            raygenImport,
     void* rayGenShaderIdentifier;
     void* missShaderIdentifier;
     void* hitGroupShaderIdentifier;
+    void* secondMissShaderIdentifier;
+    void* secondHitGroupShaderIdentifier;
 
     auto GetShaderIdentifiers = [&](auto* stateObjectProperties)
     {
         rayGenShaderIdentifier   = stateObjectProperties->GetShaderIdentifier(raygenImport);
         missShaderIdentifier     = stateObjectProperties->GetShaderIdentifier(missShaderImport);
         hitGroupShaderIdentifier = stateObjectProperties->GetShaderIdentifier(hitGroupExport);
+        if (secondMissShaderImport != nullptr)
+        {
+            secondMissShaderIdentifier     = stateObjectProperties->GetShaderIdentifier(secondMissShaderImport);
+            secondHitGroupShaderIdentifier = stateObjectProperties->GetShaderIdentifier(secondHitGroupExport);
+        }
     };
 
     // Get shader identifiers.
@@ -179,20 +224,28 @@ void DXRStateObject::_buildShaderTables(const wchar_t *            raygenImport,
 
     // Miss shader table
     {
-        UINT        numShaderRecords = 1;
+        UINT        numShaderRecords = (secondMissShaderImport != nullptr) ? 2 : 1;
         UINT        shaderRecordSize = shaderIdentifierSize;
         ShaderTable missShaderTable(dxrDevice.Get(), numShaderRecords, shaderRecordSize, L"MissShaderTable");
         missShaderTable.pushBack(ShaderRecord(missShaderIdentifier, shaderIdentifierSize));
+        if (secondMissShaderImport != nullptr)
+        {
+            missShaderTable.pushBack(ShaderRecord(secondMissShaderIdentifier, shaderIdentifierSize));
+        }
         missShaderTableResource = missShaderTable.GetResource();
     }
 
     // Hit group shader table
     {
 
-        UINT        numShaderRecords = 1;
+        UINT        numShaderRecords = (secondHitGroupExport != nullptr) ? 2 : 1;
         UINT        shaderRecordSize = shaderIdentifierSize;
         ShaderTable hitGroupShaderTable(dxrDevice.Get(), numShaderRecords, shaderRecordSize, L"HitGroupShaderTable");
         hitGroupShaderTable.pushBack(ShaderRecord(hitGroupShaderIdentifier, shaderIdentifierSize));
+        if (secondHitGroupExport != nullptr)
+        {
+            hitGroupShaderTable.pushBack(ShaderRecord(secondHitGroupShaderIdentifier, shaderIdentifierSize));
+        }
         hitGroupShaderTableResource = hitGroupShaderTable.GetResource();
     }
 }

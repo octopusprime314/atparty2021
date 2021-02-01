@@ -22,26 +22,17 @@ void TextureBroker::addTexture(std::string textureName, TextureBlock* texData)
 {
     _lock.lock();
     _textureLoadsInFlight++;
+    auto isNewTexture = _textures.find(textureName) == _textures.end();
     _lock.unlock();
-    if (_textures.find(textureName) == _textures.end())
+    if (isNewTexture)
     {
-        if (EngineManager::getGraphicsLayer() == GraphicsLayer::OPENGL)
-        {
-            auto texture = new AssetTexture(textureName);
-            _lock.lock();
-            _textures[textureName] = texture;
-            _lock.unlock();
-        }
-        else if (EngineManager::getGraphicsLayer() >= GraphicsLayer::DX12)
-        {
-            auto texture = new AssetTexture(textureName,
-                                            DXLayer::instance()->getTextureCopyCmdList(),
-                                            DXLayer::instance()->getDevice(),
-                                            texData);
-            _lock.lock();
-            _textures[textureName] = texture;
-            _lock.unlock();
-        }
+        auto texture = new AssetTexture(textureName,
+                                        DXLayer::instance()->getTextureCopyCmdList(),
+                                        DXLayer::instance()->getDevice(),
+                                        texData);
+        _lock.lock();
+        _textures[textureName] = texture;
+        _lock.unlock();
     }
     _lock.lock();
     _textureLoadsFinished++;
@@ -70,37 +61,18 @@ void TextureBroker::addLayeredTexture(std::vector<std::string> textureNames)
     {
         std::vector<AssetTexture*> textures;
 
-        if (EngineManager::getGraphicsLayer() == GraphicsLayer::OPENGL)
+        // prime the asset textures
+        for (auto textureName : textureNames)
         {
-
-            // prime the asset textures
-            for (auto textureName : textureNames)
+            if (getTexture(textureName) == nullptr)
             {
-                if (getTexture(textureName) == nullptr)
-                {
-                    addTexture(textureName);
-                }
-                textures.push_back(getTexture(textureName));
+                addTexture(textureName);
             }
-
-            _layeredTextures[sumString] = new LayeredTexture(textures);
+            textures.push_back(getTexture(textureName));
         }
-        else if (EngineManager::getGraphicsLayer() >= GraphicsLayer::DX12)
-        {
 
-            // prime the asset textures
-            for (auto textureName : textureNames)
-            {
-                if (getTexture(textureName) == nullptr)
-                {
-                    addTexture(textureName);
-                }
-                textures.push_back(getTexture(textureName));
-            }
-
-            _layeredTextures[sumString] = new LayeredTexture(
-                textures, DXLayer::instance()->getCmdList(), DXLayer::instance()->getDevice());
-        }
+        _layeredTextures[sumString] = new LayeredTexture(
+            textures, DXLayer::instance()->getCmdList(), DXLayer::instance()->getDevice());
     }
     _lock.lock();
     _textureLoadsFinished++;
@@ -127,16 +99,9 @@ void TextureBroker::addCubeTexture(std::string textureName)
     _lock.unlock();
     if (_textures.find(textureName) == _textures.end())
     {
-        if (EngineManager::getGraphicsLayer() == GraphicsLayer::OPENGL)
-        {
-            _textures[textureName] = new AssetTexture(textureName, true);
-        }
-        else if (EngineManager::getGraphicsLayer() >= GraphicsLayer::DX12)
-        {
-            _textures[textureName] =
-                new AssetTexture(textureName, DXLayer::instance()->getTextureCopyCmdList(),
-                                 DXLayer::instance()->getDevice(), nullptr, true);
-        }
+        _textures[textureName] =
+            new AssetTexture(textureName, DXLayer::instance()->getTextureCopyCmdList(),
+                                DXLayer::instance()->getDevice(), nullptr, true);
     }
     _lock.lock();
     _textureLoadsFinished++;

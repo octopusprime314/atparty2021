@@ -119,14 +119,6 @@ void HLSLShader::buildDXC(ComPtr<IDxcBlob>& pResultBlob, std::wstring shaderStri
     }
     else
     {
-        DxcDefine define;
-        define.Name  = L"USE_SHADER_MODEL_6_5";
-        define.Value = L"0";
-        if (EngineManager::getGraphicsLayer() >= GraphicsLayer::DXR_TRACERAYINLINE)
-        {
-            define.Value = L"1";
-        }
-
         LPCWSTR args[] = {
             L"-Od",
             L"/Zi",
@@ -147,7 +139,7 @@ void HLSLShader::buildDXC(ComPtr<IDxcBlob>& pResultBlob, std::wstring shaderStri
 
         dxcCompiler->CompileWithDebug(pSource, shaderString.c_str(), entryPoint.c_str(),
                                       shaderProfile.c_str(), args, sizeof(args) / sizeof(LPCWSTR*),
-                                      &define, 1, includeHandler, &dxcResult, &debugName,
+                                      nullptr, 0, includeHandler, &dxcResult, &debugName,
                                       &shaderPDBData);
 
         dxcResult->GetResult(&pResultBlob);
@@ -323,10 +315,7 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
     if (useDxcCompiler && isVSPS)
     {
         std::wstring profile = L"vs_6_3";
-        if (EngineManager::getGraphicsLayer() >= GraphicsLayer::DXR_TRACERAYINLINE)
-        {
-            profile = L"vs_6_5";
-        }
+
         buildDXC(compiledDXILVS, shaderString, profile, L"main", streamVS);
 
         if (compiledDXILVS != nullptr)
@@ -359,10 +348,7 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
     if (useDxcCompiler && isVSPS)
     {
         std::wstring profile = L"ps_6_3";
-        if (EngineManager::getGraphicsLayer() >= GraphicsLayer::DXR_TRACERAYINLINE)
-        {
-            profile = L"ps_6_5";
-        }
+
         buildDXC(compiledDXILPS, psFileName.c_str(), profile, L"main", streamPS);
 
         if (compiledDXILPS != nullptr)
@@ -395,10 +381,7 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
     {
 
         std::wstring profile = L"cs_6_3";
-        if (EngineManager::getGraphicsLayer() >= GraphicsLayer::DXR_TRACERAYINLINE)
-        {
-            profile = L"cs_6_5";
-        }
+
         buildDXC(compiledDXILCS, shaderString, profile, L"main", streamCS);
 
         if (compiledDXILCS != nullptr)
@@ -477,7 +460,7 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
             samplerTableRange = new CD3DX12_DESCRIPTOR_RANGE();
             samplerTableRange->Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0);
             rootParameters[resource.second.uID + rootParameterIndex].InitAsDescriptorTable(
-                1, samplerTableRange, D3D12_SHADER_VISIBILITY_PIXEL);
+                1, samplerTableRange, D3D12_SHADER_VISIBILITY_ALL);
             _resourceIndexes[resource.second.Name] = resource.second.uID + rootParameterIndex;
             i++;
         }
@@ -500,27 +483,29 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
                 const UINT descriptorTableEntries = MaxBLASSRVsForRayTracing;
                 // Add 256 potential slots for this resource
                 srvTableRange->Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1 + descriptorTableEntries,
-                                    resource.second.uID);
+                                    resource.second.BindPoint);
             }
             else
             {
                 srvTableRange->Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, resource.second.BindCount,
-                                    resource.second.uID);
+                                    resource.second.BindPoint);
             }
             if (csResult == S_OK)
             {
                 srvTableRange->RegisterSpace = resource.second.Space;
-                rootParameters[resource.second.uID + rootParameterIndex].InitAsDescriptorTable(
+                rootParameters[resource.second.BindPoint + rootParameterIndex]
+                    .InitAsDescriptorTable(
                     1, srvTableRange);
             }
             else
             {
                 srvTableRange->RegisterSpace = resource.second.Space;
-                rootParameters[resource.second.uID + rootParameterIndex].InitAsDescriptorTable(
-                    1, srvTableRange, D3D12_SHADER_VISIBILITY_PIXEL);
+                rootParameters[resource.second.BindPoint + rootParameterIndex]
+                    .InitAsDescriptorTable(
+                    1, srvTableRange, D3D12_SHADER_VISIBILITY_ALL);
             }
 
-            _resourceIndexes[resource.second.Name] = resource.second.uID + rootParameterIndex;
+            _resourceIndexes[resource.second.Name] = resource.second.BindPoint + rootParameterIndex;
             i++;
             heapCounters[resource.second.Type]++;
         }
@@ -528,9 +513,9 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
         else if (resource.second.Type == 12)
         {
 
-            rootParameters[resource.second.uID + rootParameterIndex].InitAsShaderResourceView(0);
+            rootParameters[resource.second.BindPoint + rootParameterIndex].InitAsShaderResourceView(0);
 
-            _resourceIndexes[resource.second.Name] = resource.second.uID + rootParameterIndex;
+            _resourceIndexes[resource.second.Name] = resource.second.BindPoint + rootParameterIndex;
             i++;
             heapCounters[resource.second.Type]++;
         }
@@ -965,7 +950,7 @@ void HLSLShader::bindAsyncCompute()
 
 void HLSLShader::unbind() {}
 
-void HLSLShader::bindAttributes(VAO* vao)
+void HLSLShader::bindAttributes(VAO* vao, bool bindVertexBuffer)
 {
     auto cmdList = DXLayer::instance()->getCmdList();
 
@@ -973,8 +958,11 @@ void HLSLShader::bindAttributes(VAO* vao)
     {
         cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         cmdList->IASetIndexBuffer(&(vao->getIndexBuffer()));
-        D3D12_VERTEX_BUFFER_VIEW vertexBuffers[] = {vao->getVertexBuffer()};
-        cmdList->IASetVertexBuffers(0, 1, vertexBuffers);
+        if (bindVertexBuffer)
+        {
+            D3D12_VERTEX_BUFFER_VIEW vertexBuffers[] = {vao->getVertexBuffer()};
+            cmdList->IASetVertexBuffers(0, 1, vertexBuffers);
+        }
     }
     else
     {

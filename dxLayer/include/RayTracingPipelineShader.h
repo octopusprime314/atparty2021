@@ -137,10 +137,10 @@ class RayTracingPipelineShader
     float*                                        getWorldToObjectTransforms();
     float*                                        getPrevInstanceTransforms();
     int                                           getBLASCount();
-    void                                          updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes);
-    void                                          updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes);
-    void                                          updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes);
-    void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes);
+    void                                          updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
+    void                                          updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
+    void                                          updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
+    void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          buildAccelerationStructures();
     UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize);
     void                                          buildBLAS(Entity* entity);

@@ -1,85 +1,174 @@
-// Object Declarations
-sampler   textureSampler : register(s0);
-Texture2D textureMap : register(t0);
-Texture2D tex0 : register(t1);
-Texture2D tex1 : register(t2);
-Texture2D tex2 : register(t3);
-Texture2D tex3 : register(t4);
-Texture2D alphatex0 : register(t5);
+#include "../include/structs.hlsl"
+
+Buffer<float>                         instanceNormalMatrixTransforms   : register(t0, space0);
+StructuredBuffer<CompressedAttribute> vertexBuffer[]                   : register(t1, space2);
+Buffer<uint>                          instanceIndexToMaterialMapping   : register(t2, space0);
+Buffer<uint>                          instanceIndexToAttributesMapping : register(t3, space0);
+StructuredBuffer<UniformMaterial>     uniformMaterials                 : register(t4, space0);
+Texture2D                             diffuseTexture[]                 : register(t5, space1);
+
+SamplerState bilinearWrap : register(s0);
 
 cbuffer objectData : register(b0)
 {
-    float4x4 model;
-    int      id;
-    int      isLayeredTexture;
-    int      primitiveOffset;
+    uint     instanceBufferIndex;
+    float4x4 modelMatrix;
 }
+
 cbuffer globalData : register(b1)
 {
-    float4x4 prevModel;
-    float4x4 prevView;
-    float4x4 view;
-    float4x4 projection;
-    float4x4 normal;
+    float4x4 projTransform;
+    float4x4 viewTransform;
+    float4x4 inverseView;
+    float2   screenSize;
+    uint     texturesPerMaterial;
 }
-
-
 struct MRT
 {
-    float4 color : SV_Target0;
-    float4 normal : SV_Target1;
-    float4 id : SV_Target2;
+    float4 color    : SV_Target0;
+    float4 normal   : SV_Target1;
+    float4 position : SV_Target2;
 };
 
-MRT main(in float4 position
-       : SV_POSITION, in float3 normal
-       : NORMALOUT, in float2   uv
-       : UVOUT, in uint         primitiveID
-       : SV_PrimitiveID)
+void ProcessRasterOpaqueTriangle(in  RayTraversalData rayData,
+                                 out float3           albedo,
+                                 out float            roughness,
+                                 out float            metallic,
+                                 out float3           normal,
+                                 out float3           hitPosition,
+                                 out float            transmittance)
+{
+    hitPosition = rayData.worldRayOrigin + (rayData.closestRayT * rayData.worldRayDirection);
+
+    int    geometryIndex   = rayData.geometryIndex;
+    int    primitiveIndex  = rayData.primitiveIndex;
+    int    instanceIndex   = rayData.instanceIndex;
+    float2 barycentrics    = rayData.barycentrics;
+
+    int materialIndex = instanceIndexToMaterialMapping[instanceIndex] + (geometryIndex * texturesPerMaterial);
+    int attributeIndex = instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
+
+    float2 uvCoord = rayData.uv;
+
+    // FUCK THIS MATRIX DECOMPOSITION BULLSHIT!!!!
+    float4x3 cachedTransform        = rayData.objectToWorld;
+    float4x4 objectToWorldTransform = {float4(cachedTransform[0].xyz, 0.0),
+                                        float4(cachedTransform[1].xyz, 0.0),
+                                        float4(cachedTransform[2].xyz, 0.0),
+                                        float4(cachedTransform[3].xyz, 1.0)};
+
+    int offset = instanceIndex * 9;
+  
+    float3x3 instanceNormalMatrixTransform = {
+        float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 3)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 6)]),
+        float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 1)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 4)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 7)]),
+        float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 2)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 5)],
+                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 8)])};
+
+    float mipLevel = 0;
+
+    albedo = float3(0.0, 0.0, 0.0);
+    if (uniformMaterials[attributeIndex].validBits & ColorValidBit)
+    {
+        albedo = uniformMaterials[attributeIndex].baseColor;
+    }
+    else
+    {
+        albedo = pow(diffuseTexture[NonUniformResourceIndex(materialIndex)].SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz, 2.2);
+    }
+
+    roughness = 0.0;
+    if (uniformMaterials[attributeIndex].validBits & RoughnessValidBit)
+    {
+        roughness = uniformMaterials[attributeIndex].roughness;
+    }
+    else
+    {
+        roughness = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
+                        .SampleLevel(bilinearWrap, uvCoord, mipLevel)
+                        .y;
+    }
+
+    metallic = 0.0;
+    if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
+    {
+        metallic = uniformMaterials[attributeIndex].metallic;
+    }
+
+    normal = float3(0.0, 0.0, 0.0);
+    //if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
+    //{
+        normal = -normal;
+    //}
+    //else
+    //{
+    //    float3 normalMap = diffuseTexture[NonUniformResourceIndex(materialIndex + 1)]
+    //                            .SampleLevel(bilinearWrap, uvCoord, mipLevel)
+    //                            .xyz;
+    //
+    //    // Converts from [0,1] space to [-1,1] space
+    //    normalMap = normalMap * 2.0f - 1.0f;
+    //
+    //    // Compute the normal from loading the triangle vertices
+    //    float3x3 tbnMat = GetTBN(barycentrics, attributeIndex, primitiveIndex);
+    //
+    //    // If there is a failure in getting the TBN matrix then use the computed normal without normal mappings
+    //    if (any(isnan(tbnMat[0])))
+    //    {
+    //        normal = -normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
+    //    }
+    //    else
+    //    {
+    //        float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
+    //
+    //        normal = -normalize(mul(normalMap, tbnMatNormalTransform));
+    //    }
+    //}
+
+    transmittance = uniformMaterials[attributeIndex].transmittance;
+}
+
+MRT main(in float4 position    : SV_POSITION,
+         in float3 normal      : NORMALOUT,
+         in float2 uv          : UVOUT,
+         in uint   primitiveID : SV_PrimitiveID)
 {
 
     float4 vTexColor = float4(0.0, 0.0, 0.0, 1.0);
     MRT    output;
 
-    if (isLayeredTexture)
-    {
-        float4 red       = float4(tex0.Sample(textureSampler, mul(uv, 150.0)).rgb, 1.0);
-        float4 green     = float4(tex1.Sample(textureSampler, mul(uv, 150.0)).rgb, 1.0);
-        float4 blue      = float4(tex2.Sample(textureSampler, mul(uv, 150.0)).rgb, 1.0);
-        float4 alpha     = float4(tex3.Sample(textureSampler, mul(uv, 150.0)).rgb, 1.0);
-        float4 idTexture = float4(alphatex0.Sample(textureSampler, uv));
+    int    geometryIndex  = 0;
+    int    primitiveIndex = primitiveID;
+    int    instanceIndex  = instanceBufferIndex;
 
-        // Used to prevent tiling
-        float4 tRandoR = float4(tex0.Sample(textureSampler, mul(uv, 5.0)).rgb, 1.0);
-        float4 tRandoG = float4(tex1.Sample(textureSampler, mul(uv, 5.0)).rgb, 1.0);
-        float4 tRandoB = float4(tex2.Sample(textureSampler, mul(uv, 5.0)).rgb, 1.0);
-        float4 tRandoA = float4(tex3.Sample(textureSampler, mul(uv, 5.0)).rgb, 1.0);
+    RayTraversalData rayData;
+    rayData.worldRayOrigin    = float3(0.0, 0.0, 0.0);
+    rayData.closestRayT       = 0.0;
+    rayData.worldRayDirection = float3(0.0, 0.0, 0.0);
+    rayData.geometryIndex     = geometryIndex;
+    rayData.primitiveIndex    = primitiveIndex;
+    rayData.instanceIndex     = instanceIndex;
+    rayData.barycentrics      = float2(0.0, 0.0);
+    rayData.uvIsValid         = true;
+    rayData.uv                = uv;
+    
+    float3 albedo;
+    float  roughness;
+    float  metallic;
+    float3 hitPosition;
+    float  transmittance;
+    float3 tbnNormal;
+    
+    ProcessRasterOpaqueTriangle(rayData, albedo, roughness, metallic, tbnNormal, hitPosition, transmittance);
 
-        float4 tR = red * tRandoR;
-        float4 tG = green * tRandoG;
-        float4 tB = blue * tRandoB;
-        float4 tA = alpha * tRandoA;
+    output.color    = float4(albedo, transmittance);
+    output.normal   = float4(normal, roughness);
+    output.position = float4(position.xyz, metallic);
 
-        float redPixel   = idTexture.r;
-        float greenPixel = idTexture.g;
-        float bluePixel  = idTexture.b;
-        // alpha value is inverse
-        float alphaPixel = 1.0 - idTexture.a;
-
-        float4 lerpComponent = float4(0.0, 0.0, 0.0, 1.0);
-        lerpComponent        = mul(redPixel, tR) + mul((1.0f - redPixel), lerpComponent);
-        lerpComponent        = mul(greenPixel, tG) + mul((1.0f - greenPixel), lerpComponent);
-        lerpComponent        = mul(bluePixel, tB) + mul((1.0f - bluePixel), lerpComponent);
-        lerpComponent        = mul(alphaPixel, tA) + mul((1.0f - alphaPixel), lerpComponent);
-        vTexColor            = float4(lerpComponent.rgb, 1.0);
-        output.color         = vTexColor;
-    }
-    else
-    {
-        output.color = float4(textureMap.Sample(textureSampler, uv).rgb, 1.0);
-    }
-    output.normal = float4(normal.rgb, 1.0);
-    output.id =
-        float4(0.0, 0.0, float(id) / 16777216.0, float(primitiveID + primitiveOffset) / 16777216.0);
     return output;
 }

@@ -74,10 +74,6 @@ class PathTracerShader : public ShaderBase
 
     void _updateGameState(EngineStateFlags state);
     void _updateKeyboard(int key, int x, int y);
-    void _processLights(std::vector<Light*>&  lights,
-                        ViewEventDistributor* viewEventDistributor,
-                        PointLightList&       pointLightList,
-                        bool                  addLights);
 
   public:
     PathTracerShader(std::string shaderName);
@@ -85,4 +81,8 @@ class PathTracerShader : public ShaderBase
     void           runShader(std::vector<Light*>&  lights,
                              ViewEventDistributor* viewEventDistributor);
     RenderTexture* getCompositedFrame();
+    void           processLights(std::vector<Light*>&  lights,
+                                 ViewEventDistributor* viewEventDistributor,
+                                 PointLightList&       pointLightList,
+                                 bool                  addLights);
 };

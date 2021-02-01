@@ -152,82 +152,58 @@ void IOEventDistributor::_keyboardUpdate(GLFWwindow* window, int key, int scanco
 // One frame draw update call
 void IOEventDistributor::_drawUpdate()
 {
+    // this struct holds Windows event messages
+    MSG      msg           = {0};
+    auto     last          = nowMs();
+    uint64_t updateTrigger = KINEMATICS_TIME;
 
-    if (EngineManager::getGraphicsLayer() == GraphicsLayer::OPENGL)
+    uint64_t cyclesWithoutMouseMovement = 0;
+
+    // main loop
+    while (true)
     {
-        auto     last          = nowMs();
-        uint64_t updateTrigger = KINEMATICS_TIME;
-        while (!_quit)
+        // check to see if any messages are waiting in the queue
+        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
         {
-            auto now = nowMs();
-            updateTrigger += (now - last).count();
-            last = now;
+            // translate keystroke messages into the right format
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
 
-            if (updateTrigger >= KINEMATICS_TIME)
-            {
-                MasterClock::instance()->update(updateTrigger);
-                updateTrigger = 0;
-            }
-
-            IOEvents::updateDraw(_window);
+            // check to see if it's time to quit
+            if (msg.message == WM_QUIT)
+                break;
         }
-    }
-    else
-    {
 
-        // this struct holds Windows event messages
-        MSG      msg           = {0};
-        auto     last          = nowMs();
-        uint64_t updateTrigger = KINEMATICS_TIME;
+        // Keep cursor locked inside the window
+        RECT rect = {0, 0, IOEventDistributor::screenPixelWidth,
+                        IOEventDistributor::screenPixelHeight};
+        ClipCursor(&rect);
 
-        uint64_t cyclesWithoutMouseMovement = 0;
-
-        // main loop
-        while (true)
+        /*if (cyclesWithoutMouseMovement > 100)
         {
-            // check to see if any messages are waiting in the queue
-            if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-            {
-                // translate keystroke messages into the right format
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
+            SetCursorPos(IOEventDistributor::screenPixelWidth / 2,
+                            IOEventDistributor::screenPixelHeight / 2);
 
-                // check to see if it's time to quit
-                if (msg.message == WM_QUIT)
-                    break;
-            }
-
-            // Keep cursor locked inside the window
-            RECT rect = {0, 0, IOEventDistributor::screenPixelWidth,
-                         IOEventDistributor::screenPixelHeight};
-            ClipCursor(&rect);
-
-            /*if (cyclesWithoutMouseMovement > 100)
-            {
-                SetCursorPos(IOEventDistributor::screenPixelWidth / 2,
-                             IOEventDistributor::screenPixelHeight / 2);
-
-                cyclesWithoutMouseMovement = 0;
-            }
-
-            cyclesWithoutMouseMovement++;*/
-
-            auto now = nowMs();
-            updateTrigger += (now - last).count();
-            last = now;
-
-            auto millisecondsPerFrame = 16;
-            // if (updateTrigger >= millisecondsPerFrame)
-            //{
-            // Update kinematics by 1 mS
-            // MasterClock::instance()->update(16);
-            MasterClock::instance()->update(updateTrigger);
-            updateTrigger = 0;
-
-            // Draw frame every second
-            IOEvents::updateDraw(_window);
-            //}
+            cyclesWithoutMouseMovement = 0;
         }
+
+        cyclesWithoutMouseMovement++;*/
+
+        auto now = nowMs();
+        updateTrigger += (now - last).count();
+        last = now;
+
+        auto millisecondsPerFrame = 16;
+        // if (updateTrigger >= millisecondsPerFrame)
+        //{
+        // Update kinematics by 1 mS
+        // MasterClock::instance()->update(16);
+        MasterClock::instance()->update(updateTrigger);
+        updateTrigger = 0;
+
+        // Draw frame every second
+        IOEvents::updateDraw(_window);
+        //}
     }
 }
 

@@ -207,10 +207,10 @@ RenderTexture* PathTracerShader::getCompositedFrame()
     return _compositor;
 }
 
-void PathTracerShader::_processLights(std::vector<Light*>&  lights,
-                                      ViewEventDistributor* viewEventDistributor,
-                                      PointLightList&       pointLightList,
-                                      bool                  addLights)
+void PathTracerShader::processLights(std::vector<Light*>&  lights,
+                                     ViewEventDistributor* viewEventDistributor,
+                                     PointLightList&       pointLightList,
+                                     bool                  addLights)
 {
     // Use map to sort the lights based on distance from the viewer
     std::map<float, int> lightsSorted;
@@ -376,10 +376,10 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     rtPipeline->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
     rtPipeline->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
 
-    rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes);
-    rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes);
-    rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes);
-    rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes);
+    rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
+    rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
+    rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
+    rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
 
     if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
     {
@@ -413,7 +413,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     // Process point lights
     PointLightList pointLightList;
-    _processLights(lights, viewEventDistributor, pointLightList, RandomInsertAndRemoveEntities);
+    processLights(lights, viewEventDistributor, pointLightList, RandomInsertAndRemoveEntities);
 
     // Process directional light
     Vector4 sunLightColor  = Vector4(1.0, 1.0, 1.0);
@@ -554,10 +554,10 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     rtPipeline->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
     rtPipeline->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
 
-    rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes);
-    rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes);
-    rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes);
-    rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes);
+    rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
+    rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
+    rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
+    rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
 
     shader->updateData("numPointLights", &pointLightList.lightCount, true);
     shader->updateData("pointLightColors", pointLightList.lightColorsArray, true);

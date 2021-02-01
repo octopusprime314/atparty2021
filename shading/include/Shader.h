@@ -65,9 +65,11 @@ class Shader
                             ImageData imageInfo)                                     = 0;
     virtual void updateRTAS(std::string id, ComPtr<ID3D12DescriptorHeap> rtASDescriptorHeap,
                             D3D12_GPU_VIRTUAL_ADDRESS gpuva, bool isCompute = false) = 0;
-    virtual void bindAttributes(VAO* vao)                                            = 0;
+    virtual void bindAttributes(VAO* vao, bool bindVertexBuffer)                     = 0;
     virtual void unbindAttributes()                                                  = 0;
     virtual void bind()                                                              = 0;
     virtual void unbind()                                                            = 0;
     virtual Vector4 getThreadGroupSize()                                             = 0;
+
+    std::map<std::string, UINT> _resourceIndexes;
 };

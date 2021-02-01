@@ -314,13 +314,13 @@ void BuildGltfMeshes(const Document*           document,
 
                 if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_POSITION, accessorId))
                 {
-                    vertexStrides.push_back(vertices.size() / 3);
-
                     const Accessor& accessor = document->accessors.Get(accessorId);
 
                     auto tempVerts = resourceReader->ReadBinaryData<float>(*document, accessor);
                     vertices.insert(vertices.end(), tempVerts.begin(), tempVerts.end());
-                    const auto dataByteLength = vertices.size() * sizeof(float);
+
+                    vertexStrides.push_back(vertices.size() / 3);
+
                 }
                 if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_NORMAL, accessorId))
                 {
@@ -328,7 +328,6 @@ void BuildGltfMeshes(const Document*           document,
 
                     auto tempNormals = resourceReader->ReadBinaryData<float>(*document, accessor);
                     normals.insert(normals.end(), tempNormals.begin(), tempNormals.end());
-                    const auto dataByteLength = normals.size() * sizeof(float);
                 }
                 if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_TEXCOORD_0, accessorId))
                 {
@@ -344,21 +343,22 @@ void BuildGltfMeshes(const Document*           document,
                 if ((accessor.type == TYPE_SCALAR) &&
                     (accessor.componentType == COMPONENT_UNSIGNED_SHORT))
                 {
-                    indexStrides.push_back(indices.size());
                     std::vector<uint16_t> uint16Indices = resourceReader->ReadBinaryData<uint16_t>(*document, accessor);
 
                     for (uint16_t index : uint16Indices)
                     {
                         indices.push_back(index);
                     }
+                    indexStrides.push_back(indices.size());
+
                 }
                 else if ((accessor.type == TYPE_SCALAR) &&
                             (accessor.componentType == COMPONENT_UNSIGNED_INT))
                 {
-                    indexStrides.push_back(indices.size());
                     auto newIndices = resourceReader->ReadBinaryData<uint32_t>(*document, accessor);
                     indices.insert(indices.end(), newIndices.begin(), newIndices.end());
 
+                    indexStrides.push_back(indices.size());
                     is32BitIndices = true;
                 }
                 std::string::size_type sz; // alias of size_t

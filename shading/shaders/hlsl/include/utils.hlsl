@@ -60,6 +60,7 @@ float3 GetNormalCoord(float2 barycentrics, uint instanceIndex, uint primitiveInd
                      barycentrics.y * (normal[2] - normal[0]));
 }
 
+
 // Compute barycentric coordinates (u, v, w) for
 // point p with respect to triangle (a, b, c)
 void ComputeBarycentric(float3 p, float3 a, float3 b, float3 c, out float u, out float v,
@@ -373,8 +374,56 @@ bool ProcessTransparentTriangle(in RayTraversalData rayData)
     return false;
 }
 
+float3 RefractionRay(float3 normal, float3 incidentRayDirection)
+{
+    float cosIncident   = clamp(-1.0, 1.0, dot(incidentRayDirection, normal));
+    float etaIncident   = 1.0;
+    float etaRefraction = GLASS_IOR;
+    float3 n   = normal;
+    if (cosIncident < 0.0)
+    {
+        cosIncident = -cosIncident;
+    }
+    else
+    {
+        etaIncident = GLASS_IOR;
+        etaRefraction = 1.0;
+        n    = -normal;
+    }
+    float eta = etaIncident / etaRefraction;
+    float k   = 1.0 - eta * eta * (1.0 - cosIncident * cosIncident);
+    return (k < 0.0) ? 0.0 : eta * incidentRayDirection + (eta * cosIncident - sqrt(k)) * n;
+}
+
+#ifdef COMPILE_DXR_1_0_ONLY
+
+void LaunchReflectionRefractionRayPair(in Payload incidentPayload,
+                                       in float3  incidentRay,
+                                       in float3  normal,
+                                       in RayDesc ray,
+                                       in float   indexOfRefraction,
+                                       in float3  incidentLight)
+{
+    float reflectionCoeff = (pow((1.0 - indexOfRefraction), 2.0) / pow((1.0 + indexOfRefraction), 2.0));
+    float refractionCoeff = 1.0 - reflectionCoeff;
+
+    Payload payloadRefraction;
+    payloadRefraction.recursionCount = incidentPayload.recursionCount + 1;
+    payloadRefraction.color          = incidentPayload.color.xyz + (incidentLight * refractionCoeff);
+
+    ray.Direction = RefractionRay(normal, incidentRay);
+    TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payloadRefraction);
+
+    Payload payloadReflection;
+    payloadReflection.recursionCount = incidentPayload.recursionCount + 1;
+    payloadReflection.color          = incidentPayload.color.xyz + (incidentLight * reflectionCoeff);
+
+    ray.Direction = incidentRay - (2.0f * dot(incidentRay, normal) * normal);
+    TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payloadReflection);
+}
+#endif
+
 void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
-                           in  RayDesc                 ray,
                            out float3                  albedo,
                            out float                   roughness,
                            out float                   metallic,
@@ -392,10 +441,16 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     int materialIndex = instanceIndexToMaterialMapping[instanceIndex] + (geometryIndex * texturesPerMaterial);
     int attributeIndex = instanceIndexToAttributesMapping[instanceIndex] + geometryIndex;
 
-    float2 uvCoord = GetTexCoord(barycentrics, attributeIndex, primitiveIndex);
+    float2 uvCoord = float2(0.0, 0.0);
 
-    float3 rayP0 = rayData.worldRayOrigin + (rayData.worldRayDirection * ray.TMin);
-    float3 rayP1 = rayData.worldRayOrigin + (rayData.worldRayDirection * ray.TMax);
+    if (rayData.uvIsValid == false)
+    {
+        uvCoord = GetTexCoord(barycentrics, attributeIndex, primitiveIndex);
+    }
+    else
+    {
+        uvCoord = rayData.uv;
+    }
 
     // FUCK THIS MATRIX DECOMPOSITION BULLSHIT!!!!
     float4x3 cachedTransform        = rayData.objectToWorld;
@@ -417,9 +472,7 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
                 instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 5)],
                 instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 8)])};
 
-    float mipLevel = 0; // ComputeMipLevel(rayQuery.CommittedTriangleBarycentrics(),
-                        //              attributeIndex, primitiveIndex, rayP0, rayP1,
-                        //              hitPosition, threadId.xy, objectToWorldTransform, instanceNormalMatrixTransform);
+    float mipLevel = 0;
 
     albedo = float3(0.0, 0.0, 0.0);
     if (uniformMaterials[attributeIndex].validBits & ColorValidBit)
@@ -432,7 +485,6 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     }
 
     roughness = 0.0;
-
     if (uniformMaterials[attributeIndex].validBits & RoughnessValidBit)
     {
         roughness = uniformMaterials[attributeIndex].roughness;
@@ -451,7 +503,6 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     }
 
     normal = float3(0.0, 0.0, 0.0);
-
     if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
     {
         normal = -GetNormalCoord(barycentrics, attributeIndex, primitiveIndex);

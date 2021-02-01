@@ -52,7 +52,7 @@ void PrimaryRaygen()
     // TMin should be kept small to prevent missing geometry at close contact areas.
     ray.TMin           = MIN_RAY_LENGTH;
     ray.TMax           = MAX_RAY_LENGTH;
-    Payload payload    = {float4(0, 0, 0, 0)};
+    Payload payload    = {float3(0, 0, 0), 0.0, 0.0};
 
     TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payload);
 }
@@ -100,12 +100,7 @@ void PrimaryRaygen()
     rayData.barycentrics      = attr.barycentrics;
     rayData.objectToWorld     = ObjectToWorld4x3();
 
-    RayDesc ray;
-    ray.TMin      = MIN_RAY_LENGTH;
-    ray.TMax      = MAX_RAY_LENGTH;
-
     ProcessOpaqueTriangle(rayData,
-                          ray,
                           albedo,
                           roughness,
                           metallic,

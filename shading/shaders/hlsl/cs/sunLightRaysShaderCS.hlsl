@@ -1,4 +1,5 @@
 #include "../include/structs.hlsl"
+#include "../include/dxr1_1_defines.hlsl"
 
 RaytracingAccelerationStructure             rtAS                             : register(t0, space0);
 Texture2D                                   diffuseTexture[]                 : register(t1, space1);
@@ -129,7 +130,6 @@ void main(int3 threadId : SV_DispatchThreadID,
         rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
 
         ProcessOpaqueTriangle(rayData,
-                              ray,
                               albedo,
                               roughness,
                               metallic,
@@ -143,8 +143,7 @@ void main(int3 threadId : SV_DispatchThreadID,
                                                                    roughness,
                                                                    metallic,
                                                                    threadId.xy,
-                                                                   false,
-                                                                   rayQuery.CommittedRayT());
+                                                                   false);
 
         indirectLightRaysUAV[threadId.xy].xyz = secondarySurfaceReflectionColor;
         

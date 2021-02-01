@@ -93,7 +93,6 @@ static float refractionIndex = 1.0 - reflectionIndex;
             rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
 
             ProcessOpaqueTriangle(rayData,
-                                  ray,
                                   albedo,
                                   roughness,
                                   metallic,

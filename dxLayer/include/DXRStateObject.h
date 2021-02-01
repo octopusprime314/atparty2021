@@ -35,7 +35,9 @@ class DXRStateObject
                                                  ComPtr<ID3D12Resource>&    rayGenShaderTableResource,
                                                  ComPtr<ID3D12Resource>&    missShaderTableResource,
                                                  ComPtr<ID3D12Resource>&    hitGroupShaderTableResource,
-                                                 ComPtr<ID3D12StateObject>& stateObject);
+                                                 ComPtr<ID3D12StateObject>& stateObject,
+                                                 const wchar_t *            secondMissShaderImport = nullptr,
+                                                 const wchar_t*             secondHitGroupExport   = nullptr);
 
     void                      _buildStateObject(const wchar_t*              raygenImport,
                                                 const wchar_t*              missShaderImport,
@@ -47,7 +49,11 @@ class DXRStateObject
                                                 ComPtr<ID3D12Resource>&     hitGroupShaderTableResource,
                                                 ComPtr<IDxcBlob>            pResultBlob,
                                                 ComPtr<ID3D12RootSignature> rootSignature,
-                                                ComPtr<ID3D12StateObject>&  stateObject);
+                                                ComPtr<ID3D12StateObject>&  stateObject,
+                                                const wchar_t*              secondMissShaderImport = nullptr,
+                                                const wchar_t*              secondHitGroupExport   = nullptr,
+                                                const wchar_t*              secondClosestHitImport = nullptr,
+                                                const wchar_t*              secondAnyHitImport     = nullptr);
   public:
     DXRStateObject(ComPtr<ID3D12RootSignature> primaryRaysRootSignature,
                    ComPtr<ID3D12RootSignature> reflectionRaysRootSignature);

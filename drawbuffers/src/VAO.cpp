@@ -57,7 +57,6 @@ uint32_t VAO::getVAOContext() { return _vaoContext; }
 
 uint32_t VAO::getVAOShadowContext() { return _vaoShadowContext; }
 
-
 void VAO::createVAO(RenderBuffers* renderBuffers, ModelClass classId)
 {
     auto      vertices            = renderBuffers->getVertices();

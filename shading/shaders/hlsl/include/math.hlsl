@@ -253,4 +253,40 @@ float halfFloatToFloat(uint16_t halfFloat)
     return asfloat(value);
 }
 
+float3 GetLighting(float3 normal, float3 halfVector, float roughness, float3 eyeVector,
+                   float3 lightDirection, float metallic, float occlusion, float3 albedo,
+                   float3 radiance, float3 reflectance)
+{
+    // Cook-Torrance BRDF for specular lighting calculations
+    float  NDF = DistributionGGX(normal, halfVector, roughness);
+    float  G   = GeometrySmith(normal, eyeVector, lightDirection, roughness);
+    float3 F   = FresnelSchlick(max(dot(halfVector, eyeVector), 0.0), reflectance);
+
+    // Specular component of light that is reflected off the surface
+    float3 kS = F;
+    // Diffuse component of light is left over from what is not reflected and thus refracted
+    float3 kD = float3(1.0f, 1.0f, 1.0f) - kS;
+    // Metallic prevents any sort of diffuse (refracted) light from occuring.
+    // Metallic of 1.0 signals only specular component of light
+    kD *= 1.0 - metallic;
+
+    float3 numerator = NDF * G * F;
+    float  denominator =
+        4.0 * max(dot(normal, eyeVector), 0.0f) * max(dot(normal, lightDirection), 0.0f);
+    float3 specular = numerator / max(denominator, 0.001f);
+    float3 diffuse  = kD * albedo / PI;
+
+    float NdotL = max(dot(normal, lightDirection), 0.0f);
+
+    // 1) Add the diffuse and specular light components and multiply them by the overall incident
+    // ray's light energy (radiance) and then also multiply by the alignment of the surface normal
+    // with the incoming light ray's direction and shadowed intensity. 2) NdotL basically says that
+    // more aligned the normal and light direction is, the more the light will be scattered within
+    // the surface (diffuse lighting) rather than get reflected (specular) which will get color from
+    // the diffuse surface the reflected light hits after the bounce.
+    float3 lighting = (diffuse + specular) * radiance * NdotL * (1.0f - occlusion);
+
+    return lighting;
+}
+
 #endif
