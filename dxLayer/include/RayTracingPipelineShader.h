@@ -122,7 +122,7 @@ class RayTracingPipelineShader
     void _updateTLASData(int tlasCount,
                          std::vector<D3D12_RAYTRACING_INSTANCE_DESC>& instanceDescriptionCPUBuffer);
     void _updateInstanceData();
-    void _updateBlasData();
+    void _updateGeometryData();
 
   public:
     RayTracingPipelineShader();
@@ -143,7 +143,7 @@ class RayTracingPipelineShader
     void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          buildAccelerationStructures();
     UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize);
-    void                                          buildBLAS(Entity* entity);
+    void                                          buildGeometry(Entity* entity);
     void                                          createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries);
     void                                          createUnboundedAttributeBufferSrvDescriptorTable(UINT descriptorTableEntries);
     void                                          createUnboundedIndexBufferSrvDescriptorTable(UINT descriptorTableEntries);

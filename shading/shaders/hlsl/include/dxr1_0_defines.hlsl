@@ -5,4 +5,6 @@
 
 #define COMPILE_DXR_1_0_ONLY
 
+#define RAYTRACING_ENABLED
+
 #endif

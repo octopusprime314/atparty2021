@@ -32,39 +32,43 @@ void RayTracingPipelineShader::init(ComPtr<ID3D12Device> device)
     _materialMapping.reserve(InitInstancesForRayTracing);
     _attributeMapping.reserve(InitInstancesForRayTracing);
 
-    auto commandList = DXLayer::instance()->getComputeCmdList();
-    auto dxLayer     = DXLayer::instance();
-
-    device->QueryInterface(IID_PPV_ARGS(&_dxrDevice));
-
-    // Initialize command list round trip execution to CMD_LIST_NUM
-    // Initialize suballocator blocks to 64 KB and limit compaction transient allocation to 16 MB
-    RTCompaction::Initialize(_dxrDevice.Get(), CMD_LIST_NUM, 65536, 16777216);
-
     constexpr auto transformOffset              = 12; // 3x4
     UINT           instanceTransformSizeInBytes = InitInstancesForRayTracing * transformOffset;
 
     constexpr auto normalTransformOffset    = 9; // 3x3
     UINT instanceNormalTransformSizeInBytes = InitInstancesForRayTracing * normalTransformOffset;
-    _instanceNormalMatrixTransforms.resize(instanceNormalTransformSizeInBytes);
-    
+
+    _instanceNormalMatrixTransforms       .resize(instanceNormalTransformSizeInBytes);
     _instanceWorldToObjectMatrixTransforms.resize(instanceTransformSizeInBytes);
     _instanceTransforms                   .resize(instanceTransformSizeInBytes);
     _prevInstanceTransforms               .resize(instanceTransformSizeInBytes);
-
-    // Create descriptor heap
-    ZeroMemory(&_rtASSrvHeapDesc, sizeof(_rtASSrvHeapDesc));
-    _rtASSrvHeapDesc.NumDescriptors = 1;
-    _rtASSrvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    _rtASSrvHeapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    _dxrDevice->CreateDescriptorHeap(&_rtASSrvHeapDesc,
-                                     IID_PPV_ARGS(_rtASDescriptorHeap.GetAddressOf()));
 
     _instanceIndexToMaterialMappingGPUBuffer  = nullptr;
     _instanceIndexToAttributeMappingGPUBuffer = nullptr;
     _instanceNormalMatrixTransformsGPUBuffer  = nullptr;
     _instanceUniformMaterialMappingGPUBuffer  = nullptr;
 
+
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+    {
+        auto commandList = DXLayer::instance()->getComputeCmdList();
+        auto dxLayer     = DXLayer::instance();
+
+        device->QueryInterface(IID_PPV_ARGS(&_dxrDevice));
+
+        // Initialize command list round trip execution to CMD_LIST_NUM
+        // Initialize suballocator blocks to 64 KB and limit compaction transient allocation to 16 MB
+        RTCompaction::Initialize(_dxrDevice.Get(), CMD_LIST_NUM, 65536, 16777216);
+
+        // Create descriptor heap
+        ZeroMemory(&_rtASSrvHeapDesc, sizeof(_rtASSrvHeapDesc));
+        _rtASSrvHeapDesc.NumDescriptors = 1;
+        _rtASSrvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        _rtASSrvHeapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        _dxrDevice->CreateDescriptorHeap(&_rtASSrvHeapDesc,
+                                         IID_PPV_ARGS(_rtASDescriptorHeap.GetAddressOf()));
+
+    }
     _doneAdding = false;
 }
 
@@ -228,7 +232,7 @@ void RayTracingPipelineShader::updateAndBindNormalMatrixBuffer(std::map<std::str
     }
 }
 
-void RayTracingPipelineShader::buildBLAS(Entity* entity)
+void RayTracingPipelineShader::buildGeometry(Entity* entity)
 {
     auto textureBroker = TextureBroker::instance();
 
@@ -304,20 +308,8 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
                                     ->GetGPUVirtualAddress() + 
                                  vertexOffset;
 
-        int staticGeomIndex = staticGeometryDesc->size();
-        staticGeometryDesc->push_back(D3D12_RAYTRACING_GEOMETRY_DESC());
-
-        (*staticGeometryDesc)[staticGeomIndex].Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-        (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexBuffer = indexGPUAddress;
-        (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexCount = static_cast<UINT>(indexCount);
-
-        (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexFormat = indexFormat;
-
-        (*staticGeometryDesc)[staticGeomIndex].Triangles.Transform3x4 = 0;
-        (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-        (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexCount  = static_cast<UINT>(vertexCount);
-        (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexBuffer.StartAddress = vertexGPUAddress;
-        (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexBuffer.StrideInBytes = sizeof(CompressedAttribute);
+        
+        auto materialTransmittance = entity->getModel()->getMaterial(i).uniformMaterial.transmittance;
 
         Model* bufferModel = entity->getModel();
 
@@ -333,26 +325,15 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
         auto vertexBuffer = _vertexBufferMap[bufferModel].first.back();
 
         indexBuffer->indexBufferFormat = indexFormat;
-        vertexBuffer->count = (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexCount;
-        indexBuffer->count = (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexCount;
-        indexBuffer->resource = (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
+        vertexBuffer->count            = static_cast<UINT>(vertexCount);
+        indexBuffer->count             = static_cast<UINT>(indexCount);
+        indexBuffer->resource          = (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
 
         vertexBuffer->resource = (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
         vertexBuffer->nameId   = entity->getModel()->getName();
 
         vertexBuffer->offset = vertexOffset;
         indexBuffer->offset  = indexOffset;
-
-        auto materialTransmittance = entity->getModel()->getMaterial(i).uniformMaterial.transmittance;
-
-        if (materialTransmittance > 0.0f)
-        {
-            (*staticGeometryDesc)[staticGeomIndex].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
-        }
-        else
-        {
-            (*staticGeometryDesc)[staticGeomIndex].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-        }
 
 
         UINT vertexBufferDescriptorIndex = addSRVToUnboundedAttributeBufferDescriptorTable(
@@ -394,16 +375,45 @@ void RayTracingPipelineShader::buildBLAS(Entity* entity)
             texture = textureBroker->getTexture(textureNames.roughnessMetallic);
             addSRVToUnboundedTextureDescriptorTable(texture);
             _texturesMap[bufferModel].first.push_back(texture);
+        }
 
+        if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+        {
+            int staticGeomIndex = staticGeometryDesc->size();
+            staticGeometryDesc->push_back(D3D12_RAYTRACING_GEOMETRY_DESC());
+
+            if (materialTransmittance > 0.0f)
+            {
+                (*staticGeometryDesc)[staticGeomIndex].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+            }
+            else
+            {
+                (*staticGeometryDesc)[staticGeomIndex].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+            }
+
+            (*staticGeometryDesc)[staticGeomIndex].Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+            (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexBuffer = indexGPUAddress;
+            (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexCount = static_cast<UINT>(indexCount);
+
+            (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexFormat = indexFormat;
+
+            (*staticGeometryDesc)[staticGeomIndex].Triangles.Transform3x4 = 0;
+            (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+            (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexCount  = static_cast<UINT>(vertexCount);
+            (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexBuffer.StartAddress = vertexGPUAddress;
+            (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexBuffer.StrideInBytes = sizeof(CompressedAttribute);
         }
     }
 
-    bottomLevelInputs.Type           = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-    bottomLevelInputs.NumDescs       = static_cast<UINT>(staticGeometryDesc->size());
-    bottomLevelInputs.pGeometryDescs = staticGeometryDesc->data();
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+    {
+        bottomLevelInputs.Type     = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+        bottomLevelInputs.NumDescs = static_cast<UINT>(staticGeometryDesc->size());
+        bottomLevelInputs.pGeometryDescs = staticGeometryDesc->data();
 
-    _bottomLevelBuildDescs.push_back(bottomLevelInputs);
-    _bottomLevelBuildModels.push_back(entity->getModel());
+        _bottomLevelBuildDescs.push_back(bottomLevelInputs);
+        _bottomLevelBuildModels.push_back(entity->getModel());
+    }
 }
 
 void RayTracingPipelineShader::_updateTLASData(int                                          tlasCount,
@@ -582,7 +592,7 @@ void RayTracingPipelineShader::_updateInstanceData()
     }
 }
 
-void RayTracingPipelineShader::_updateBlasData()
+void RayTracingPipelineShader::_updateGeometryData()
 {
     auto    viewEventDistributor = EngineManager::instance()->getViewManager();
     auto    entityList           = EngineManager::instance()->getEntityList();
@@ -602,7 +612,6 @@ void RayTracingPipelineShader::_updateBlasData()
 
     if (RandomInsertAndRemoveEntities)
     {
-
         if (entityList->size() < MaxInstancesForRayTracing)
         {
             int  modelCount = ModelBroker::instance()->getModelNames().size();
@@ -672,7 +681,7 @@ void RayTracingPipelineShader::_updateBlasData()
     }
 
     float cometTailRadius = 20000;
-    bool  newBlasBuilds   = false;
+    bool  newGeometryBuilds   = false;
 
     std::map<Model*, int> modelCountsInEntities;
     for (auto entity = entityList->begin(); entity != entityList->end();)
@@ -693,12 +702,12 @@ void RayTracingPipelineShader::_updateBlasData()
         }
 
         // Does a vertex buffer exist for this blas
-        bool isNewBLAS = _vertexBufferMap.find((*entity)->getModel()) == _vertexBufferMap.end();
+        bool isNewGeometry = _vertexBufferMap.find((*entity)->getModel()) == _vertexBufferMap.end();
 
-        if (isNewBLAS)
+        if (isNewGeometry)
         {
-            buildBLAS((*entity));
-            newBlasBuilds = true;
+            buildGeometry((*entity));
+            newGeometryBuilds = true;
         }
 
         if (RandomInsertAndRemoveEntities)
@@ -736,7 +745,7 @@ void RayTracingPipelineShader::_updateBlasData()
     bool blasRemoved = false;
     for (auto model : modelCountsInEntities)
     {
-        if (model.second == 0 && _blasMap[model.first] != nullptr)
+        if (model.second == 0 && _blasMap.find(model.first) != _blasMap.end())
         {
 
             removeSRVToUnboundedTextureDescriptorTable(_texturesMap[model.first].second);
@@ -755,18 +764,21 @@ void RayTracingPipelineShader::_updateBlasData()
         }
     }
 
-    if (newBlasBuilds)
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
     {
-        RTCompaction::ASBuffers* buffers = RTCompaction::BuildAccelerationStructures(
-            _dxrDevice.Get(), commandList.Get(), _bottomLevelBuildDescs.data(),
-            _bottomLevelBuildDescs.size());
-
-        for (int asBufferIndex = 0; asBufferIndex < _bottomLevelBuildModels.size(); asBufferIndex++)
+        if (newGeometryBuilds)
         {
-            _blasMap[_bottomLevelBuildModels[asBufferIndex]] = &buffers[asBufferIndex];
-        }
+            RTCompaction::ASBuffers* buffers = RTCompaction::BuildAccelerationStructures(
+                _dxrDevice.Get(), commandList.Get(), _bottomLevelBuildDescs.data(),
+                _bottomLevelBuildDescs.size());
 
-        commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
+            for (int asBufferIndex = 0; asBufferIndex < _bottomLevelBuildModels.size(); asBufferIndex++)
+            {
+                _blasMap[_bottomLevelBuildModels[asBufferIndex]] = &buffers[asBufferIndex];
+            }
+
+            commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
+        }
     }
 }
 
@@ -778,8 +790,11 @@ void RayTracingPipelineShader::buildAccelerationStructures()
     auto commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
                                                              : DXLayer::instance()->getCmdList();
 
-    // Increment next frame and let the library internally manage compaction and releasing memory
-    RTCompaction::NextFrame(_dxrDevice.Get(), commandList.Get());
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+    {
+        // Increment next frame and let the library internally manage compaction and releasing memory
+        RTCompaction::NextFrame(_dxrDevice.Get(), commandList.Get());
+    }
 
     constexpr int transformOffset          = sizeof(float) * 12;
     constexpr int normalTransformOffset    = sizeof(float) * 9;
@@ -789,7 +804,7 @@ void RayTracingPipelineShader::buildAccelerationStructures()
     _bottomLevelBuildDescs.clear();
     _bottomLevelBuildModels.clear();
 
-    _updateBlasData();
+    _updateGeometryData();
 
     _updateInstanceData();
 
@@ -802,8 +817,6 @@ void RayTracingPipelineShader::buildAccelerationStructures()
     int instanceDescIndex = 0;
     for (auto entity : *entityList)
     {
-        instanceDescriptionCPUBuffer.push_back(D3D12_RAYTRACING_INSTANCE_DESC());
-
         auto worldSpaceTransform = entity->getWorldSpaceTransform();
         memcpy(&_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
                 worldSpaceTransform.getFlatBuffer(), sizeof(float) * 12);
@@ -820,17 +833,23 @@ void RayTracingPipelineShader::buildAccelerationStructures()
         memcpy(&_instanceNormalMatrixTransforms[offset + 0], normalMatrix.getFlatBuffer() + 0, normalTransformOffset / 3);
         memcpy(&_instanceNormalMatrixTransforms[offset + 3], normalMatrix.getFlatBuffer() + 4, normalTransformOffset / 3);
         memcpy(&_instanceNormalMatrixTransforms[offset + 6], normalMatrix.getFlatBuffer() + 8, normalTransformOffset / 3);
-        memcpy(&instanceDescriptionCPUBuffer[instanceDescIndex].Transform,
-                &_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
-                sizeof(float) * 12);
 
-        // do not overwrite geometry flags for bottom levels, this caused the non opaque and
-        // opaqueness of bottom levels to be random
-        instanceDescriptionCPUBuffer[instanceDescIndex].Flags                               = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-        instanceDescriptionCPUBuffer[instanceDescIndex].InstanceMask                        = 1;
-        instanceDescriptionCPUBuffer[instanceDescIndex].InstanceID                          = 0;
-        instanceDescriptionCPUBuffer[instanceDescIndex].InstanceContributionToHitGroupIndex = 0;
-        instanceDescriptionCPUBuffer[instanceDescIndex].AccelerationStructure               = _blasMap[entity->getModel()]->GetASBuffer();
+
+        if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+        {
+            instanceDescriptionCPUBuffer.push_back(D3D12_RAYTRACING_INSTANCE_DESC());
+            memcpy(&instanceDescriptionCPUBuffer[instanceDescIndex].Transform,
+                    &_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
+                    sizeof(float) * 12);
+
+            // do not overwrite geometry flags for bottom levels, this caused the non opaque and
+            // opaqueness of bottom levels to be random
+            instanceDescriptionCPUBuffer[instanceDescIndex].Flags                               = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceMask                        = 1;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceID                          = 0;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceContributionToHitGroupIndex = 0;
+            instanceDescriptionCPUBuffer[instanceDescIndex].AccelerationStructure               = _blasMap[entity->getModel()]->GetASBuffer();
+        }
 
         instanceDescIndex++;
 
@@ -838,7 +857,10 @@ void RayTracingPipelineShader::buildAccelerationStructures()
         _attributeMapping.push_back(_vertexBufferMap[entity->getModel()].second);
     }
 
-    _updateTLASData(instanceDescIndex, instanceDescriptionCPUBuffer);
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+    {
+        _updateTLASData(instanceDescIndex, instanceDescriptionCPUBuffer);
+    }
 }
 
 void RayTracingPipelineShader::resetUnboundedTextureDescriptorTable()                    { _unboundedTextureSrvIndex = 0; }

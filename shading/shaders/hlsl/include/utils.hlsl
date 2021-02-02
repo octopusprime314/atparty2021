@@ -5,6 +5,8 @@
 
 #include "math.hlsl"
 
+#ifdef RAYTRACING_ENABLED
+
 float2 GetTexCoord(float2 barycentrics, uint instanceIndex, uint primitiveIndex)
 {
     float2 texCoord[3];
@@ -423,6 +425,36 @@ void LaunchReflectionRefractionRayPair(in Payload incidentPayload,
 }
 #endif
 
+#endif
+
+float3 GetVertex(uint instanceIndex, uint vertexId)
+{
+    float3 vertex = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).vertex;
+    return vertex;
+}
+
+float3 GetNormal(uint instanceIndex, uint vertexId)
+{
+    float3 normal =
+        float3(halfFloatToFloat(
+                   vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[0]),
+               halfFloatToFloat(
+                   vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[1]),
+               halfFloatToFloat(
+                   vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[2]));
+
+    return normal;
+}
+
+float2 GetUV(uint instanceIndex, uint vertexId)
+{
+    float2 uv = float2(
+        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).uv[0]),
+        halfFloatToFloat(
+            vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).uv[1]));
+    return uv;
+}
+
 void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
                            out float3                  albedo,
                            out float                   roughness,
@@ -443,6 +475,7 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
 
     float2 uvCoord = float2(0.0, 0.0);
 
+#ifdef RAYTRACING_ENABLED
     if (rayData.uvIsValid == false)
     {
         uvCoord = GetTexCoord(barycentrics, attributeIndex, primitiveIndex);
@@ -451,6 +484,9 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     {
         uvCoord = rayData.uv;
     }
+#else
+    uvCoord = rayData.uv;
+#endif
 
     // FUCK THIS MATRIX DECOMPOSITION BULLSHIT!!!!
     float4x3 cachedTransform        = rayData.objectToWorld;
@@ -503,6 +539,8 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     }
 
     normal = float3(0.0, 0.0, 0.0);
+
+#ifdef RAYTRACING_ENABLED
     if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
     {
         normal = -GetNormalCoord(barycentrics, attributeIndex, primitiveIndex);
@@ -531,6 +569,11 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
             normal = -normalize(mul(normalMap, tbnMatNormalTransform));
         }
     }
+#else
+
+    // NEED TO BE IMPLEMENTED BY FETCHING UV AND NORMALS USING INDEX BUFFER
+
+#endif
 
     transmittance = uniformMaterials[attributeIndex].transmittance;
 }

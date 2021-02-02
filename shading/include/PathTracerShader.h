@@ -27,16 +27,6 @@
 
 class HLSLShader;
 
-struct PointLightList
-{
-    // Constant max of 1024 lights in shader
-    static const int MAX_LIGHTS = 1024;
-    float    lightPosArray   [4 * MAX_LIGHTS];
-    float    lightColorsArray[4 * MAX_LIGHTS];
-    float    lightRangesArray[MAX_LIGHTS];
-    uint32_t lightCount;
-};
-
 class PathTracerShader : public ShaderBase
 {
     ComPtr<ID3D12DescriptorHeap> _descriptorHeap;
@@ -81,8 +71,4 @@ class PathTracerShader : public ShaderBase
     void           runShader(std::vector<Light*>&  lights,
                              ViewEventDistributor* viewEventDistributor);
     RenderTexture* getCompositedFrame();
-    void           processLights(std::vector<Light*>&  lights,
-                                 ViewEventDistributor* viewEventDistributor,
-                                 PointLightList&       pointLightList,
-                                 bool                  addLights);
 };

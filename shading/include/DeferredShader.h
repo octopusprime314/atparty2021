@@ -27,18 +27,18 @@
 #include "MRTFrameBuffer.h"
 #include "ShaderBase.h"
 #include "ViewEventDistributor.h"
-#include "PathTracerShader.h"
+
+class PointLightList;
 
 class DeferredShader : public ShaderBase
 {
-
     AssetTexture* _skyBoxDayTexture;
     AssetTexture* _skyBoxNightTexture;
 
   public:
     DeferredShader(std::string shaderName);
     virtual ~DeferredShader();
-    void runShader(PointLightList&       pointLightList,
+    void runShader(PointLightList*       pointLightList,
                    ViewEventDistributor* viewEventDistributor,
                    MRTFrameBuffer&       mrtFBO);
 };

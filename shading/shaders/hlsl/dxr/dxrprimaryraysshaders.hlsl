@@ -1,4 +1,5 @@
 #include "../include/structs.hlsl"
+#include "../include/dxr1_0_defines.hlsl"
 
 RaytracingAccelerationStructure       rtAS                             : register(t0, space0);
 Texture2D                             diffuseTexture[]                 : register(t1, space1);

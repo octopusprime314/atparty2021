@@ -49,6 +49,16 @@ enum class GraphicsLayer
     DXR_1_1_PATHTRACER
 };
 
+struct PointLightList
+{
+    // Constant max of 1024 lights in shader
+    static const int MAX_LIGHTS = 1024;
+    float            lightPosArray[4 * MAX_LIGHTS];
+    float            lightColorsArray[4 * MAX_LIGHTS];
+    float            lightRangesArray[MAX_LIGHTS];
+    uint32_t         lightCount;
+};
+
 class EngineManager
 {
 
@@ -72,7 +82,6 @@ class EngineManager
     Bloom*                       _bloom;
     SSCompute*                   _add;
     StaticShader*                _singleDrawRaster;
-    RenderTexture*               _singleDrawRasterRenderTarget;
 
     MRTFrameBuffer*              _gBuffers;
     DeferredShader*              _deferredShader;
@@ -105,6 +114,10 @@ class EngineManager
 
     // Light Management
     Light* addLight(const SceneLight& sceneLight);
+    void processLights(std::vector<Light*>&  lights,
+                       ViewEventDistributor* viewEventDistributor,
+                       PointLightList&       pointLightList,
+                       bool                  addLights);
     void updateLightState(const std::string& name, const Vector4& position, const Vector4& rotation,
                           const Vector4& scale, const Vector4& color);
     std::optional<SceneLight> getSceneLight(const std::string& lightName);

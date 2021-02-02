@@ -24,32 +24,7 @@ cbuffer globalData : register(b1)
     uint     texturesPerMaterial;
 }
 
-
-#include "../include/math.hlsl"
-
-float3 GetVertex(uint instanceIndex, uint vertexId)
-{
-    float3 vertex = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).vertex;
-    return vertex;
-}
-
-float3 GetNormal(uint instanceIndex, uint vertexId)
-{
-    float3 normal = float3(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[1]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[2]));
-
-    return normal;
-}
-
-float2 GetUV(uint instanceIndex, uint vertexId)
-{
-    float2 uv = float2(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).uv[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).uv[1]));
-    return uv;
-}
+#include "../include/utils.hlsl"
 
 void main(    uint   id          : SV_VERTEXID,
           out float4 outPosition : SV_POSITION,

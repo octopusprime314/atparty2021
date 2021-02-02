@@ -1,11 +1,6 @@
 #include "math.hlsl"
 
-#ifdef COMPILE_DXR_1_1_ONLY
-#include "randomRays.hlsl"
-#include "utils.hlsl"
-#endif
-
-#ifdef COMPILE_DXR_1_0_ONLY
+#ifdef RAYTRACING_ENABLED
 #include "randomRays.hlsl"
 #include "utils.hlsl"
 #endif
@@ -129,7 +124,7 @@ float3 GetBRDFPointLight(float3 albedo,
     color = color / (color + float3(1.0f, 1.0f, 1.0f));
     color = pow(color, colorScale);
 
-#ifdef COMPILE_DXR_1_1_ONLY
+#ifdef RAYTRACING_ENABLED
     // pointLightOcclusionUAV[threadId.xy].x = noOcclusion ? 1.0 : 0.0;
     //pointLightOcclusionUAV[threadId.xy].xyz = color;
     pointLightOcclusionUAV[threadId.xy].x = (1.0f - totalOcclusion);

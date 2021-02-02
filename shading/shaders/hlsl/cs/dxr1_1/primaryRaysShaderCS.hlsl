@@ -1,4 +1,5 @@
-#include "../include/structs.hlsl"
+#include "../../include/structs.hlsl"
+#include "../../include/dxr1_1_defines.hlsl"
 
 RaytracingAccelerationStructure       rtAS                             : register(t0, space0);
 Texture2D                             diffuseTexture[]                 : register(t1, space1);
@@ -29,7 +30,7 @@ cbuffer globalData : register(b0)
     uint     texturesPerMaterial;
 }
 
-#include "../include/utils.hlsl"
+#include "../../include/utils.hlsl"
 
 static float reflectionIndex = 0.5;
 static float refractionIndex = 1.0 - reflectionIndex;

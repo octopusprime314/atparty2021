@@ -31,7 +31,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     primaryRaysFormats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
 
     _primaryRaysShader = new HLSLShader(
-        SHADERS_LOCATION + "hlsl/cs/primaryRaysShaderCS", "", primaryRaysFormats);
+        DXR1_1_SHADERS_LOCATION + "primaryRaysShaderCS", "", primaryRaysFormats);
 
     _albedoPrimaryRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
@@ -66,7 +66,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
 
     _sunLightRaysShader =
-        new HLSLShader(SHADERS_LOCATION + "hlsl/cs/sunLightRaysShaderCS", "", sunLightRaysFormats);
+        new HLSLShader(DXR1_1_SHADERS_LOCATION + "sunLightRaysShaderCS", "", sunLightRaysFormats);
 
     _sunLightRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
@@ -80,7 +80,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     reflectionRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
     reflectionRaysFormats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
 
-    _reflectionRaysShader = new HLSLShader(SHADERS_LOCATION + "hlsl/cs/reflectionRaysShaderCS", "",
+    _reflectionRaysShader = new HLSLShader(DXR1_1_SHADERS_LOCATION + "reflectionRaysShaderCS", "",
                                            reflectionRaysFormats);
 
     _reflectionRays =
@@ -207,97 +207,6 @@ RenderTexture* PathTracerShader::getCompositedFrame()
     return _compositor;
 }
 
-void PathTracerShader::processLights(std::vector<Light*>&  lights,
-                                     ViewEventDistributor* viewEventDistributor,
-                                     PointLightList&       pointLightList,
-                                     bool                  addLights)
-{
-    // Use map to sort the lights based on distance from the viewer
-    std::map<float, int> lightsSorted;
-    // Get point light positions
-    unsigned int pointLights = 0;
-
-    Vector4 cameraPos  = viewEventDistributor->getCameraPos();
-    cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
-
-    static unsigned int previousTime = 0;
-    static constexpr unsigned int lightGenInternalMs = 250;
-
-    auto milliSeconds = MasterClock::instance()->getGameTime();
-    if (((milliSeconds - previousTime) > lightGenInternalMs) && addLights)
-    {
-        // random floats between -1.0 - 1.0
-        // Will be used to obtain a seed for the random number engine
-        std::random_device rd;
-        // Standard mersenne_twister_engine seeded with rd()
-        std::mt19937                     generator(rd());
-        std::uniform_real_distribution<> randomFloats(-1.0, 1.0);
-
-        float lightIntensityRange = 10.0f;
-        //float randomLightIntensity = lightIntensityRange;
-        float randomLightIntensity = (((randomFloats(generator) + 1.0) / 2.0) * lightIntensityRange) + 300000.0;
-
-        Vector4 randomColor(static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
-                            static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
-                            static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0));
-
-        //Vector4 randomColor(1.0, 1.0, 1.0);
-        //Vector4 randomColor(64.0 / 255.0, 156.0 / 255.0, 255.0 / 255.0);
-
-        SceneLight light;
-        light.name      = "light trail" + std::to_string(lights.size());
-        light.lightType = LightType::POINT;
-        light.rotation  = Vector4(0.0, 0.0, 0.0, 1.0);
-        light.scale     = Vector4(randomLightIntensity, randomLightIntensity, randomLightIntensity);
-        light.color     = randomColor;
-        light.position  = -cameraPos;
-        light.lockedIdx = -1;
-        EngineManager::instance()->addLight(light);
-
-        previousTime = MasterClock::instance()->getGameTime();
-    }
-
-    int pointLightOffset = 0;
-    for (auto& light : lights)
-    {
-        if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
-        {
-            Vector4 pointLightPos     = light->getPosition();
-            Vector4 pointLightVector  = cameraPos + pointLightPos;
-            float   distanceFromLight = pointLightVector.getMagnitude();
-
-            lightsSorted.insert(std::pair<float, int>(distanceFromLight, pointLightOffset));
-            pointLights++;
-        }
-        pointLightOffset++;
-    }
-
-    int       lightPosIndex    = 0;
-    int       lightColorIndex  = 0;
-    int       lightRangeIndex  = 0;
-    int       totalLights      = 0;
-    for (auto& lightIndex : lightsSorted)
-    {
-        auto light = lights[lightIndex.second];
-        // If point light then add to uniforms
-        if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
-        {
-            // Point lights need to remain stationary so move lights with camera space changes
-            auto   pos       = light->getPosition();
-            float* posBuff   = pos.getFlatBuffer();
-            float* colorBuff = light->getColor().getFlatBuffer();
-            for (int i = 0; i < 4; i++)
-            {
-                pointLightList.lightPosArray[lightPosIndex++] = posBuff[i];
-                pointLightList.lightColorsArray[lightColorIndex++] = colorBuff[i];
-            }
-            pointLightList.lightRangesArray[lightRangeIndex++] = light->getScale().getFlatBuffer()[0];
-            totalLights++;
-        }
-    }
-    pointLightList.lightCount = pointLights;
-}
-
 void PathTracerShader::runShader(std::vector<Light*>&  lights,
                                  ViewEventDistributor* viewEventDistributor)
 {
@@ -413,7 +322,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     // Process point lights
     PointLightList pointLightList;
-    processLights(lights, viewEventDistributor, pointLightList, RandomInsertAndRemoveEntities);
+    EngineManager::instance()->processLights(lights, viewEventDistributor, pointLightList, RandomInsertAndRemoveEntities);
 
     // Process directional light
     Vector4 sunLightColor  = Vector4(1.0, 1.0, 1.0);

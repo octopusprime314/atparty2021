@@ -145,8 +145,11 @@ void ShaderBroker::_gatherShaderNames()
         }
     }
 
-    // Always compile this collection of path tracer shaders
-    _shaders["../SHADING/SHADERS/HLSL/CS/PATHTRACERSHADERCS"] = new PathTracerShader("PATHTRACERSHADER");
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+    {
+        // Always compile this collection of path tracer shaders
+        _shaders["../../SHADING/SHADERS/HLSL/CS/PATHTRACERSHADERCS"] = new PathTracerShader("PATHTRACERSHADER");
+    }
 
     _finishedCompiling = true;
 }

@@ -16,17 +16,17 @@ DeferredShader::DeferredShader(std::string shaderName)
 
 DeferredShader::~DeferredShader() {}
 
-void DeferredShader::runShader(PointLightList&       pointLightList,
+void DeferredShader::runShader(PointLightList*       pointLightList,
                                ViewEventDistributor* viewEventDistributor,
                                MRTFrameBuffer&       gBuffers)
 {
     _shader->bind();
     _shader->bindAttributes(nullptr, false);
 
-    _shader->updateData("numPointLights", &pointLightList.lightCount, false);
-    _shader->updateData("pointLightColors", pointLightList.lightColorsArray, false);
-    _shader->updateData("pointLightRanges", pointLightList.lightRangesArray, false);
-    _shader->updateData("pointLightPositions", pointLightList.lightPosArray, false);
+    _shader->updateData("numPointLights", &pointLightList->lightCount, false);
+    _shader->updateData("pointLightColors", pointLightList->lightColorsArray, false);
+    _shader->updateData("pointLightRanges", pointLightList->lightRangesArray, false);
+    _shader->updateData("pointLightPositions", pointLightList->lightPosArray, false);
 
     // Change of basis from camera view position back to world position
     Matrix viewToModelSpace      = viewEventDistributor->getView().inverse();

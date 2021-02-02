@@ -68,18 +68,18 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
     
     _rayTracingPipeline->init(DXLayer::instance()->getDevice());
 
-    _pathTracerShader = static_cast<PathTracerShader*>(ShaderBroker::instance()->getShader("pathTracerShader"));
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+    {
+        _pathTracerShader = static_cast<PathTracerShader*>(ShaderBroker::instance()->getShader("pathTracerShader"));
+    }
+
     _bloom            = new Bloom();
     _add              = new SSCompute("add",
                                        IOEventDistributor::screenPixelWidth,
                                        IOEventDistributor::screenPixelHeight,
                                        TextureFormat::RGBA_UNSIGNED_BYTE);
 
-    _singleDrawRaster             = static_cast<StaticShader*>(ShaderBroker::instance()->getShader("staticShader"));
-    _singleDrawRasterRenderTarget = new RenderTexture(IOEventDistributor::screenPixelWidth,
-                                                      IOEventDistributor::screenPixelHeight,
-                                                      TextureFormat::RGBA_UNSIGNED_BYTE,
-                                                      "SingleDrawRaster");
+    _singleDrawRaster = static_cast<StaticShader*>(ShaderBroker::instance()->getShader("staticShader"));
 
     _renderTexture = new RenderTexture(IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_UNSIGNED_BYTE);
     _depthTexture = new RenderTexture(IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight, TextureFormat::DEPTH32_FLOAT);
@@ -146,6 +146,98 @@ std::optional<SceneLight> EngineManager::getSceneLight(const std::string& lightN
     return std::optional<SceneLight>();
 }
 
+void EngineManager::processLights(std::vector<Light*>&  lights,
+                                  ViewEventDistributor* viewEventDistributor,
+                                  PointLightList&       pointLightList,
+                                  bool                  addLights)
+{
+    // Use map to sort the lights based on distance from the viewer
+    std::map<float, int> lightsSorted;
+    // Get point light positions
+    unsigned int pointLights = 0;
+
+    Vector4 cameraPos  = viewEventDistributor->getCameraPos();
+    cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
+
+    static unsigned int previousTime = 0;
+    static constexpr unsigned int lightGenInternalMs = 250;
+
+    auto milliSeconds = MasterClock::instance()->getGameTime();
+    if (((milliSeconds - previousTime) > lightGenInternalMs) && addLights)
+    {
+        // random floats between -1.0 - 1.0
+        // Will be used to obtain a seed for the random number engine
+        std::random_device rd;
+        // Standard mersenne_twister_engine seeded with rd()
+        std::mt19937                     generator(rd());
+        std::uniform_real_distribution<> randomFloats(-1.0, 1.0);
+
+        float lightIntensityRange = 10.0f;
+        //float randomLightIntensity = lightIntensityRange;
+        float randomLightIntensity = (((randomFloats(generator) + 1.0) / 2.0) * lightIntensityRange) + 300000.0;
+
+        Vector4 randomColor(static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
+                            static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0),
+                            static_cast<int>(((randomFloats(generator) + 1.0) / 2.0) * 2.0));
+
+        //Vector4 randomColor(1.0, 1.0, 1.0);
+        //Vector4 randomColor(64.0 / 255.0, 156.0 / 255.0, 255.0 / 255.0);
+
+        SceneLight light;
+        light.name      = "light trail" + std::to_string(lights.size());
+        light.lightType = LightType::POINT;
+        light.rotation  = Vector4(0.0, 0.0, 0.0, 1.0);
+        light.scale     = Vector4(randomLightIntensity, randomLightIntensity, randomLightIntensity);
+        light.color     = randomColor;
+        light.position  = -cameraPos;
+        light.lockedIdx = -1;
+        EngineManager::instance()->addLight(light);
+
+        previousTime = MasterClock::instance()->getGameTime();
+    }
+
+    int pointLightOffset = 0;
+    for (auto& light : lights)
+    {
+        if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
+        {
+            Vector4 pointLightPos     = light->getPosition();
+            Vector4 pointLightVector  = cameraPos + pointLightPos;
+            float   distanceFromLight = pointLightVector.getMagnitude();
+
+            lightsSorted.insert(std::pair<float, int>(distanceFromLight, pointLightOffset));
+            pointLights++;
+        }
+        pointLightOffset++;
+    }
+
+    int       lightPosIndex    = 0;
+    int       lightColorIndex  = 0;
+    int       lightRangeIndex  = 0;
+    int       totalLights      = 0;
+    for (auto& lightIndex : lightsSorted)
+    {
+        auto light = lights[lightIndex.second];
+        // If point light then add to uniforms
+        if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
+        {
+            // Point lights need to remain stationary so move lights with camera space changes
+            auto   pos       = light->getPosition();
+            float* posBuff   = pos.getFlatBuffer();
+            float* colorBuff = light->getColor().getFlatBuffer();
+            for (int i = 0; i < 4; i++)
+            {
+                pointLightList.lightPosArray[lightPosIndex++] = posBuff[i];
+                pointLightList.lightColorsArray[lightColorIndex++] = colorBuff[i];
+            }
+            pointLightList.lightRangesArray[lightRangeIndex++] = light->getScale().getFlatBuffer()[0];
+            totalLights++;
+        }
+    }
+    pointLightList.lightCount = pointLights;
+}
+
+
 // Only initializes the static pointer once
 // All function parameters are optional so if instance() is called then assume engine manager is
 // instantiated
@@ -188,15 +280,15 @@ void EngineManager::_postDraw()
     {
         HLSLShader::setOM(_gBuffers->getTextures(), IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight);
 
-        _pathTracerShader->runShader(lightList, _viewManager);
+        RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+        rtPipeline->buildAccelerationStructures();
+
         _singleDrawRaster->startEntity();
 
         for (auto entity : _scene->entityList)
         {
             _singleDrawRaster->runShader(entity);
         }
-
-        finalRender = _singleDrawRasterRenderTarget;
 
         HLSLShader::releaseOM(_gBuffers->getTextures());
 
@@ -207,9 +299,9 @@ void EngineManager::_postDraw()
 
         // Process point lights
         PointLightList pointLightList;
-        _pathTracerShader->processLights(lightList, _viewManager, pointLightList, RandomInsertAndRemoveEntities);
+        processLights(lightList, _viewManager, pointLightList, RandomInsertAndRemoveEntities);
 
-        _deferredShader->runShader(pointLightList, _viewManager, *_gBuffers);
+        _deferredShader->runShader(&pointLightList, _viewManager, *_gBuffers);
 
         HLSLShader::releaseOM(rts);
 

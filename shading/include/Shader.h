@@ -44,6 +44,7 @@ struct ImageData
 };
 
 const std::string SHADERS_LOCATION = "../shading/shaders/";
+const std::string DXR1_1_SHADERS_LOCATION = "../shading/shaders/hlsl/cs/dxr1_1/";
 
 // Simple shader loading class that should be derived from to create more complex shaders
 class Shader
