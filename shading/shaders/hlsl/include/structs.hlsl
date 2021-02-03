@@ -5,10 +5,10 @@
 
 struct CompressedAttribute
 {
-    float3   vertex;
-    uint16_t normal[3];
-    uint16_t uv[2];
-    uint16_t padding;
+    float3    vertex;
+    uint      normalXY;
+    uint      normalZuvX;
+    uint      uvYUnused;
 };
 
 #define ColorValidBit     1

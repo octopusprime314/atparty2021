@@ -17,16 +17,16 @@ float2 GetTexCoord(float2 barycentrics, uint instanceIndex, uint primitiveIndex)
               indexBuffer[NonUniformResourceIndex(instanceIndex)].Load((primitiveIndex * 3) + 2));
 
     texCoord[0] = float2(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).uv[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).uv[1]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).uvYUnused & 0xFFFF)));
 
     texCoord[1] = float2(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).uv[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).uv[1]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).uvYUnused & 0xFFFF)));
 
     texCoord[2] = float2(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).uv[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).uv[1]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).uvYUnused & 0xFFFF)));
 
     float2 interpolatedUV = (texCoord[0] + barycentrics.x * (texCoord[1] - texCoord[0]) +
                              barycentrics.y * (texCoord[2] - texCoord[0]));
@@ -44,19 +44,19 @@ float3 GetNormalCoord(float2 barycentrics, uint instanceIndex, uint primitiveInd
               indexBuffer[NonUniformResourceIndex(instanceIndex)].Load((primitiveIndex * 3) + 2));
 
     normal[0] = float3(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normal[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normal[1]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normal[2]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalZuvX & 0xFFFF)));
 
     normal[1] = float3(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normal[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normal[1]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normal[2]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalZuvX & 0xFFFF)));
 
     normal[2] = float3(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normal[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normal[1]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normal[2]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalZuvX & 0xFFFF)));
 
     return normalize(normal[0] + barycentrics.x * (normal[1] - normal[0]) +
                      barycentrics.y * (normal[2] - normal[0]));
@@ -98,33 +98,33 @@ float3x3 GetTBN(float2 barycentrics, uint instanceIndex, uint primitiveIndex)
     float2 texCoord[3];
 
     texCoord[0] = float2(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).uv[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).uv[1]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).uvYUnused & 0xFFFF)));
 
     texCoord[1] = float2(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).uv[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).uv[1]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).uvYUnused & 0xFFFF)));
 
     texCoord[2] = float2(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).uv[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).uv[1]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).uvYUnused & 0xFFFF)));
 
     float3 normal[3];
 
     normal[0] = float3(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normal[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normal[1]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normal[2]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalZuvX & 0xFFFF)));
 
     normal[1] = float3(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normal[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normal[1]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normal[2]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalZuvX & 0xFFFF)));
 
     normal[2] = float3(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normal[0]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normal[1]),
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normal[2]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalZuvX & 0xFFFF)));
 
     float3 surfaceNormal = normal[0] + barycentrics.x * (normal[1] - normal[0]) +
                            barycentrics.y * (normal[2] - normal[0]);
@@ -436,12 +436,12 @@ float3 GetVertex(uint instanceIndex, uint vertexId)
 float3 GetNormal(uint instanceIndex, uint vertexId)
 {
     float3 normal =
-        float3(halfFloatToFloat(
-                   vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[0]),
-               halfFloatToFloat(
-                   vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[1]),
-               halfFloatToFloat(
-                   vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normal[2]));
+       float3(halfFloatToFloat(
+                  min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normalXY & 0xFFFF)),
+              halfFloatToFloat(
+                  min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normalXY >> 16)),
+              halfFloatToFloat(
+                  min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normalZuvX & 0xFFFF)));
 
     return normal;
 }
@@ -449,9 +449,8 @@ float3 GetNormal(uint instanceIndex, uint vertexId)
 float2 GetUV(uint instanceIndex, uint vertexId)
 {
     float2 uv = float2(
-        halfFloatToFloat(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).uv[0]),
-        halfFloatToFloat(
-            vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).uv[1]));
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).uvYUnused & 0xFFFF)));
     return uv;
 }
 

@@ -147,7 +147,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     _hemisphereSamplesGPUBuffer->count    = numSamples;
 
     UINT descriptorVB = rtPipeline->createBufferSRV(_hemisphereSamplesGPUBuffer, numSamples,
-                                                    static_cast<UINT>(sizeof(float) * 4));
+                                    static_cast<UINT>(sizeof(float) * 4), DXGI_FORMAT_UNKNOWN);
 
     BYTE* mappedData = nullptr;
     _hemisphereSamplesUpload->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));

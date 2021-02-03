@@ -556,7 +556,7 @@ void RayTracingPipelineShader::_updateInstanceData()
             _instanceIndexToMaterialMappingUpload[_instanceMappingIndex];
         _instanceIndexToMaterialMappingGPUBuffer->count = newInstanceSize;
 
-        createBufferSRV(_instanceIndexToMaterialMappingGPUBuffer, newInstanceSize, sizeof(UINT));
+        createBufferSRV(_instanceIndexToMaterialMappingGPUBuffer, newInstanceSize, 0, DXGI_FORMAT_R32_UINT);
 
         allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
                              sizeof(UINT) * newInstanceSize,
@@ -567,7 +567,7 @@ void RayTracingPipelineShader::_updateInstanceData()
             _instanceIndexToAttributeMappingUpload[_instanceMappingIndex];
         _instanceIndexToAttributeMappingGPUBuffer->count = newInstanceSize;
 
-        createBufferSRV(_instanceIndexToAttributeMappingGPUBuffer, newInstanceSize, sizeof(UINT));
+        createBufferSRV(_instanceIndexToAttributeMappingGPUBuffer, newInstanceSize, 0, DXGI_FORMAT_R32_UINT);
 
         allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
                              sizeof(UniformMaterial) * newInstanceSize,
@@ -577,7 +577,7 @@ void RayTracingPipelineShader::_updateInstanceData()
         _instanceUniformMaterialMappingGPUBuffer->resource = _instanceUniformMaterialMappingUpload[_instanceMappingIndex];
         _instanceUniformMaterialMappingGPUBuffer->count = newInstanceSize;
 
-        createBufferSRV(_instanceUniformMaterialMappingGPUBuffer, newInstanceSize, sizeof(UniformMaterial));
+        createBufferSRV(_instanceUniformMaterialMappingGPUBuffer, newInstanceSize, sizeof(UniformMaterial), DXGI_FORMAT_UNKNOWN);
 
         allocateUploadBuffer(
             DXLayer::instance()->getDevice().Get(), nullptr, sizeof(float) * 9 * newInstanceSize,
@@ -587,8 +587,7 @@ void RayTracingPipelineShader::_updateInstanceData()
             _instanceNormalMatrixTransformsUpload[_instanceMappingIndex];
         _instanceNormalMatrixTransformsGPUBuffer->count = newInstanceSize;
 
-        createBufferSRV(_instanceNormalMatrixTransformsGPUBuffer, 9 * newInstanceSize,
-                        sizeof(UINT));
+        createBufferSRV(_instanceNormalMatrixTransformsGPUBuffer, 9 * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
     }
 }
 
@@ -1015,6 +1014,7 @@ UINT RayTracingPipelineShader::addSRVToUnboundedAttributeBufferDescriptorTable(D
     srvDesc.Buffer.NumElements         = vertexCount;
     srvDesc.Buffer.StructureByteStride = sizeof(CompressedAttribute);
     srvDesc.Buffer.Flags               = D3D12_BUFFER_SRV_FLAG_NONE;
+    srvDesc.Buffer.FirstElement        = 0;
 
     device->CreateShaderResourceView(vertexBuffer->resource.Get(), &srvDesc, hDescriptor);
 
@@ -1163,7 +1163,7 @@ UINT RayTracingPipelineShader::_allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* 
 }
 // Create SRV for a buffer.
 UINT RayTracingPipelineShader::createBufferSRV(D3DBuffer* buffer, UINT numElements,
-                                               UINT elementSize)
+                                               UINT elementSize, DXGI_FORMAT format)
 {
 
     auto                            device  = DXLayer::instance()->getDevice();
@@ -1174,8 +1174,8 @@ UINT RayTracingPipelineShader::createBufferSRV(D3DBuffer* buffer, UINT numElemen
 
     if (elementSize == 0)
     {
-        srvDesc.Format                     = DXGI_FORMAT_R32_TYPELESS;
-        srvDesc.Buffer.Flags               = D3D12_BUFFER_SRV_FLAG_RAW;
+        srvDesc.Format                     = format;
+        srvDesc.Buffer.Flags               = D3D12_BUFFER_SRV_FLAG_NONE;
         srvDesc.Buffer.StructureByteStride = 0;
     }
     else

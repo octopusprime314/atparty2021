@@ -190,29 +190,29 @@ int IntersectRayTriangle(float3 rayMin, float3 rayMax, float3 point0, float3 poi
 }
 
 // Convert the specified half float number to a single precision float number.
-float halfFloatToFloat(uint16_t halfFloat)
+float halfFloatToFloat(min16uint halfFloat)
 {
 
     /// A static constant for a half float with a value of zero.
-    const uint16_t ZERO = 0x0000;
+    const min16uint ZERO = 0x0000;
 
     /// A static constant for a half float with a value of not-a-number.
-    const uint16_t NOT_A_NUMBER = 0xFFFF;
+    const min16uint NOT_A_NUMBER = 0xFFFF;
 
     /// A static constant for a half float with a value of positive infinity.
-    const uint16_t POSITIVE_INFINITY = 0x7C00;
+    const min16uint POSITIVE_INFINITY = 0x7C00;
 
     /// A static constant for a half float with a value of negative infinity.
-    const uint16_t NEGATIVE_INFINITY = 0xFC00;
+    const min16uint NEGATIVE_INFINITY = 0xFC00;
 
     /// A mask which isolates the sign of a half float number.
-    const uint16_t HALF_FLOAT_SIGN_MASK = 0x8000;
+    const min16uint HALF_FLOAT_SIGN_MASK = 0x8000;
 
     /// A mask which isolates the exponent of a half float number.
-    const uint16_t HALF_FLOAT_EXPONENT_MASK = 0x7C00;
+    const min16uint HALF_FLOAT_EXPONENT_MASK = 0x7C00;
 
     /// A mask which isolates the significand of a half float number.
-    const uint16_t HALF_FLOAT_SIGNIFICAND_MASK = 0x03FF;
+    const min16uint HALF_FLOAT_SIGNIFICAND_MASK = 0x03FF;
 
     /// A mask which isolates the sign of a single precision float number.
     const uint32_t FLOAT_SIGN_MASK = 0x80000000;

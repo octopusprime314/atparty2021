@@ -142,7 +142,7 @@ class RayTracingPipelineShader
     void                                          updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          buildAccelerationStructures();
-    UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize);
+    UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize, DXGI_FORMAT format);
     void                                          buildGeometry(Entity* entity);
     void                                          createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries);
     void                                          createUnboundedAttributeBufferSrvDescriptorTable(UINT descriptorTableEntries);

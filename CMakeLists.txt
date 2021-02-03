@@ -129,13 +129,12 @@ if (MSVC)
     add_definitions("/MP /std:c++17")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
     # Disable individual compilation of hlsl include files
-    set_source_files_properties(${HLSL_INCLUDE_SHADER_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
-    # VS_SHADER_TYPE means Visual Studio Shader Type and NOT Vertex Shader Shader Type LOL
-    set_source_files_properties(${HLSL_VS_SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename)_compiled.h\"  -Od /Zi -WX -Qembed_debug -enable-16bit-types /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Vertex  VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
-    set_source_files_properties(${HLSL_PS_SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename)_compiled.h\"  -Od /Zi -WX -Qembed_debug -enable-16bit-types /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Pixel   VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
-    set_source_files_properties(${HLSL_CS_SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename)_compiled.h\"  -Od /Zi -WX -Qembed_debug -enable-16bit-types /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
-    set_source_files_properties(${HLSL_DXR_SHADER_FILES} PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename).cso\" /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename)_compiled.h\" -Od /Zi -WX -Qembed_debug -enable-16bit-types /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Library VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT "")
-    set_source_files_properties(${HLSL_CS_DXR1_1SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename)_compiled.h\"  -Od /Zi -WX -Qembed_debug -enable-16bit-types /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
+    set_source_files_properties(${HLSL_INCLUDE_SHADER_FILES}   PROPERTIES VS_TOOL_OVERRIDE "None")
+    set_source_files_properties(${HLSL_VS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Vertex  VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
+    set_source_files_properties(${HLSL_PS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Pixel   VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
+    set_source_files_properties(${HLSL_CS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
+    set_source_files_properties(${HLSL_DXR_SHADER_FILES}       PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename).cso\"        /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename)_compiled.h\"        -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Library VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT "")
+    set_source_files_properties(${HLSL_CS_DXR1_1SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename)_compiled.h\"  -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
 endif()
 
 target_link_libraries(compaction-lib-demo           legacy_stdio_definitions.lib)
@@ -145,8 +144,8 @@ target_link_libraries(compaction-lib-demo optimized ${CMAKE_SOURCE_DIR}/libs/glt
 
 #pre fetches assets during cmake -G configuration
 FetchContent_Populate(assets
-                      URL        https://www.dropbox.com/s/pm2vsf3bm97hhpm/compaction-demo-assets.zip?dl=0
-                      URL_HASH   MD5=9c275003fb5b74f6ea10084cf8eac0b8
+                      URL        https://www.dropbox.com/s/eqms9g5o39c4oxz/assets.zip?dl=0
+                      URL_HASH   MD5=6c8c21c8fb8f4924518da1ea50074c4c
                       SOURCE_DIR assets)
 
 #pre fetches lib dependencies during cmake -G configuration
