@@ -316,7 +316,12 @@ namespace RTCompaction
     void RemoveAccelerationStructures(ASBuffers**    buffers,
                                       const uint32_t removeCount)
     {
-        _asBufferReleaseQueue.push(*buffers);
+        for (uint32_t removeIndex = 0; removeIndex < removeCount; removeIndex++)
+        {
+            // Tag initial frame index request for deletion
+            buffers[removeIndex]->frameIndexRequest = _commandListIndex;
+            _asBufferReleaseQueue.push(buffers[removeIndex]);
+        }
     }
 
     void ReleaseAccelerationStructures(ASBuffers** buffers, const uint32_t removeCount)

@@ -206,8 +206,8 @@ void DXRStateObject::_buildShaderTables(const wchar_t *            raygenImport,
     };
 
     // Get shader identifiers.
-    UINT                                         shaderIdentifierSize;
-    ComPtr<ID3D12StateObjectPropertiesPrototype> stateObjectProperties;
+    UINT                                shaderIdentifierSize;
+    ComPtr<ID3D12StateObjectProperties> stateObjectProperties;
 
     stateObject.As(&stateObjectProperties);
     GetShaderIdentifiers(stateObjectProperties.Get());

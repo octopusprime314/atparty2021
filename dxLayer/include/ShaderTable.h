@@ -1,6 +1,5 @@
 #pragma once
-#include "d3d12.h"
-#include "d3d12_1.h"
+#include <d3d12.h>
 #include "d3dx12.h"
 #include <sstream>
 #include <stdint.h>

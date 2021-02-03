@@ -266,6 +266,22 @@ void AssetTexture::_load(const std::string& path)
 {
     RGBA* image;
 
+    int len;
+    int slength  = (int)path.length() + 1;
+    len          = MultiByteToWideChar(CP_ACP, 0, path.c_str(), slength, 0, 0);
+    wchar_t* buf = new wchar_t[len];
+    MultiByteToWideChar(CP_ACP, 0, path.c_str(), slength, buf, len);
+    std::wstring r(buf);
+    delete[] buf;
+
+    WIN32_FIND_DATAW data;
+    HANDLE           h = FindFirstFileW(r.c_str(), &data);
+
+    FindClose(h);
+
+    int size = data.nFileSizeLow | (__int64)data.nFileSizeHigh << 32;
+
+
     std::ifstream io(path.c_str(), std::ios::binary);
     if (!io)
     {
@@ -343,16 +359,12 @@ void AssetTexture::_load(const std::string& path)
             headerOffset += sizeof(DDS_HEADER_DXT10);
         }
 
-        std::ifstream in(path, std::ifstream::ate | std::ifstream::binary);
-        int size = in.tellg();
         size -= headerOffset; 
 
         // retrieve the image data
         _bits = new BYTE[size];
 
         reader.read(_bits, size);
-
-        //_bits = &_bits[headerOffset];
 
         // get the image width and height
         _width = header.dwWidth;
