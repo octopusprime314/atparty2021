@@ -11,9 +11,10 @@ BUILD INSTRUCTIONS:
     cmake --build . --config Release
     
 PACKAGING FOR DISTRIBUTION:
-    This command will generate a folder that contains all the files
-    necessary to run the application from the bin folder.
-    
+    These commands will generate a folder that contains all the files
+    necessary to run the application from the bin folder.  Run these commands
+    from the build folder.
+    cmake ..
     cmake --build . --target install --config Release
     
 RUN PACKAGE:
