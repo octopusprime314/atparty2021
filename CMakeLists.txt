@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.15)
-project(compaction-lib-demo)
-set(VS_STARTUP_VERSION compaction-lib-demo)
+project(atparty2021)
+set(VS_STARTUP_VERSION atparty2021)
 set(TLS_VERIFY OFF)
 
 include(InstallRequiredSystemLibraries)
 include(FetchContent)
 
 
-set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/compaction-lib-demo-dist")
+set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/atparty2021-dist")
 
 include_directories("${CMAKE_SOURCE_DIR}/libs/dx/include")
 include_directories("${CMAKE_SOURCE_DIR}/libs/fmod/inc")
@@ -85,7 +85,7 @@ source_group("dxLayer"                FILES  ${DX_HEADER_FILES} ${DX_SRC_FILES})
 source_group("imgui"                  FILES  ${IMGUI_HEADER_FILES})
 source_group("compaction-lib"         FILES  ${COMPACTION_HEADER_FILES} ${COMPACTION_SRC_FILES})
 
-add_executable(compaction-lib-demo
+add_executable(atparty2021
                ${MODEL_SRC_FILES}
                ${SHADING_SRC_FILES}
                ${AUDIO_SRC_FILES}
@@ -121,10 +121,10 @@ add_executable(compaction-lib-demo
                ${COMPACTION_HEADER_FILES}
                ${COMPACTION_SRC_FILES})
 
-target_compile_features(compaction-lib-demo PRIVATE cxx_range_for)
+target_compile_features(atparty2021 PRIVATE cxx_range_for)
 
 if (MSVC)
-    set(VS_STARTUP_Project compaction-lib-demo)
+    set(VS_STARTUP_Project atparty2021)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_definitions("/MP /std:c++17")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
@@ -137,10 +137,10 @@ if (MSVC)
     set_source_files_properties(${HLSL_CS_DXR1_1SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename)_compiled.h\"  -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
 endif()
 
-target_link_libraries(compaction-lib-demo           legacy_stdio_definitions.lib)
-target_link_libraries(compaction-lib-demo           ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod64_vc.lib)
-target_link_libraries(compaction-lib-demo debug     ${CMAKE_SOURCE_DIR}/libs/gltf/lib/debug/GLTFSDK.lib)
-target_link_libraries(compaction-lib-demo optimized ${CMAKE_SOURCE_DIR}/libs/gltf/lib/release/GLTFSDK.lib)
+target_link_libraries(atparty2021           legacy_stdio_definitions.lib)
+target_link_libraries(atparty2021           ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod64_vc.lib)
+target_link_libraries(atparty2021 debug     ${CMAKE_SOURCE_DIR}/libs/gltf/lib/debug/GLTFSDK.lib)
+target_link_libraries(atparty2021 optimized ${CMAKE_SOURCE_DIR}/libs/gltf/lib/release/GLTFSDK.lib)
 
 #pre fetches assets during cmake -G configuration
 FetchContent_Populate(assets
@@ -165,7 +165,20 @@ file(COPY ${CMAKE_SOURCE_DIR}/build/libs/ DESTINATION ${CMAKE_SOURCE_DIR}/libs)
 file(REMOVE_RECURSE ${CMAKE_SOURCE_DIR}/build/libs/)
 
 #dxil and dxcompiler dlls are needed for dxr
-add_custom_command(TARGET compaction-lib-demo POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod64.dll   $<TARGET_FILE_DIR:compaction-lib-demo>
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll $<TARGET_FILE_DIR:compaction-lib-demo>
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll       $<TARGET_FILE_DIR:compaction-lib-demo>)
+add_custom_command(TARGET atparty2021 POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod64.dll   $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll       $<TARGET_FILE_DIR:atparty2021>)
+
+install(TARGETS atparty2021 RUNTIME DESTINATION bin)
+install(FILES "${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll"
+              "${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod64.dll"
+              "${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll"
+        DESTINATION bin)
+# FYI: Keep the trailing '/'s here.
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/shading/shaders/"
+        DESTINATION shading/shaders)
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/assets/"
+        DESTINATION assets)
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/config/"
+        DESTINATION config)
