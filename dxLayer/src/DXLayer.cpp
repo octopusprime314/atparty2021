@@ -50,12 +50,20 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
     debug->EnableDebugLayer();
 #endif
 
+#ifdef USE_DRED
+    CComPtr<ID3D12DeviceRemovedExtendedDataSettings> pDredSettings;
+    D3D12GetDebugInterface(IID_PPV_ARGS(&pDredSettings));
+
+    // Turn on AutoBreadcrumbs and Page Fault reporting
+    pDredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+    pDredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+#endif
+
     D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(_device.GetAddressOf()));
 
     D3D12_COMMAND_QUEUE_DESC cqDesc;
     ZeroMemory(&cqDesc, sizeof(cqDesc));
 
-    
     // Direct Command queue
     cqDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     _device->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(_gfxCmdQueue.GetAddressOf()));
@@ -451,8 +459,13 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
 
     _gfxCmdQueue->ExecuteCommandLists(1, CommandListCast(_gfxCmdLists[prevCmdListIndex].GetAddressOf()));
 
-    _presentTarget->present();
-
+    HRESULT result = _presentTarget->present();
+#ifdef _DEBUG
+    if (result != S_OK)
+    {
+        queryDeviceError();
+    }
+#endif
     _mtx.unlock();
 
     int fenceValue = _gfxNextFenceValue[prevCmdListIndex]++;
@@ -465,6 +478,39 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
 
     _finishedCmdLists.push(prevCmdListIndex);
     _cmdListFinishedExecution[prevCmdListIndex] = true;
+}
+
+void DXLayer::queryDeviceError()
+{
+#ifdef USE_DRED
+    ComPtr<ID3D12DeviceRemovedExtendedData> pDred;
+    _device->QueryInterface(IID_PPV_ARGS(&pDred));
+
+    D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT DredAutoBreadcrumbsOutput;
+    D3D12_DRED_PAGE_FAULT_OUTPUT       DredPageFaultOutput;
+    pDred->GetAutoBreadcrumbsOutput(&DredAutoBreadcrumbsOutput);
+    pDred->GetPageFaultAllocationOutput(&DredPageFaultOutput);
+
+    auto node = DredPageFaultOutput.pHeadRecentFreedAllocationNode;
+    while (node != nullptr)
+    {
+        std::string pageFault =
+            "Free node: " + std::to_string(node->AllocationType) + " " + node->ObjectNameA + "\n";
+
+        OutputDebugString(pageFault.c_str());
+        node = node->pNext;
+    }
+
+    node = DredPageFaultOutput.pHeadExistingAllocationNode;
+    while (node != nullptr)
+    {
+        std::string pageFault = "Existing node: " + std::to_string(node->AllocationType) + " " +
+                                node->ObjectNameA + "\n";
+
+        OutputDebugString(pageFault.c_str());
+        node = node->pNext;
+    }
+#endif
 }
 
 void DXLayer::setTimeStamp()

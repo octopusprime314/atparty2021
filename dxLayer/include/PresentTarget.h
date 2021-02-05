@@ -35,6 +35,6 @@ class PresentTarget
     void unbindTarget(ComPtr<ID3D12GraphicsCommandList4> cmdList,
                       int                               swapchainIndex,
                       RenderTexture*                    renderFrame);
-    void present();
+    HRESULT present();
     ComPtr<ID3D12Resource> getBackBuffer(int swapChainIndex);
 };

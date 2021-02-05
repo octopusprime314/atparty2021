@@ -51,6 +51,7 @@ class DXLayer
     bool                               usingAsyncCompute();
     void                               lock();
     void                               unlock();
+    void                               queryDeviceError();
 
   private:
     DXLayer(HINSTANCE hInstance, int cmdShow);

@@ -143,4 +143,7 @@ ComPtr<ID3D12Resource> PresentTarget::getBackBuffer(int swapChainIndex)
     return _backBuffers[swapChainIndex];
 }
 
-void PresentTarget::present() { _swapChain->Present(0, 0); }
+HRESULT PresentTarget::present()
+{
+    return _swapChain->Present(0, 0);
+}

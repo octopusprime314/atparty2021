@@ -130,6 +130,7 @@ if (MSVC)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
     # Disable individual compilation of hlsl include files
     set_source_files_properties(${HLSL_INCLUDE_SHADER_FILES}   PROPERTIES VS_TOOL_OVERRIDE "None")
+    # Compile folders for hlsl
     set_source_files_properties(${HLSL_VS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Vertex  VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
     set_source_files_properties(${HLSL_PS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Pixel   VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
     set_source_files_properties(${HLSL_CS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)

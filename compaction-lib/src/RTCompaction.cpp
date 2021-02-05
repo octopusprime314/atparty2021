@@ -205,6 +205,7 @@ namespace RTCompaction
             else
             {
                 // This build doesn't request compaction
+                buffers[buildIndex].isCompacted         = false;
                 buffers[buildIndex].requestedCompaction = false;
                 commandList->BuildRaytracingAccelerationStructure(&bottomLevelBuildDesc,
                                                                   0,
