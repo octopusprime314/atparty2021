@@ -487,7 +487,6 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     uvCoord = rayData.uv;
 #endif
 
-    // FUCK THIS MATRIX DECOMPOSITION BULLSHIT!!!!
     float4x3 cachedTransform        = rayData.objectToWorld;
     float4x4 objectToWorldTransform = {float4(cachedTransform[0].xyz, 0.0),
                                         float4(cachedTransform[1].xyz, 0.0),
