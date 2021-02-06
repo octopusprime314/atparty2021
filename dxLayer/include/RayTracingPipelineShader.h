@@ -52,8 +52,7 @@ class RayTracingPipelineShader
 
     using IndexBufferMapping = std::map<Model*, D3DBufferDescriptorHeapMap>;
 
-    using UniformMaterialMap     = std::pair<std::vector<UniformMaterial>, int>;
-    using UniformMaterialMapping = std::vector<std::pair<Model*, UniformMaterialMap>>;
+    using UniformMaterialMapping = std::map<int, std::vector<UniformMaterial>>;
 
     using BlasMapping= std::map<Model*, RTCompaction::ASBuffers*>;
 

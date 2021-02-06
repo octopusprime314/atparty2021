@@ -181,9 +181,16 @@ void RayTracingPipelineShader::updateAndBindUniformMaterialBuffer(std::map<std::
     std::vector<UniformMaterial> uniformMaterialBuffer;
     for(auto& uniformMaterials : _uniformMaterialMap)
     {
-        for (auto& uniformMaterial : uniformMaterials.second.first)
+        if (uniformMaterials.second.size() == 0)
         {
-            uniformMaterialBuffer.push_back(uniformMaterial);
+            uniformMaterialBuffer.push_back(UniformMaterial());
+        }
+        else
+        {
+            for (auto& uniformMaterial : uniformMaterials.second)
+            {
+                uniformMaterialBuffer.push_back(uniformMaterial);
+            }
         }
     }
 
@@ -316,8 +323,7 @@ void RayTracingPipelineShader::buildGeometry(Entity* entity)
         // Initialize the map values
         _vertexBufferMap[bufferModel] = RayTracingPipelineShader::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
         _indexBufferMap[bufferModel] = RayTracingPipelineShader::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
-        _uniformMaterialMap.push_back(std::pair<Model*, UniformMaterialMap>(bufferModel, UniformMaterialMap()));
-
+        
         _indexBufferMap[bufferModel].first.push_back(new D3DBuffer());
         _vertexBufferMap[bufferModel].first.push_back(new D3DBuffer());
 
@@ -335,7 +341,6 @@ void RayTracingPipelineShader::buildGeometry(Entity* entity)
         vertexBuffer->offset = vertexOffset;
         indexBuffer->offset  = indexOffset;
 
-
         UINT vertexBufferDescriptorIndex = addSRVToUnboundedAttributeBufferDescriptorTable(
             vertexBuffer, vertexBuffer->count, vertexBuffer->offset);
 
@@ -345,8 +350,9 @@ void RayTracingPipelineShader::buildGeometry(Entity* entity)
         _vertexBufferMap[bufferModel].second = vertexBufferDescriptorIndex;
         _indexBufferMap[bufferModel].second  = indexBufferDescriptorIndex;
 
-        _uniformMaterialMap.back().second.first.push_back(bufferModel->getMaterialNames()[i].uniformMaterial);
-        _uniformMaterialMap.back().second.second = vertexBufferDescriptorIndex;
+        // lock in the same index for attribute buffers
+        _uniformMaterialMap[vertexBufferDescriptorIndex] = std::vector<UniformMaterial>();
+        _uniformMaterialMap[vertexBufferDescriptorIndex].push_back(bufferModel->getMaterialNames()[i].uniformMaterial);
 
         auto materialNames = entity->getModel()->getMaterialNames();
 
@@ -750,6 +756,10 @@ void RayTracingPipelineShader::_updateGeometryData()
             removeSRVToUnboundedTextureDescriptorTable(_texturesMap[model.first].second);
             removeSRVToUnboundedAttributeBufferDescriptorTable(_vertexBufferMap[model.first].second);
             removeSRVToUnboundedIndexBufferDescriptorTable(_indexBufferMap[model.first].second);
+
+            // Clear out material slot and use later
+            auto attributeSlot = _vertexBufferMap.find(model.first)->second.second;
+            _uniformMaterialMap[attributeSlot].clear();
 
             _vertexBufferMap.erase(_vertexBufferMap.find(model.first));
             _indexBufferMap.erase(_indexBufferMap.find(model.first));
