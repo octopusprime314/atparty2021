@@ -92,6 +92,7 @@ static float refractionIndex = 1.0 - reflectionIndex;
             rayData.instanceIndex     = rayQuery.CommittedInstanceIndex();
             rayData.barycentrics      = rayQuery.CommittedTriangleBarycentrics();
             rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
+            rayData.uvIsValid         = false;
 
             ProcessOpaqueTriangle(rayData,
                                   albedo,

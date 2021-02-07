@@ -138,6 +138,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 rayData.instanceIndex     = rayQuery.CommittedInstanceIndex();
                 rayData.barycentrics      = rayQuery.CommittedTriangleBarycentrics();
                 rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
+                rayData.uvIsValid         = false;
 
                 ProcessOpaqueTriangle(rayData,
                                       albedo,

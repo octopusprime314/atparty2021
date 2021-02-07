@@ -151,6 +151,7 @@ void ReflectionRaygen()
     rayData.instanceIndex     = InstanceIndex();
     rayData.barycentrics      = attr.barycentrics;
     rayData.objectToWorld     = ObjectToWorld4x3();
+    rayData.uvIsValid         = false;
 
     float3 albedo;
     float  roughness;

@@ -100,6 +100,7 @@ void PrimaryRaygen()
     rayData.instanceIndex     = InstanceIndex();
     rayData.barycentrics      = attr.barycentrics;
     rayData.objectToWorld     = ObjectToWorld4x3();
+    rayData.uvIsValid         = false;
 
     ProcessOpaqueTriangle(rayData,
                           albedo,
