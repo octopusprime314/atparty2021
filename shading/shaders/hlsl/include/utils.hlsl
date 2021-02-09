@@ -399,30 +399,31 @@ float3 RefractionRay(float3 normal, float3 incidentRayDirection)
 
 #ifdef COMPILE_DXR_1_0_ONLY
 
-void LaunchReflectionRefractionRayPair(in Payload incidentPayload,
-                                       in float3  incidentRay,
-                                       in float3  normal,
-                                       in RayDesc ray,
-                                       in float   indexOfRefraction,
-                                       in float3  incidentLight)
+void LaunchReflectionRefractionRayPair(inout Payload incidentPayload,
+                                       in    float3  incidentRay,
+                                       in    float3  normal,
+                                       in    RayDesc ray,
+                                       in    float   indexOfRefraction,
+                                       in    float3  incidentLight)
 {
     float reflectionCoeff = (pow((1.0 - indexOfRefraction), 2.0) / pow((1.0 + indexOfRefraction), 2.0));
     float refractionCoeff = 1.0 - reflectionCoeff;
 
     Payload payloadRefraction;
     payloadRefraction.recursionCount = incidentPayload.recursionCount + 1;
-    payloadRefraction.color          = incidentPayload.color.xyz + (incidentLight * refractionCoeff);
+    payloadRefraction.color          = incidentLight * refractionCoeff;
 
     ray.Direction = RefractionRay(normal, incidentRay);
     TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payloadRefraction);
 
     Payload payloadReflection;
     payloadReflection.recursionCount = incidentPayload.recursionCount + 1;
-    payloadReflection.color          = incidentPayload.color.xyz + (incidentLight * reflectionCoeff);
+    payloadReflection.color          = incidentLight * reflectionCoeff;
 
     ray.Direction = incidentRay - (2.0f * dot(incidentRay, normal) * normal);
     TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payloadReflection);
 }
+
 #endif
 
 #endif

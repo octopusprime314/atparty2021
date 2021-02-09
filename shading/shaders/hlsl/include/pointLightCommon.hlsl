@@ -5,13 +5,14 @@
 #include "utils.hlsl"
 #endif
 
-float3 GetBRDFPointLight(float3 albedo,
-                         float3 normal,
-                         float3 hitPosition,
-                         float  roughness,
-                         float  metallic,
-                         int2   threadId,
-                         bool   onlyDiffuse)
+float3 GetBRDFPointLight(in    float3 albedo,
+                         in    float3 normal,
+                         in    float3 hitPosition,
+                         in    float  roughness,
+                         in    float  metallic,
+                         in    int2   threadId,
+                         in    bool   onlyDiffuse,
+                         inout int    recursionCount)
 {
     float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
     float3 eyeVector      = normalize(hitPosition - cameraPosition);
@@ -30,7 +31,7 @@ float3 GetBRDFPointLight(float3 albedo,
 #ifdef COMPILE_DXR_1_0_ONLY
 
     Payload payload;
-    payload.recursionCount = 0;
+    payload.recursionCount = recursionCount;
     payload.occlusion      = 0.0;
 
 #endif
@@ -102,13 +103,18 @@ float3 GetBRDFPointLight(float3 albedo,
 #endif
 #ifdef COMPILE_DXR_1_0_ONLY
 
-            TraceRay(rtAS,
-                     RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES,
-                     ~0, 1, 0, 1, ray, payload);
+            if (payload.recursionCount < RECURSION_LIMIT)
+            {
+                TraceRay(rtAS,
+                         RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES,
+                         ~0, 1, 0, 1, ray, payload);
+            
+                payload.recursionCount++;
+                occlusion = payload.occlusion;
+                totalOcclusion = occlusion;
+            }
 
-            payload.recursionCount++;
-            occlusion = payload.occlusion;
-            totalOcclusion = occlusion;
+            recursionCount = payload.recursionCount;
 #endif
 
             float3 lighting = GetLighting(normal, halfVector, roughness, eyeVector, lightDirection, metallic, occlusion, albedo, radiance, F0);

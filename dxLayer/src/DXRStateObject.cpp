@@ -38,7 +38,7 @@ DXRStateObject::DXRStateObject(ComPtr<ID3D12RootSignature> primaryRaysRootSignat
                       primaryRaysRootSignature,
                       _dxrPrimaryRaysStateObject);
 
-    // Create primary ray tracing shaders
+    // Create reflection ray tracing shaders
     std::string reflectionRaysName = SHADERS_LOCATION + "hlsl/dxr/dxrreflectionraysshaders.hlsl";
 
     HLSLShader reflectionRaysShader(reflectionRaysName, true);
@@ -66,7 +66,11 @@ DXRStateObject::DXRStateObject(ComPtr<ID3D12RootSignature> primaryRaysRootSignat
                       _reflectionRaysHitGroupShaderTable, 
                       pResultBlob,
                       reflectionRaysRootSignature,
-                      _dxrReflectionRaysStateObject);
+                      _dxrReflectionRaysStateObject,
+                      shadowMissShaderImport,
+                      shadowHitGroupExport,
+                      shadowClosestHitShaderImport,
+                      shadowAnyHitShaderImport);
 }
 
 void DXRStateObject::_buildStateObject(const wchar_t*              raygenImport,
@@ -253,16 +257,18 @@ void DXRStateObject::_buildShaderTables(const wchar_t *            raygenImport,
 
 void DXRStateObject::dispatchPrimaryRays()
 {
+    const uint32_t shaderRecordCount = 1;
+
     auto cmdList = DXLayer::instance()->getCmdList();
 
     D3D12_DISPATCH_RAYS_DESC dispatchRaysDesc = {};
 
     dispatchRaysDesc.HitGroupTable.StartAddress             = _primaryRaysHitGroupShaderTable->GetGPUVirtualAddress();
     dispatchRaysDesc.HitGroupTable.SizeInBytes              = _primaryRaysHitGroupShaderTable->GetDesc().Width;
-    dispatchRaysDesc.HitGroupTable.StrideInBytes            = dispatchRaysDesc.HitGroupTable.SizeInBytes;
+    dispatchRaysDesc.HitGroupTable.StrideInBytes            = dispatchRaysDesc.HitGroupTable.SizeInBytes / shaderRecordCount;
     dispatchRaysDesc.MissShaderTable.StartAddress           = _primaryRaysMissShaderTable->GetGPUVirtualAddress();
     dispatchRaysDesc.MissShaderTable.SizeInBytes            = _primaryRaysMissShaderTable->GetDesc().Width;
-    dispatchRaysDesc.MissShaderTable.StrideInBytes          = dispatchRaysDesc.MissShaderTable.SizeInBytes;
+    dispatchRaysDesc.MissShaderTable.StrideInBytes          = dispatchRaysDesc.MissShaderTable.SizeInBytes / shaderRecordCount;
     dispatchRaysDesc.RayGenerationShaderRecord.StartAddress = _primaryRaysRayGenShaderTable->GetGPUVirtualAddress();
     dispatchRaysDesc.RayGenerationShaderRecord.SizeInBytes  = _primaryRaysRayGenShaderTable->GetDesc().Width;
     dispatchRaysDesc.Width                                  = IOEventDistributor::screenPixelWidth;
@@ -273,22 +279,23 @@ void DXRStateObject::dispatchPrimaryRays()
 
     cmdList->DispatchRays(&dispatchRaysDesc);
     cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
-
 }
 
 
 void DXRStateObject::dispatchReflectionRays()
 {
+    const uint32_t shaderRecordCount = 2;
+
     auto cmdList = DXLayer::instance()->getCmdList();
 
     D3D12_DISPATCH_RAYS_DESC dispatchRaysDesc = {};
 
     dispatchRaysDesc.HitGroupTable.StartAddress             = _reflectionRaysHitGroupShaderTable->GetGPUVirtualAddress();
     dispatchRaysDesc.HitGroupTable.SizeInBytes              = _reflectionRaysHitGroupShaderTable->GetDesc().Width;
-    dispatchRaysDesc.HitGroupTable.StrideInBytes            = dispatchRaysDesc.HitGroupTable.SizeInBytes;
+    dispatchRaysDesc.HitGroupTable.StrideInBytes            = dispatchRaysDesc.HitGroupTable.SizeInBytes / shaderRecordCount;
     dispatchRaysDesc.MissShaderTable.StartAddress           = _reflectionRaysMissShaderTable->GetGPUVirtualAddress();
     dispatchRaysDesc.MissShaderTable.SizeInBytes            = _reflectionRaysMissShaderTable->GetDesc().Width;
-    dispatchRaysDesc.MissShaderTable.StrideInBytes          = dispatchRaysDesc.MissShaderTable.SizeInBytes;
+    dispatchRaysDesc.MissShaderTable.StrideInBytes          = dispatchRaysDesc.MissShaderTable.SizeInBytes / shaderRecordCount;
     dispatchRaysDesc.RayGenerationShaderRecord.StartAddress = _reflectionRaysRayGenShaderTable->GetGPUVirtualAddress();
     dispatchRaysDesc.RayGenerationShaderRecord.SizeInBytes  = _reflectionRaysRayGenShaderTable->GetDesc().Width;
     dispatchRaysDesc.Width                                  = IOEventDistributor::screenPixelWidth;
@@ -299,5 +306,4 @@ void DXRStateObject::dispatchReflectionRays()
 
     cmdList->DispatchRays(&dispatchRaysDesc);
     cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
-
 }

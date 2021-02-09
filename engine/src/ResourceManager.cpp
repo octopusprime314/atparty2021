@@ -887,15 +887,15 @@ void ResourceManager::updateResources()
     _updateTransformData();
 }
 
-void ResourceManager::resetUnboundedTextureDescriptorTable()                    { _unboundedTextureSrvIndex = 0; }
-void ResourceManager::resetUnboundedAttributeBufferDescriptorTable()            { _unboundedAttributeBufferSrvIndex = 0; }
-void ResourceManager::resetUnboundedIndexBufferDescriptorTable()                { _unboundedIndexBufferSrvIndex = 0; }
-ResourceManager::AttributeMapping& ResourceManager::getVertexBuffers() { return _vertexBufferMap; }
-ResourceManager::IndexBufferMapping& ResourceManager::getIndexBuffers(){ return _indexBufferMap; }
-float* ResourceManager::getInstanceNormalTransforms()                           { return _instanceNormalMatrixTransforms.data(); }
-float* ResourceManager::getWorldToObjectTransforms()                            { return _instanceWorldToObjectMatrixTransforms.data(); }
-float* ResourceManager::getPrevInstanceTransforms()                             { return _prevInstanceTransforms.data(); }
-int    ResourceManager::getBLASCount()                                          { return _blasMap.size(); }
+void ResourceManager::resetUnboundedTextureDescriptorTable()            { _unboundedTextureSrvIndex = 0;                        }
+void ResourceManager::resetUnboundedAttributeBufferDescriptorTable()    { _unboundedAttributeBufferSrvIndex = 0;                }
+void ResourceManager::resetUnboundedIndexBufferDescriptorTable()        { _unboundedIndexBufferSrvIndex = 0;                    }
+ResourceManager::AttributeMapping& ResourceManager::getVertexBuffers()  { return _vertexBufferMap;                              }
+ResourceManager::IndexBufferMapping& ResourceManager::getIndexBuffers() { return _indexBufferMap;                               }
+float* ResourceManager::getInstanceNormalTransforms()                   { return _instanceNormalMatrixTransforms.data();        }
+float* ResourceManager::getWorldToObjectTransforms()                    { return _instanceWorldToObjectMatrixTransforms.data(); }
+float* ResourceManager::getPrevInstanceTransforms()                     { return _prevInstanceTransforms.data();                }
+int    ResourceManager::getBLASCount()                                  { return _blasMap.size();                               }
 
 void ResourceManager::createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries)
 {

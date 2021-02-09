@@ -138,13 +138,15 @@ void main(int3 threadId : SV_DispatchThreadID,
                               hitPosition,
                               transmittance);
 
+        uint   recursionIndex = 0;
         float3 secondarySurfaceReflectionColor = GetBRDFPointLight(albedo,
                                                                    normal,
                                                                    hitPosition,
                                                                    roughness,
                                                                    metallic,
                                                                    threadId.xy,
-                                                                   false);
+                                                                   false,
+                                                                   recursionIndex);
 
         indirectLightRaysUAV[threadId.xy].xyz = secondarySurfaceReflectionColor;
         

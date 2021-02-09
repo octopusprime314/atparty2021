@@ -80,7 +80,8 @@ PixelOut main(float4 posH : SV_POSITION,
     }
     else
     {
-        float3 reflectionColor = GetBRDFPointLight(albedo, normal, position, roughness, metallic, uint2(0,0), false);
+        uint   recursionCount = 0;
+        float3 reflectionColor = GetBRDFPointLight(albedo, normal, position, roughness, metallic, uint2(0,0), false, recursionCount);
 
         pixel.color = float4(reflectionColor, 1.0);
     }

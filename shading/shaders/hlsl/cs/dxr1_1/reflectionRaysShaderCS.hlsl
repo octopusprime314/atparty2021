@@ -72,15 +72,15 @@ void main(int3 threadId            : SV_DispatchThreadID,
         float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
         float3 rayDirection   = normalize(hitPosition - cameraPosition);
 
+        uint   bounceIndex = 0;
         float3 reflectionColor = GetBRDFPointLight(albedo,
                                                    normal,
                                                    hitPosition,
                                                    roughness,
                                                    metallic,
                                                    threadId.xy,
-                                                   false);
-
-        uint bounceIndex = 0;
+                                                   false,
+                                                   bounceIndex);
 
         while (roughness < 0.25 && bounceIndex < RECURSION_LIMIT)
         {
@@ -162,7 +162,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                      roughness,
                                                      metallic,
                                                      threadId.xy,
-                                                     false);
+                                                     false,
+                                                     bounceIndex);
                 bounceIndex++;
             }
             else

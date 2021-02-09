@@ -70,13 +70,15 @@ void ReflectionRaygen()
         float3 cameraPosition  = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
         float3 rayDirection    = normalize(hitPosition - cameraPosition);
 
+        uint recursionIndex = 0;
         float3 reflectionColor = GetBRDFPointLight(albedo,
                                                    normal,
                                                    hitPosition,
                                                    roughness,
                                                    metallic,
                                                    DispatchRaysIndex().xy,
-                                                   false);
+                                                   false,
+                                                   recursionIndex);
 
         if (roughness < 0.25)
         {
@@ -96,7 +98,7 @@ void ReflectionRaygen()
                                                   rayDirection,
                                                   normal,
                                                   ray,
-                                                  GLASS_IOR,
+                                                  GLASS_IOR - 1.0,
                                                   reflectionColor);
             }
             else
@@ -176,7 +178,8 @@ void ReflectionRaygen()
                                                roughness,
                                                metallic,
                                                DispatchRaysIndex().xy,
-                                               false);
+                                               false,
+                                               payload.recursionCount);
 
     if (roughness < 0.25 && payload.recursionCount < RECURSION_LIMIT)
     {
@@ -192,7 +195,7 @@ void ReflectionRaygen()
                                               WorldRayDirection(),
                                               normal,
                                               ray,
-                                              GLASS_IOR,
+                                              GLASS_IOR - 1.0,
                                               reflectionColor);
         }
         // Opaque materials make a reflected ray
@@ -201,7 +204,7 @@ void ReflectionRaygen()
             ray.Direction = WorldRayDirection() - (2.0f * dot(WorldRayDirection(), normal) * normal);
 
             // All light goes into reflection ray
-            payload.color.xyz += reflectionColor;
+            payload.color.xyz = reflectionColor;
             payload.recursionCount++;
 
             TraceRay(rtAS, RAY_FLAG_NONE, ~0, 0, 0, 0, ray, payload);
@@ -209,7 +212,7 @@ void ReflectionRaygen()
     }
     else
     {
-        reflectionUAV[DispatchRaysIndex().xy] = float4(payload.color.xyz + reflectionColor, 1.0);
+        reflectionUAV[DispatchRaysIndex().xy] += float4(reflectionColor, 1.0);
     }
 }
 
@@ -224,7 +227,29 @@ void ReflectionMiss(inout Payload payload)
 void ShadowAnyHit(inout Payload                            payload,
                   in BuiltInTriangleIntersectionAttributes attr)
 {
-    payload.occlusion = 1.0;
+    RayTraversalData rayData;
+    rayData.worldRayOrigin = WorldRayOrigin();
+    rayData.currentRayT    = RayTCurrent();
+    // Anyhit invokation dictates that previous accepted non opaque triangle is farther away
+    // than current
+    rayData.closestRayT       = RayTCurrent() + 1.0;
+    rayData.worldRayDirection = WorldRayDirection();
+    rayData.geometryIndex     = GeometryIndex();
+    rayData.primitiveIndex    = PrimitiveIndex();
+    rayData.instanceIndex     = InstanceIndex();
+    rayData.barycentrics      = attr.barycentrics;
+    rayData.objectToWorld     = ObjectToWorld4x3();
+
+    bool isHit = ProcessTransparentTriangle(rayData);
+    if (isHit == false)
+    {
+        payload.occlusion = 0.0;
+        IgnoreHit();
+    }
+    else
+    {
+        payload.occlusion = 1.0;
+    }
 }
 
 [shader("closesthit")]

@@ -54,17 +54,10 @@ struct Payload
     uint   recursionCount;
 };
 
-//struct ShadowPayload
-//{
-//    float3 color;
-//    float  occlusion;
-//    uint   recursionCount;
-//};
-
 #define MAX_LIGHTS 1024
 #define MAX_RAY_LENGTH 100000.0
 #define MIN_RAY_LENGTH 0.1
-#define RECURSION_LIMIT 10
+#define RECURSION_LIMIT 31
 
 #define WATER_IOR   1.3
 #define GLASS_IOR   1.5
@@ -72,8 +65,5 @@ struct Payload
 
 // Use glass reflection coefficients from this website
 //https://glassproperties.com/glasses/
-
-
-
 
 #endif
