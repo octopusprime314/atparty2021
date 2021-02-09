@@ -5,6 +5,7 @@
 #include "ShaderTable.h"
 #include "DXLayer.h"
 #include <random>
+#include <set>
 
 ResourceManager::ResourceManager()
 {
@@ -837,12 +838,24 @@ void ResourceManager::_updateGeometryData()
                 _dxrDevice.Get(), commandList.Get(), _bottomLevelBuildDescs.data(),
                 _bottomLevelBuildDescs.size());
 
+            std::set<ID3D12Resource*> resourcesToBarrier;
             for (int asBufferIndex = 0; asBufferIndex < _bottomLevelBuildModels.size(); asBufferIndex++)
             {
                 _blasMap[_bottomLevelBuildModels[asBufferIndex]] = &buffers[asBufferIndex];
+
+                resourcesToBarrier.insert(buffers[asBufferIndex].resultGpuMemory.parentResource);
             }
 
-            commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
+            D3D12_RESOURCE_BARRIER* barrierDesc = new D3D12_RESOURCE_BARRIER[resourcesToBarrier.size()];
+            ZeroMemory(barrierDesc, sizeof(D3D12_RESOURCE_BARRIER) * resourcesToBarrier.size());
+
+            int i = 0;
+            for (auto resourceToBarrier : resourcesToBarrier)
+            {
+                barrierDesc[i] = CD3DX12_RESOURCE_BARRIER::UAV(resourceToBarrier);
+                i++;
+            }
+            commandList->ResourceBarrier(resourcesToBarrier.size(), barrierDesc);
         }
     }
 }
