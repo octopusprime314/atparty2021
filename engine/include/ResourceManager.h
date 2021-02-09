@@ -42,7 +42,7 @@ struct GpuToCpuBuffers
 #define RandomInsertAndRemoveEntities 0
 
 
-class RayTracingPipelineShader
+class ResourceManager
 {
     using TextureDescriptorHeapMap = std::pair<std::vector<AssetTexture*>, int>;
     using TextureMapping = std::map<Model*, TextureDescriptorHeapMap>;
@@ -117,13 +117,12 @@ class RayTracingPipelineShader
     
     UINT _allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
                              UINT descriptorIndexToUse = UINT_MAX);
-    void _updateTLASData(int tlasCount,
-                         std::vector<D3D12_RAYTRACING_INSTANCE_DESC>& instanceDescriptionCPUBuffer);
-    void _updateInstanceData();
+    void _updateTransformData();
+    void _updateResourceMappingBuffers();
     void _updateGeometryData();
 
   public:
-    RayTracingPipelineShader();
+    ResourceManager();
     void                                          init(ComPtr<ID3D12Device> device);
     ComPtr<ID3D12DescriptorHeap>                  getRTASDescHeap();
     D3D12_GPU_VIRTUAL_ADDRESS                     getRTASGPUVA();
@@ -139,7 +138,7 @@ class RayTracingPipelineShader
     void                                          updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
-    void                                          buildAccelerationStructures();
+    void                                          updateResources();
     UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize, DXGI_FORMAT format);
     void                                          buildGeometry(Entity* entity);
     void                                          createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries);

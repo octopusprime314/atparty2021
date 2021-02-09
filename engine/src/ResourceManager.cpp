@@ -1,4 +1,4 @@
-#include "RayTracingPipelineShader.h"
+#include "ResourceManager.h"
 #include "D3D12RaytracingHelpers.hpp"
 #include "EngineManager.h"
 #include "ModelBroker.h"
@@ -6,7 +6,7 @@
 #include "DXLayer.h"
 #include <random>
 
-RayTracingPipelineShader::RayTracingPipelineShader()
+ResourceManager::ResourceManager()
 {
     _descriptorsAllocated              = 0;
     auto device                        = DXLayer::instance()->getDevice();
@@ -27,7 +27,7 @@ RayTracingPipelineShader::RayTracingPipelineShader()
     createUnboundedIndexBufferSrvDescriptorTable(MaxBLASSRVsForRayTracing);
 }
 
-void RayTracingPipelineShader::init(ComPtr<ID3D12Device> device)
+void ResourceManager::init(ComPtr<ID3D12Device> device)
 {
     _materialMapping.reserve(InitInstancesForRayTracing);
     _attributeMapping.reserve(InitInstancesForRayTracing);
@@ -81,7 +81,7 @@ inline std::string BlobToUtf8(_In_ IDxcBlob* pBlob)
     return std::string((char*)pBlob->GetBufferPointer(), pBlob->GetBufferSize());
 }
 
-void RayTracingPipelineShader::allocateUploadBuffer(ID3D12Device* pDevice, void* pData,
+void ResourceManager::allocateUploadBuffer(ID3D12Device* pDevice, void* pData,
                                                     UINT64           datasize,
                                                     ID3D12Resource** ppResource, const wchar_t* resourceName)
 {
@@ -97,12 +97,12 @@ void RayTracingPipelineShader::allocateUploadBuffer(ID3D12Device* pDevice, void*
     }
 }
 
-ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getRTASDescHeap()
+ComPtr<ID3D12DescriptorHeap> ResourceManager::getRTASDescHeap()
 {
     return _rtASDescriptorHeap;
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS RayTracingPipelineShader::getRTASGPUVA()
+D3D12_GPU_VIRTUAL_ADDRESS ResourceManager::getRTASGPUVA()
 {
     if (_tlasResultBuffer[_topLevelIndex] == nullptr)
     {
@@ -114,17 +114,17 @@ D3D12_GPU_VIRTUAL_ADDRESS RayTracingPipelineShader::getRTASGPUVA()
     }
 }
 
-ComPtr<ID3D12DescriptorHeap> RayTracingPipelineShader::getDescHeap()
+ComPtr<ID3D12DescriptorHeap> ResourceManager::getDescHeap()
 {
     return _descriptorHeap;
 }
 
-RayTracingPipelineShader::TextureMapping& RayTracingPipelineShader::getSceneTextures()
+ResourceManager::TextureMapping& ResourceManager::getSceneTextures()
 {
     return _texturesMap;
 }
 
-void RayTracingPipelineShader::updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
+void ResourceManager::updateAndBindMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
 {
     BYTE* mappedData                           = nullptr;
     _instanceIndexToMaterialMappingGPUBuffer->resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
@@ -148,7 +148,7 @@ void RayTracingPipelineShader::updateAndBindMaterialBuffer(std::map<std::string,
     }
 }
 
-void RayTracingPipelineShader::updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
+void ResourceManager::updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
 {
     BYTE* mappedData                           = nullptr;
     _instanceIndexToAttributeMappingGPUBuffer->resource->Map(0, nullptr,
@@ -173,7 +173,7 @@ void RayTracingPipelineShader::updateAndBindAttributeBuffer(std::map<std::string
     }
 }
 
-void RayTracingPipelineShader::updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
+void ResourceManager::updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
 {
     BYTE* mappedData                           = nullptr;
     _instanceUniformMaterialMappingGPUBuffer->resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
@@ -214,7 +214,7 @@ void RayTracingPipelineShader::updateAndBindUniformMaterialBuffer(std::map<std::
     }
 }
 
-void RayTracingPipelineShader::updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
+void ResourceManager::updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute)
 {
     BYTE* mappedData                           = nullptr;
     _instanceNormalMatrixTransformsGPUBuffer->resource->Map(0, nullptr,
@@ -239,7 +239,7 @@ void RayTracingPipelineShader::updateAndBindNormalMatrixBuffer(std::map<std::str
     }
 }
 
-void RayTracingPipelineShader::buildGeometry(Entity* entity)
+void ResourceManager::buildGeometry(Entity* entity)
 {
     auto textureBroker = TextureBroker::instance();
 
@@ -321,8 +321,8 @@ void RayTracingPipelineShader::buildGeometry(Entity* entity)
         Model* bufferModel = entity->getModel();
 
         // Initialize the map values
-        _vertexBufferMap[bufferModel] = RayTracingPipelineShader::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
-        _indexBufferMap[bufferModel] = RayTracingPipelineShader::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
+        _vertexBufferMap[bufferModel] = ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
+        _indexBufferMap[bufferModel] = ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
         
         _indexBufferMap[bufferModel].first.push_back(new D3DBuffer());
         _vertexBufferMap[bufferModel].first.push_back(new D3DBuffer());
@@ -360,7 +360,7 @@ void RayTracingPipelineShader::buildGeometry(Entity* entity)
         for (auto textureNames : materialNames)
         {
             // Initialize the map values
-            _texturesMap[bufferModel] = RayTracingPipelineShader::TextureDescriptorHeapMap(std::vector<AssetTexture*>(), 0);
+            _texturesMap[bufferModel] = ResourceManager::TextureDescriptorHeapMap(std::vector<AssetTexture*>(), 0);
 
             // Grab the first descriptor heap index into the material's resources
             AssetTexture* texture = textureBroker->getTexture(textureNames.albedo);
@@ -422,97 +422,153 @@ void RayTracingPipelineShader::buildGeometry(Entity* entity)
     }
 }
 
-void RayTracingPipelineShader::_updateTLASData(int                                          tlasCount,
-                                               std::vector<D3D12_RAYTRACING_INSTANCE_DESC>& instanceDescriptionCPUBuffer)
+void ResourceManager::_updateTransformData()
 {
-    if (tlasCount == 0)
+    auto entityList = EngineManager::instance()->getEntityList();
+
+    constexpr int transformOffset       = sizeof(float) * 12;
+    constexpr int normalTransformOffset = sizeof(float) * 9;
+
+    // Copy over all the previous instance transforms for motion vectors
+    memcpy(_prevInstanceTransforms.data(), _instanceTransforms.data(), sizeof(float) * 12 * entityList->size());
+
+    // Create an instance desc for the dynamic and static bottom levels
+    std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescriptionCPUBuffer(entityList->size());
+
+    int instanceDescIndex = 0;
+    for (auto entity : *entityList)
     {
-        return;
-    }
-    auto dxLayer = DXLayer::instance();
-    auto commandList = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
-                                                    : DXLayer::instance()->getCmdList();
+        auto worldSpaceTransform = entity->getWorldSpaceTransform();
+        memcpy(&_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
+                worldSpaceTransform.getFlatBuffer(), sizeof(float) * 12);
 
-    CD3DX12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+        auto worldToObjectMatrix = entity->getWorldSpaceTransform().inverse();
+            memcpy(&_instanceWorldToObjectMatrixTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
+                worldToObjectMatrix.getFlatBuffer(), sizeof(float) * 12);
 
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC    topLevelBuildDesc = {};
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& topLevelInputs = topLevelBuildDesc.Inputs;
-    topLevelInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-    topLevelInputs.Flags    = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-    topLevelInputs.NumDescs = static_cast<UINT>(tlasCount);
-    topLevelInputs.pGeometryDescs = nullptr;
-    topLevelInputs.Type           = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+        // Update normal transforms which is for all geometry in both
+        auto normalMatrix = worldToObjectMatrix.transpose();
+        auto offset       = instanceDescIndex * (normalTransformOffset / sizeof(float));
 
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO topLevelPrebuildInfo = {};
+        // Pointer math works in offset of the type
+        memcpy(&_instanceNormalMatrixTransforms[offset + 0], normalMatrix.getFlatBuffer() + 0, normalTransformOffset / 3);
+        memcpy(&_instanceNormalMatrixTransforms[offset + 3], normalMatrix.getFlatBuffer() + 4, normalTransformOffset / 3);
+        memcpy(&_instanceNormalMatrixTransforms[offset + 6], normalMatrix.getFlatBuffer() + 8, normalTransformOffset / 3);
 
-    _dxrDevice->GetRaytracingAccelerationStructurePrebuildInfo(&topLevelInputs,
-                                                               &topLevelPrebuildInfo);
-    bool newTopLevelAllocation = false;
-    if ((_tlasScratchBuffer[_topLevelIndex] == nullptr) || 
-        (_tlasResultBuffer[_topLevelIndex] == nullptr) ||
-        (_instanceDescriptionGPUBuffer[_topLevelIndex] == nullptr))
-    {
-        newTopLevelAllocation = true;
-    }
-    else if ((topLevelPrebuildInfo.ScratchDataSizeInBytes >_tlasScratchBuffer[_topLevelIndex]->GetDesc().Width) ||
-             (topLevelPrebuildInfo.ResultDataMaxSizeInBytes > _tlasResultBuffer[_topLevelIndex]->GetDesc().Width)||
-             (_instanceDescriptionGPUBuffer[_topLevelIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount)))
-    {
-        newTopLevelAllocation = true;
-        _topLevelIndex++;
 
-        _topLevelIndex %= CMD_LIST_NUM;
-    }
+        if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+        {
+            instanceDescriptionCPUBuffer.push_back(D3D12_RAYTRACING_INSTANCE_DESC());
+            memcpy(&instanceDescriptionCPUBuffer[instanceDescIndex].Transform,
+                    &_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
+                    sizeof(float) * 12);
 
-    if (newTopLevelAllocation)
-    {
-        auto tlasScratchBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ScratchDataSizeInBytes * TlasAllocationMultiplier,
-                                                                   D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            // do not overwrite geometry flags for bottom levels, this caused the non opaque and
+            // opaqueness of bottom levels to be random
+            instanceDescriptionCPUBuffer[instanceDescIndex].Flags                               = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceMask                        = 1;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceID                          = 0;
+            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceContributionToHitGroupIndex = 0;
+            instanceDescriptionCPUBuffer[instanceDescIndex].AccelerationStructure               = _blasMap[entity->getModel()]->GetASBuffer();
+        }
 
-        _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-                                            &tlasScratchBufferDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
-                                            IID_PPV_ARGS(&_tlasScratchBuffer[_topLevelIndex]));
+        instanceDescIndex++;
 
-        auto tlasBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ResultDataMaxSizeInBytes * TlasAllocationMultiplier,
-                                                            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-        _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-                                            &tlasBufferDesc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-                                            nullptr, IID_PPV_ARGS(&_tlasResultBuffer[_topLevelIndex]));
-
-        // Create view of SRV for shader access
-        CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(_rtASDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-        ZeroMemory(&_rtASSrvDesc, sizeof(_rtASSrvDesc));
-        _rtASSrvDesc.Shader4ComponentMapping                  = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        _rtASSrvDesc.ViewDimension                            = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-        _rtASSrvDesc.RaytracingAccelerationStructure.Location = _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
-        _dxrDevice->CreateShaderResourceView(nullptr, &_rtASSrvDesc, hDescriptor);
-
-        allocateUploadBuffer(_dxrDevice.Get(), nullptr,
-                                sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount *
-                                    TlasAllocationMultiplier,
-                                &_instanceDescriptionGPUBuffer[_topLevelIndex], L"instanceDescriptionGPUBuffer");
+        _materialMapping.push_back(_texturesMap[entity->getModel()].second);
+        _attributeMapping.push_back(_vertexBufferMap[entity->getModel()].second);
     }
 
-    BYTE*         mappedData = nullptr;
-    CD3DX12_RANGE readRange(0, 0);
-    _instanceDescriptionGPUBuffer[_topLevelIndex]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
+    {
+        if (entityList->size() == 0)
+        {
+            return;
+        }
+        auto dxLayer = DXLayer::instance();
+        auto commandList = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
+                                                        : DXLayer::instance()->getCmdList();
 
-    memcpy(&mappedData[0], instanceDescriptionCPUBuffer.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * tlasCount);
+        CD3DX12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 
-    // Top Level Acceleration Structure desc
-    topLevelBuildDesc.DestAccelerationStructureData =
-        _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
-    topLevelBuildDesc.ScratchAccelerationStructureData =
-        _tlasScratchBuffer[_topLevelIndex]->GetGPUVirtualAddress();
-    topLevelBuildDesc.Inputs.InstanceDescs = _instanceDescriptionGPUBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC    topLevelBuildDesc = {};
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& topLevelInputs = topLevelBuildDesc.Inputs;
+        topLevelInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+        topLevelInputs.Flags    = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+        topLevelInputs.NumDescs       = static_cast<UINT>(entityList->size());
+        topLevelInputs.pGeometryDescs = nullptr;
+        topLevelInputs.Type           = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 
-    commandList->BuildRaytracingAccelerationStructure(&topLevelBuildDesc, 0, nullptr);
-    commandList->ResourceBarrier(
-        1, &CD3DX12_RESOURCE_BARRIER::UAV(_tlasResultBuffer[_topLevelIndex].Get()));
+        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO topLevelPrebuildInfo = {};
+
+        _dxrDevice->GetRaytracingAccelerationStructurePrebuildInfo(&topLevelInputs,
+                                                                   &topLevelPrebuildInfo);
+        bool newTopLevelAllocation = false;
+        if ((_tlasScratchBuffer[_topLevelIndex] == nullptr) || 
+            (_tlasResultBuffer[_topLevelIndex] == nullptr) ||
+            (_instanceDescriptionGPUBuffer[_topLevelIndex] == nullptr))
+        {
+            newTopLevelAllocation = true;
+        }
+        else if ((topLevelPrebuildInfo.ScratchDataSizeInBytes >_tlasScratchBuffer[_topLevelIndex]->GetDesc().Width) ||
+                 (topLevelPrebuildInfo.ResultDataMaxSizeInBytes > _tlasResultBuffer[_topLevelIndex]->GetDesc().Width)||
+                 (_instanceDescriptionGPUBuffer[_topLevelIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size())))
+        {
+            newTopLevelAllocation = true;
+            _topLevelIndex++;
+
+            _topLevelIndex %= CMD_LIST_NUM;
+        }
+
+        if (newTopLevelAllocation)
+        {
+            auto tlasScratchBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ScratchDataSizeInBytes * TlasAllocationMultiplier,
+                                                                       D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+            _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                                &tlasScratchBufferDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+                                                IID_PPV_ARGS(&_tlasScratchBuffer[_topLevelIndex]));
+
+            auto tlasBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ResultDataMaxSizeInBytes * TlasAllocationMultiplier,
+                                                                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+            _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                                &tlasBufferDesc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
+                                                nullptr, IID_PPV_ARGS(&_tlasResultBuffer[_topLevelIndex]));
+
+            // Create view of SRV for shader access
+            CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(_rtASDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+            ZeroMemory(&_rtASSrvDesc, sizeof(_rtASSrvDesc));
+            _rtASSrvDesc.Shader4ComponentMapping                  = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            _rtASSrvDesc.ViewDimension                            = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+            _rtASSrvDesc.RaytracingAccelerationStructure.Location = _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+            _dxrDevice->CreateShaderResourceView(nullptr, &_rtASSrvDesc, hDescriptor);
+
+            allocateUploadBuffer(_dxrDevice.Get(), nullptr,
+                                    sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size() *
+                                        TlasAllocationMultiplier,
+                                    &_instanceDescriptionGPUBuffer[_topLevelIndex], L"instanceDescriptionGPUBuffer");
+        }
+
+        BYTE*         mappedData = nullptr;
+        CD3DX12_RANGE readRange(0, 0);
+        _instanceDescriptionGPUBuffer[_topLevelIndex]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+
+        memcpy(&mappedData[0], instanceDescriptionCPUBuffer.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size());
+
+        // Top Level Acceleration Structure desc
+        topLevelBuildDesc.DestAccelerationStructureData =
+            _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+        topLevelBuildDesc.ScratchAccelerationStructureData =
+            _tlasScratchBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+        topLevelBuildDesc.Inputs.InstanceDescs = _instanceDescriptionGPUBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+
+        commandList->BuildRaytracingAccelerationStructure(&topLevelBuildDesc, 0, nullptr);
+        commandList->ResourceBarrier(
+            1, &CD3DX12_RESOURCE_BARRIER::UAV(_tlasResultBuffer[_topLevelIndex].Get()));
+    }
 }
 
-void RayTracingPipelineShader::_updateInstanceData()
+void ResourceManager::_updateResourceMappingBuffers()
 {
     auto entityList = EngineManager::instance()->getEntityList();
 
@@ -597,7 +653,7 @@ void RayTracingPipelineShader::_updateInstanceData()
     }
 }
 
-void RayTracingPipelineShader::_updateGeometryData()
+void ResourceManager::_updateGeometryData()
 {
     auto    viewEventDistributor = EngineManager::instance()->getViewManager();
     auto    entityList           = EngineManager::instance()->getEntityList();
@@ -792,97 +848,43 @@ void RayTracingPipelineShader::_updateGeometryData()
 }
 
 
-void RayTracingPipelineShader::buildAccelerationStructures()
+void ResourceManager::updateResources()
 {
-    auto entityList           = EngineManager::instance()->getEntityList();
-    auto dxLayer              = DXLayer::instance();
-    auto commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
+    auto entityList  = EngineManager::instance()->getEntityList();
+    auto dxLayer     = DXLayer::instance();
+    auto commandList = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
                                                              : DXLayer::instance()->getCmdList();
+
+    _attributeMapping.clear();
+    _materialMapping.clear();
 
     if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
     {
         // Increment next frame and let the library internally manage compaction and releasing memory
         RTCompaction::NextFrame(_dxrDevice.Get(), commandList.Get());
+
+        _bottomLevelBuildDescs.clear();
+        _bottomLevelBuildModels.clear();
     }
-
-    constexpr int transformOffset          = sizeof(float) * 12;
-    constexpr int normalTransformOffset    = sizeof(float) * 9;
-
-    _attributeMapping.clear();
-    _materialMapping.clear();
-    _bottomLevelBuildDescs.clear();
-    _bottomLevelBuildModels.clear();
 
     _updateGeometryData();
 
-    _updateInstanceData();
+    _updateResourceMappingBuffers();
 
-    // Copy over all the previous instance transforms for motion vectors
-    memcpy(_prevInstanceTransforms.data(), _instanceTransforms.data(), sizeof(float) * 12 * entityList->size());
-
-    // Create an instance desc for the dynamic and static bottom levels
-    std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescriptionCPUBuffer(entityList->size());
-
-    int instanceDescIndex = 0;
-    for (auto entity : *entityList)
-    {
-        auto worldSpaceTransform = entity->getWorldSpaceTransform();
-        memcpy(&_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
-                worldSpaceTransform.getFlatBuffer(), sizeof(float) * 12);
-
-        auto worldToObjectMatrix = entity->getWorldSpaceTransform().inverse();
-            memcpy(&_instanceWorldToObjectMatrixTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
-                worldToObjectMatrix.getFlatBuffer(), sizeof(float) * 12);
-
-        // Update normal transforms which is for all geometry in both
-        auto normalMatrix = worldToObjectMatrix.transpose();
-        auto offset       = instanceDescIndex * (normalTransformOffset / sizeof(float));
-
-        // Pointer math works in offset of the type
-        memcpy(&_instanceNormalMatrixTransforms[offset + 0], normalMatrix.getFlatBuffer() + 0, normalTransformOffset / 3);
-        memcpy(&_instanceNormalMatrixTransforms[offset + 3], normalMatrix.getFlatBuffer() + 4, normalTransformOffset / 3);
-        memcpy(&_instanceNormalMatrixTransforms[offset + 6], normalMatrix.getFlatBuffer() + 8, normalTransformOffset / 3);
-
-
-        if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
-        {
-            instanceDescriptionCPUBuffer.push_back(D3D12_RAYTRACING_INSTANCE_DESC());
-            memcpy(&instanceDescriptionCPUBuffer[instanceDescIndex].Transform,
-                    &_instanceTransforms[instanceDescIndex * (transformOffset / sizeof(float))],
-                    sizeof(float) * 12);
-
-            // do not overwrite geometry flags for bottom levels, this caused the non opaque and
-            // opaqueness of bottom levels to be random
-            instanceDescriptionCPUBuffer[instanceDescIndex].Flags                               = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceMask                        = 1;
-            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceID                          = 0;
-            instanceDescriptionCPUBuffer[instanceDescIndex].InstanceContributionToHitGroupIndex = 0;
-            instanceDescriptionCPUBuffer[instanceDescIndex].AccelerationStructure               = _blasMap[entity->getModel()]->GetASBuffer();
-        }
-
-        instanceDescIndex++;
-
-        _materialMapping.push_back(_texturesMap[entity->getModel()].second);
-        _attributeMapping.push_back(_vertexBufferMap[entity->getModel()].second);
-    }
-
-    if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
-    {
-        _updateTLASData(instanceDescIndex, instanceDescriptionCPUBuffer);
-    }
+    _updateTransformData();
 }
 
-void RayTracingPipelineShader::resetUnboundedTextureDescriptorTable()                    { _unboundedTextureSrvIndex = 0; }
-void RayTracingPipelineShader::resetUnboundedAttributeBufferDescriptorTable()            { _unboundedAttributeBufferSrvIndex = 0; }
-void RayTracingPipelineShader::resetUnboundedIndexBufferDescriptorTable()                { _unboundedIndexBufferSrvIndex = 0; }
-RayTracingPipelineShader::AttributeMapping& RayTracingPipelineShader::getVertexBuffers() { return _vertexBufferMap; }
-RayTracingPipelineShader::IndexBufferMapping& RayTracingPipelineShader::getIndexBuffers(){ return _indexBufferMap; }
-float* RayTracingPipelineShader::getInstanceNormalTransforms()                           { return _instanceNormalMatrixTransforms.data(); }
-float* RayTracingPipelineShader::getWorldToObjectTransforms()                            { return _instanceWorldToObjectMatrixTransforms.data(); }
-float* RayTracingPipelineShader::getPrevInstanceTransforms()                             { return _prevInstanceTransforms.data(); }
-int    RayTracingPipelineShader::getBLASCount()                                          { return _blasMap.size(); }
+void ResourceManager::resetUnboundedTextureDescriptorTable()                    { _unboundedTextureSrvIndex = 0; }
+void ResourceManager::resetUnboundedAttributeBufferDescriptorTable()            { _unboundedAttributeBufferSrvIndex = 0; }
+void ResourceManager::resetUnboundedIndexBufferDescriptorTable()                { _unboundedIndexBufferSrvIndex = 0; }
+ResourceManager::AttributeMapping& ResourceManager::getVertexBuffers() { return _vertexBufferMap; }
+ResourceManager::IndexBufferMapping& ResourceManager::getIndexBuffers(){ return _indexBufferMap; }
+float* ResourceManager::getInstanceNormalTransforms()                           { return _instanceNormalMatrixTransforms.data(); }
+float* ResourceManager::getWorldToObjectTransforms()                            { return _instanceWorldToObjectMatrixTransforms.data(); }
+float* ResourceManager::getPrevInstanceTransforms()                             { return _prevInstanceTransforms.data(); }
+int    ResourceManager::getBLASCount()                                          { return _blasMap.size(); }
 
-void RayTracingPipelineShader::createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries)
+void ResourceManager::createUnboundedTextureSrvDescriptorTable(UINT descriptorTableEntries)
 {
     auto device = DXLayer::instance()->getDevice();
 
@@ -896,7 +898,7 @@ void RayTracingPipelineShader::createUnboundedTextureSrvDescriptorTable(UINT des
                                  IID_PPV_ARGS(_unboundedTextureSrvDescriptorHeap.GetAddressOf()));
 }
 
-void RayTracingPipelineShader::createUnboundedAttributeBufferSrvDescriptorTable(UINT descriptorTableEntries)
+void ResourceManager::createUnboundedAttributeBufferSrvDescriptorTable(UINT descriptorTableEntries)
 {
     auto device = DXLayer::instance()->getDevice();
 
@@ -911,7 +913,7 @@ void RayTracingPipelineShader::createUnboundedAttributeBufferSrvDescriptorTable(
                                  IID_PPV_ARGS(_unboundedAttributeBufferSrvDescriptorHeap.GetAddressOf()));
 }
 
-void RayTracingPipelineShader::createUnboundedIndexBufferSrvDescriptorTable(UINT descriptorTableEntries)
+void ResourceManager::createUnboundedIndexBufferSrvDescriptorTable(UINT descriptorTableEntries)
 {
     auto device = DXLayer::instance()->getDevice();
 
@@ -926,7 +928,7 @@ void RayTracingPipelineShader::createUnboundedIndexBufferSrvDescriptorTable(UINT
                                  IID_PPV_ARGS(_unboundedIndexBufferSrvDescriptorHeap.GetAddressOf()));
 }
 
-UINT RayTracingPipelineShader::addSRVToUnboundedTextureDescriptorTable(Texture* texture)
+UINT ResourceManager::addSRVToUnboundedTextureDescriptorTable(Texture* texture)
 {
     auto device = DXLayer::instance()->getDevice();
     UINT descriptorHeapIndex = -1;
@@ -969,23 +971,23 @@ UINT RayTracingPipelineShader::addSRVToUnboundedTextureDescriptorTable(Texture* 
     return descriptorHeapIndex;
 }
 
-void RayTracingPipelineShader::removeSRVToUnboundedTextureDescriptorTable(UINT descriptorHeapIndex)
+void ResourceManager::removeSRVToUnboundedTextureDescriptorTable(UINT descriptorHeapIndex)
 {
     _reusableMaterialSRVIndices.push(descriptorHeapIndex);
     _reusableMaterialSRVIndices.push(descriptorHeapIndex + 1);
     _reusableMaterialSRVIndices.push(descriptorHeapIndex + 2);
 }
 
-void RayTracingPipelineShader::removeSRVToUnboundedAttributeBufferDescriptorTable(UINT descriptorHeapIndex)
+void ResourceManager::removeSRVToUnboundedAttributeBufferDescriptorTable(UINT descriptorHeapIndex)
 {
     _reusableAttributeSRVIndices.push(descriptorHeapIndex);
 }
-void RayTracingPipelineShader::removeSRVToUnboundedIndexBufferDescriptorTable(UINT descriptorHeapIndex)
+void ResourceManager::removeSRVToUnboundedIndexBufferDescriptorTable(UINT descriptorHeapIndex)
 {
     _reusableIndexBufferSRVIndices.push(descriptorHeapIndex);
 }
 
-UINT RayTracingPipelineShader::addSRVToUnboundedAttributeBufferDescriptorTable(D3DBuffer* vertexBuffer,
+UINT ResourceManager::addSRVToUnboundedAttributeBufferDescriptorTable(D3DBuffer* vertexBuffer,
                                                                                UINT vertexCount,
                                                                                UINT offset)
 {
@@ -1031,7 +1033,7 @@ UINT RayTracingPipelineShader::addSRVToUnboundedAttributeBufferDescriptorTable(D
     return descriptorHeapIndex;
 }
 
-UINT RayTracingPipelineShader::addSRVToUnboundedIndexBufferDescriptorTable(D3DBuffer* indexBuffer,
+UINT ResourceManager::addSRVToUnboundedIndexBufferDescriptorTable(D3DBuffer* indexBuffer,
                                                                            UINT indexCount,
                                                                            UINT offset)
 {
@@ -1076,7 +1078,7 @@ UINT RayTracingPipelineShader::addSRVToUnboundedIndexBufferDescriptorTable(D3DBu
     return descriptorHeapIndex;
 }
 
-void RayTracingPipelineShader::updateTextureUnbounded(int descriptorTableIndex, int textureUnit, Texture* texture,
+void ResourceManager::updateTextureUnbounded(int descriptorTableIndex, int textureUnit, Texture* texture,
                                                       int unboundedIndex, bool isCompute, bool isUAV)
 {
     auto cmdList = DXLayer::instance()->getCmdList();
@@ -1104,7 +1106,7 @@ void RayTracingPipelineShader::updateTextureUnbounded(int descriptorTableIndex, 
     }
 }
 
-void RayTracingPipelineShader::updateStructuredAttributeBufferUnbounded(int                          descriptorTableIndex,
+void ResourceManager::updateStructuredAttributeBufferUnbounded(int                          descriptorTableIndex,
                                                                         ComPtr<ID3D12DescriptorHeap> bufferDescriptorHeap,
                                                                         bool                         isCompute)
 {
@@ -1130,7 +1132,7 @@ void RayTracingPipelineShader::updateStructuredAttributeBufferUnbounded(int     
     }
 }
 
-void RayTracingPipelineShader::updateStructuredIndexBufferUnbounded(int                          descriptorTableIndex,
+void ResourceManager::updateStructuredIndexBufferUnbounded(int                          descriptorTableIndex,
                                                                     ComPtr<ID3D12DescriptorHeap> bufferDescriptorHeap,
                                                                     bool                         isCompute)
 {
@@ -1158,7 +1160,7 @@ void RayTracingPipelineShader::updateStructuredIndexBufferUnbounded(int         
 
 // Allocate a descriptor and return its index.
 // If the passed descriptorIndexToUse is valid, it will be used instead of allocating a new one.
-UINT RayTracingPipelineShader::_allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
+UINT ResourceManager::_allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
                                                    UINT descriptorIndexToUse)
 {
     auto descriptorHeapCpuBase = _descriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -1167,12 +1169,11 @@ UINT RayTracingPipelineShader::_allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* 
     {
         descriptorIndexToUse = _descriptorsAllocated++;
     }
-    *cpuDescriptor =
-        CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeapCpuBase, descriptorIndexToUse, _descriptorSize);
+    *cpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeapCpuBase, descriptorIndexToUse, _descriptorSize);
     return descriptorIndexToUse;
 }
 // Create SRV for a buffer.
-UINT RayTracingPipelineShader::createBufferSRV(D3DBuffer* buffer, UINT numElements,
+UINT ResourceManager::createBufferSRV(D3DBuffer* buffer, UINT numElements,
                                                UINT elementSize, DXGI_FORMAT format)
 {
 

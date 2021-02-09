@@ -35,7 +35,7 @@ class ShaderBroker;
 class Entity;
 class IOEventDistributor;
 class DXLayer;
-class RayTracingPipelineShader;
+class ResourceManager;
 class PathTracerShader;
 class StaticShader;
 class RenderTexture;
@@ -62,7 +62,7 @@ struct PointLightList
 class EngineManager
 {
 
-    static RayTracingPipelineShader* _rayTracingPipeline;
+    static ResourceManager* _rayTracingPipeline;
     static GraphicsLayer             _graphicsLayer;
     bool                             _useRaytracing;
     bool                             _generatorMode;
@@ -125,5 +125,5 @@ class EngineManager
     void setEngineScene(std::shared_ptr<EngineScene> scene) { _scene = scene; }
 
     static GraphicsLayer             getGraphicsLayer();
-    static RayTracingPipelineShader* getRTPipeline();
+    static ResourceManager* getResourceManager();
 };

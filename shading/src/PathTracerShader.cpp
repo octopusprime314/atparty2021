@@ -3,7 +3,7 @@
 #include "EngineManager.h"
 #include "HLSLShader.h"
 #include "Logger.h"
-#include "RayTracingPipelineShader.h"
+#include "ResourceManager.h"
 #include "Bloom.h"
 #include "SSCompute.h"
 #include "TextureBroker.h"
@@ -135,9 +135,9 @@ PathTracerShader::PathTracerShader(std::string shaderName)
 
     UINT numSamples = _randomSampler.NumSamples() * _randomSampler.NumSampleSets();
 
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+    ResourceManager* resourceManager = EngineManager::getResourceManager();
 
-    rtPipeline->allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
+    resourceManager->allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
                                         sizeof(float) * 4 * numSamples, &_hemisphereSamplesUpload,
                                         L"HemisphereSamples");
 
@@ -146,7 +146,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     _hemisphereSamplesGPUBuffer->resource = _hemisphereSamplesUpload;
     _hemisphereSamplesGPUBuffer->count    = numSamples;
 
-    UINT descriptorVB = rtPipeline->createBufferSRV(_hemisphereSamplesGPUBuffer, numSamples,
+    UINT descriptorVB = resourceManager->createBufferSRV(_hemisphereSamplesGPUBuffer, numSamples,
                                     static_cast<UINT>(sizeof(float) * 4), DXGI_FORMAT_UNKNOWN);
 
     BYTE* mappedData = nullptr;
@@ -210,11 +210,11 @@ RenderTexture* PathTracerShader::getCompositedFrame()
 void PathTracerShader::runShader(std::vector<Light*>&  lights,
                                  ViewEventDistributor* viewEventDistributor)
 {
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+    ResourceManager* resourceManager = EngineManager::getResourceManager();
 
     DXLayer::instance()->setTimeStamp();
 
-    rtPipeline->buildAccelerationStructures();
+    resourceManager->updateResources();
 
     HLSLShader* shader = static_cast<HLSLShader*>(_shader);
     auto        cmdList = DXLayer::instance()->getCmdList();
@@ -279,16 +279,16 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     //auto           skyBoxTexture  = textureManager->getTexture(TEXTURE_LOCATION + "skybox-day");
     //shader->updateData("skyboxTexture", 0, skyBoxTexture, true);
 
-    shader->updateRTAS("rtAS", rtPipeline->getRTASDescHeap(), rtPipeline->getRTASGPUVA(), true);
+    shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
 
-    rtPipeline->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
-    rtPipeline->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
-    rtPipeline->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
+    resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
+    resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
+    resourceManager->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
 
-    rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
-    rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
-    rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
-    rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
 
     if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
     {
@@ -369,7 +369,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     //shader->updateData("normalSRV", 0, _normalPrimaryRays, true, false);
 
     //auto resourceBindings  = shader->_resourceIndexes;
-    //ID3D12DescriptorHeap* descriptorHeaps[] = {rtPipeline->getDescHeap().Get()};
+    //ID3D12DescriptorHeap* descriptorHeaps[] = {resourceManager->getDescHeap().Get()};
     //cmdList->SetDescriptorHeaps(1, descriptorHeaps);
     //
     //cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],
@@ -393,14 +393,14 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     //shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
 
-    //shader->updateRTAS("rtAS", rtPipeline->getRTASDescHeap(), rtPipeline->getRTASGPUVA(), true);
+    //shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
 
-    //rtPipeline->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
-    //rtPipeline->updateStructuredBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
+    //resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
+    //resourceManager->updateStructuredBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
 
-    //rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes);
-    //rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes);
-    //rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes);
+    //resourceManager->updateAndBindMaterialBuffer(shader->_resourceIndexes);
+    //resourceManager->updateAndBindAttributeBuffer(shader->_resourceIndexes);
+    //resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes);
 
     //shader->updateData("numPointLights", &pointLights, true);
     //shader->updateData("pointLightColors", lightColorsArray, true);
@@ -455,18 +455,18 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("pointLightOcclusionHistoryUAV", 0, _pointLightOcclusionHistory, true, true);
     shader->updateData("debugUAV", 0, _occlusionRays, true, true);
 
-    shader->updateRTAS("rtAS", rtPipeline->getRTASDescHeap(), rtPipeline->getRTASGPUVA(), true);
+    shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
 
     shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
 
-    rtPipeline->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
-    rtPipeline->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
-    rtPipeline->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
+    resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
+    resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
+    resourceManager->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
 
-    rtPipeline->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
-    rtPipeline->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
-    rtPipeline->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
-    rtPipeline->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
 
     shader->updateData("numPointLights", &pointLightList.lightCount, true);
     shader->updateData("pointLightColors", pointLightList.lightColorsArray, true);
@@ -482,7 +482,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("sunLightRadius", &sunLightRadius, true);
 
     //auto resourceBindings  = shader->_resourceIndexes;
-    //ID3D12DescriptorHeap* descriptorHeaps[] = {rtPipeline->getDescHeap().Get()};
+    //ID3D12DescriptorHeap* descriptorHeaps[] = {resourceManager->getDescHeap().Get()};
     //cmdList->SetDescriptorHeaps(1, descriptorHeaps);
     //
     //cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],

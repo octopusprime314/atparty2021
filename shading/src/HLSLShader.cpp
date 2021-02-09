@@ -3,7 +3,7 @@
 #include "EngineManager.h"
 #include "Entity.h"
 #include "Light.h"
-#include "RayTracingPipelineShader.h"
+#include "ResourceManager.h"
 #include "ShaderBroker.h"
 #include <fstream>
 #include <iostream>

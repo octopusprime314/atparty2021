@@ -5,7 +5,7 @@
 #include "DXGI.h"
 #include "Entity.h"
 #include "PresentTarget.h"
-#include "RayTracingPipelineShader.h"
+#include "ResourceManager.h"
 #include "ResourceBuffer.h"
 #include "d3dx12.h"
 #include <D3Dcompiler.h>

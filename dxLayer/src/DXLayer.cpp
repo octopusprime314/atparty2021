@@ -375,10 +375,10 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
     ImGui::Text(RTCompaction::GetLog().c_str());
 
     auto entityList = EngineManager::instance()->getEntityList();
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+    ResourceManager* resourceManager = EngineManager::getResourceManager();
 
     ImGui::Text(("TLAS count: " + std::to_string(entityList->size())).c_str());
-    ImGui::Text(("BLAS count: " + std::to_string(rtPipeline->getBLASCount())).c_str());
+    ImGui::Text(("BLAS count: " + std::to_string(resourceManager->getBLASCount())).c_str());
 
     ImGui::End();
 

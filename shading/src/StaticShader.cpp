@@ -30,7 +30,7 @@ void StaticShader::runShader(Entity* entity)
     // LOAD IN SHADER
     _shader->bind();
 
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+    ResourceManager* resourceManager = EngineManager::getResourceManager();
     auto viewEventDistributor = EngineManager::instance()->getViewManager();
     auto cmdList              = DXLayer::instance()->getCmdList();
 
@@ -55,13 +55,13 @@ void StaticShader::runShader(Entity* entity)
     int texturesPerMaterial = Material::TexturesPerMaterial;
     _shader->updateData("texturesPerMaterial", &texturesPerMaterial, false);
 
-    rtPipeline->updateTextureUnbounded(_shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, false);
-    rtPipeline->updateStructuredAttributeBufferUnbounded(_shader->_resourceIndexes["vertexBuffer"], nullptr, false);
+    resourceManager->updateTextureUnbounded(_shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, false);
+    resourceManager->updateStructuredAttributeBufferUnbounded(_shader->_resourceIndexes["vertexBuffer"], nullptr, false);
 
-    rtPipeline->updateAndBindMaterialBuffer(_shader->_resourceIndexes, false);
-    rtPipeline->updateAndBindAttributeBuffer(_shader->_resourceIndexes, false);
-    rtPipeline->updateAndBindNormalMatrixBuffer(_shader->_resourceIndexes, false);
-    rtPipeline->updateAndBindUniformMaterialBuffer(_shader->_resourceIndexes, false);
+    resourceManager->updateAndBindMaterialBuffer(_shader->_resourceIndexes, false);
+    resourceManager->updateAndBindAttributeBuffer(_shader->_resourceIndexes, false);
+    resourceManager->updateAndBindNormalMatrixBuffer(_shader->_resourceIndexes, false);
+    resourceManager->updateAndBindUniformMaterialBuffer(_shader->_resourceIndexes, false);
 
     // Special vao call that factors in frustum culling for the scene
     std::vector<VAO*>* vao = entity->getFrustumVAO();

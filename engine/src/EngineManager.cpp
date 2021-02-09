@@ -20,7 +20,7 @@
 #include "DeferredShader.h"
 #include <chrono>
 
-RayTracingPipelineShader* EngineManager::_rayTracingPipeline = nullptr;
+ResourceManager* EngineManager::_rayTracingPipeline = nullptr;
 GraphicsLayer             EngineManager::_graphicsLayer;
 EngineManager*            EngineManager::_engineManager = nullptr;
 
@@ -31,14 +31,14 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
 
     // initialize engine manager pointer so it can be used a singleton
     _engineManager = this;
-    _graphicsLayer = GraphicsLayer::DX12;
+    _graphicsLayer = GraphicsLayer::DXR_1_0_PATHTRACER;
     _generatorMode = false;
     _shadowEntity  = nullptr;
 
     DXLayer::initialize(hInstance, nCmdShow);
 
     _inputLayer         = new IOEventDistributor(argc, argv, hInstance, nCmdShow, "evil-suzanne");
-    _rayTracingPipeline = new RayTracingPipelineShader();
+    _rayTracingPipeline = new ResourceManager();
 
     // Load and compile all shaders for the shader broker
     auto thread = new std::thread(&ShaderBroker::compileShaders, ShaderBroker::instance());
@@ -250,9 +250,9 @@ EngineManager* EngineManager::instance(int* argc, char** argv, HINSTANCE hInstan
     return _engineManager;
 }
 
-GraphicsLayer             EngineManager::getGraphicsLayer() { return _graphicsLayer;      }
-std::vector<Entity*>*     EngineManager::getEntityList()    { return &_scene->entityList; }
-RayTracingPipelineShader* EngineManager::getRTPipeline()    { return _rayTracingPipeline; }
+GraphicsLayer         EngineManager::getGraphicsLayer()   { return _graphicsLayer;      }
+std::vector<Entity*>* EngineManager::getEntityList()      { return &_scene->entityList; }
+ResourceManager*      EngineManager::getResourceManager() { return _rayTracingPipeline; }
 
 void EngineManager::_preDraw()
 {
@@ -280,8 +280,8 @@ void EngineManager::_postDraw()
     {
         HLSLShader::setOM(_gBuffers->getTextures(), IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight);
 
-        RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
-        rtPipeline->buildAccelerationStructures();
+        ResourceManager* resourceManager = EngineManager::getResourceManager();
+        resourceManager->updateResources();
 
         _singleDrawRaster->startEntity();
 

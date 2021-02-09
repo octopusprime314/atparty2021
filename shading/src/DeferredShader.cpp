@@ -1,7 +1,7 @@
 #include "DeferredShader.h"
 #include "EngineManager.h"
 #include "HLSLShader.h"
-#include "RayTracingPipelineShader.h"
+#include "ResourceManager.h"
 
 DeferredShader::DeferredShader(std::string shaderName)
 {

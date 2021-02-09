@@ -3,7 +3,7 @@
 #include "EngineManager.h"
 #include "HLSLShader.h"
 #include "Logger.h"
-#include "RayTracingPipelineShader.h"
+#include "ResourceManager.h"
 #include "Bloom.h"
 #include "SSCompute.h"
 #include <iomanip>
@@ -129,7 +129,7 @@ void SVGFDenoiser::_updateKeyboard(int key, int x, int y)
 void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistributor,
                                         RenderTexture*        positionSRV)
 {
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+    ResourceManager* resourceManager = EngineManager::getResourceManager();
 
     auto cmdList = DXLayer::instance()->getCmdList();
 
@@ -171,8 +171,8 @@ void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistribut
 
     shader->updateData("screenSize", screenSize, true);
 
-    shader->updateData("prevInstanceWorldMatrixTransforms", rtPipeline->getPrevInstanceTransforms(), true);
-    shader->updateData("instanceWorldToObjectSpaceMatrixTransforms", rtPipeline->getWorldToObjectTransforms(), true);
+    shader->updateData("prevInstanceWorldMatrixTransforms", resourceManager->getPrevInstanceTransforms(), true);
+    shader->updateData("instanceWorldToObjectSpaceMatrixTransforms", resourceManager->getWorldToObjectTransforms(), true);
 
     auto threadGroupSize = shader->getThreadGroupSize();
 
@@ -190,7 +190,7 @@ void SVGFDenoiser::denoise(ViewEventDistributor* viewEventDistributor,
                            RenderTexture*        positionSRV,
                            RenderTexture*        normalSRV)
 {
-    RayTracingPipelineShader* rtPipeline = EngineManager::getRTPipeline();
+    ResourceManager* resourceManager = EngineManager::getResourceManager();
 
     auto cmdList = DXLayer::instance()->getCmdList();
 
