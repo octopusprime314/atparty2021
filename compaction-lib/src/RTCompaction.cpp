@@ -1,7 +1,46 @@
 #include "RTCompaction.h"
+#include <string>
+#include <queue>
+#include <iostream>
 
 namespace RTCompaction
 {
+    // Suballocation buffers
+    extern BufferSuballocator* _scratchPool;
+    extern BufferSuballocator* _resultPool;
+    extern BufferSuballocator* _compactionPool;
+    extern BufferSuballocator* _compactionSizeGpuPool;
+    extern BufferSuballocator* _compactionSizeCpuPool;
+
+    // Logger that gets cleared every call to NextFrame
+    extern std::string _buildLogger;
+    extern uint32_t    _uncompactedMemory;
+    extern uint32_t    _compactedMemory;
+
+    // Indicates to the library the command list latency for
+    // finished execution of an acceleration structure build on the
+    // original commmand buffer.  Typically an engine will have double
+    // or triple buffered command list execution cadence and so
+    // commandBufferLatency prevents compaction until the command buffer
+    // responsible for the original build is reused for the compaction.
+    extern uint32_t _commandListLatency;
+    extern uint64_t _commandListIndex;
+
+    // The maximum amount of resident memory that can be used for compaction copies
+    // to reduce the overall memory occupancy of the result and compaction buffer
+    // both being transiently in memory.
+    extern uint32_t _maxTransientCompactionMemory;
+
+    // Every suballocator block gets allocated with a configurable size
+    extern uint32_t _suballocationBlockSize;
+
+    // Limits the amount of transient compaction buffer memory
+    extern uint32_t _currentCompactionMemorySize;
+
+    // Queues used to manage compaction events
+    extern std::queue<ASBuffers*> _asBufferCompactionQueue;
+    extern std::queue<ASBuffers*> _asBufferCompleteQueue;
+    extern std::queue<ASBuffers*> _asBufferReleaseQueue;
 
     constexpr uint32_t SizeOfCompactionDescriptor           = sizeof(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC);
     constexpr uint32_t CompactionSizeSuballocationBlockSize = 65536;
@@ -22,6 +61,104 @@ namespace RTCompaction
     std::queue<ASBuffers*> _asBufferCompactionQueue;
     std::queue<ASBuffers*> _asBufferCompleteQueue;
     std::queue<ASBuffers*> _asBufferReleaseQueue;
+
+    bool CopyCompaction(ID3D12Device5* const              device,
+                        ID3D12GraphicsCommandList4* const commandList,
+                        ASBuffers**                       buffers,
+                        const uint32_t                    compactionCount)
+    {
+        for (uint32_t compactionIndex = 0; compactionIndex < compactionCount; compactionIndex++)
+        {
+            // Don't compact if not requested or already complete
+            if (buffers[compactionIndex]->isCompacted         == false &&
+                buffers[compactionIndex]->requestedCompaction == true)
+            {
+                unsigned char* data           = nullptr;
+                uint64_t       compactionSize = 0;
+                uint32_t       offset         = buffers[compactionIndex]->compactionSizeCpuMemory.parentResourceOffset;
+
+                // Map the readback gpu memory to system memory to fetch compaction size
+                D3D12_RANGE readbackBufferRange{offset, offset + SizeOfCompactionDescriptor};
+                buffers[compactionIndex]->compactionSizeCpuMemory.parentResource->Map(0, &readbackBufferRange, (void**)&data);
+                memcpy(&compactionSize, &data[offset], SizeOfCompactionDescriptor);
+
+                // If zero compactions have been performed but the transient memory budget isn't big enough
+                // still move forward with the compaction
+                if ((_currentCompactionMemorySize != 0) &&
+                    ((_currentCompactionMemorySize + compactionSize) > _maxTransientCompactionMemory))
+                {
+                    return false;
+                }
+                _currentCompactionMemorySize += compactionSize;
+
+                // Suballocate the gpu memory needed for compaction copy
+                buffers[compactionIndex]->compactionGpuMemory = _compactionPool->CreateSubAllocation(device,
+                                                                                                     compactionSize,
+                                                                                                     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
+
+                _totalCompactedMemory += buffers[compactionIndex]->compactionGpuMemory.alignedBufferSizeInBytes;
+
+                // Copy the result buffer into the compacted buffer
+                commandList->CopyRaytracingAccelerationStructure(buffers[compactionIndex]->compactionGpuMemory.GetGPUVA(),
+                                                                 buffers[compactionIndex]->resultGpuMemory.GetGPUVA(),
+                                                                 D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT);
+
+                // Tag as compaction complete
+                buffers[compactionIndex]->isCompacted = true;
+
+#if _DEBUG
+                OutputDebugString((
+                    "Uncompacted memory: " + std::to_string(buffers[compactionIndex]->resultGpuMemory.alignedBufferSizeInBytes) + "\n"
+                    "Compacted memory: "   + std::to_string(compactionSize)                                                     + "\n").c_str());
+#endif
+            }
+        }
+        return true;
+    }
+
+    void PostBuildRelease(ASBuffers**    buffers,
+                          const uint32_t buildCount)
+    {
+        for (uint32_t buildIndex = 0; buildIndex < buildCount; buildIndex++)
+        {
+            // Only delete compaction size and result buffers if compaction was done
+            if (buffers[buildIndex]->isCompacted == true)
+            {
+                // Deallocate all the buffers used to create a compaction AS buffer
+                _resultPool->FreeSubAllocation(buffers[buildIndex]->resultGpuMemory);
+                _compactionSizeGpuPool->FreeSubAllocation(buffers[buildIndex]->compactionSizeGpuMemory);
+                _compactionSizeCpuPool->FreeSubAllocation(buffers[buildIndex]->compactionSizeCpuMemory);
+            }
+            _scratchPool->FreeSubAllocation(buffers[buildIndex]->scratchGpuMemory);
+        }
+    }
+
+    void ReleaseAccelerationStructures(ASBuffers** buffers, const uint32_t removeCount)
+    {
+        for (uint32_t buildIndex = 0; buildIndex < removeCount; buildIndex++)
+        {
+            // Deallocate all the buffers used for acceleration structures
+            if (buffers[buildIndex]->scratchGpuMemory.parentResource != nullptr)
+            {
+                _scratchPool->FreeSubAllocation(buffers[buildIndex]->scratchGpuMemory);
+            }
+            if (buffers[buildIndex]->resultGpuMemory.parentResource != nullptr)
+            {
+                _resultPool->FreeSubAllocation(buffers[buildIndex]->resultGpuMemory);
+            }
+            if (buffers[buildIndex]->compactionGpuMemory.parentResource != nullptr)
+            {
+                _compactionPool->FreeSubAllocation(buffers[buildIndex]->compactionGpuMemory);
+            }
+
+            _totalUncompactedMemory -= buffers[buildIndex]->resultGpuMemory.alignedBufferSizeInBytes;
+            _totalCompactedMemory   -= buffers[buildIndex]->compactionGpuMemory.alignedBufferSizeInBytes;
+
+            // This prevents compaction from being performed if an acceleration structure
+            // gets allocated and then deallocated between round trips
+            buffers[buildIndex]->requestedCompaction = false;
+        }
+    }
 
     void NextFrame(ID3D12Device5* const              device,
                    ID3D12GraphicsCommandList4* const commandList)
@@ -243,77 +380,6 @@ namespace RTCompaction
         return buffers;
     }
 
-    bool CopyCompaction(ID3D12Device5* const              device,
-                        ID3D12GraphicsCommandList4* const commandList,
-                        ASBuffers**                       buffers,
-                        const uint32_t                    compactionCount)
-    {
-        for (uint32_t compactionIndex = 0; compactionIndex < compactionCount; compactionIndex++)
-        {
-            // Don't compact if not requested or already complete
-            if (buffers[compactionIndex]->isCompacted         == false &&
-                buffers[compactionIndex]->requestedCompaction == true)
-            {
-                unsigned char* data           = nullptr;
-                uint64_t       compactionSize = 0;
-                uint32_t       offset         = buffers[compactionIndex]->compactionSizeCpuMemory.parentResourceOffset;
-
-                // Map the readback gpu memory to system memory to fetch compaction size
-                D3D12_RANGE readbackBufferRange{offset, offset + SizeOfCompactionDescriptor};
-                buffers[compactionIndex]->compactionSizeCpuMemory.parentResource->Map(0, &readbackBufferRange, (void**)&data);
-                memcpy(&compactionSize, &data[offset], SizeOfCompactionDescriptor);
-
-                // If zero compactions have been performed but the transient memory budget isn't big enough
-                // still move forward with the compaction
-                if ((_currentCompactionMemorySize != 0) &&
-                    ((_currentCompactionMemorySize + compactionSize) > _maxTransientCompactionMemory))
-                {
-                    return false;
-                }
-                _currentCompactionMemorySize += compactionSize;
-
-                // Suballocate the gpu memory needed for compaction copy
-                buffers[compactionIndex]->compactionGpuMemory = _compactionPool->CreateSubAllocation(device,
-                                                                                                     compactionSize,
-                                                                                                     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
-
-                _totalCompactedMemory += buffers[compactionIndex]->compactionGpuMemory.alignedBufferSizeInBytes;
-
-                // Copy the result buffer into the compacted buffer
-                commandList->CopyRaytracingAccelerationStructure(buffers[compactionIndex]->compactionGpuMemory.GetGPUVA(),
-                                                                 buffers[compactionIndex]->resultGpuMemory.GetGPUVA(),
-                                                                 D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT);
-
-                // Tag as compaction complete
-                buffers[compactionIndex]->isCompacted = true;
-
-#if _DEBUG
-                OutputDebugString((
-                    "Uncompacted memory: " + std::to_string(buffers[compactionIndex]->resultGpuMemory.alignedBufferSizeInBytes) + "\n"
-                    "Compacted memory: "   + std::to_string(compactionSize)                                                     + "\n").c_str());
-#endif
-            }
-        }
-        return true;
-    }
-
-    void PostBuildRelease(ASBuffers**    buffers,
-                          const uint32_t buildCount)
-    {
-        for (uint32_t buildIndex = 0; buildIndex < buildCount; buildIndex++)
-        {
-            // Only delete compaction size and result buffers if compaction was done
-            if (buffers[buildIndex]->isCompacted == true)
-            {
-                // Deallocate all the buffers used to create a compaction AS buffer
-                _resultPool->FreeSubAllocation(buffers[buildIndex]->resultGpuMemory);
-                _compactionSizeGpuPool->FreeSubAllocation(buffers[buildIndex]->compactionSizeGpuMemory);
-                _compactionSizeCpuPool->FreeSubAllocation(buffers[buildIndex]->compactionSizeCpuMemory);
-            }
-            _scratchPool->FreeSubAllocation(buffers[buildIndex]->scratchGpuMemory);
-        }
-    }
-
     void RemoveAccelerationStructures(ASBuffers**    buffers,
                                       const uint32_t removeCount)
     {
@@ -325,35 +391,8 @@ namespace RTCompaction
         }
     }
 
-    void ReleaseAccelerationStructures(ASBuffers** buffers, const uint32_t removeCount)
+    const char* GetLog()
     {
-        for (uint32_t buildIndex = 0; buildIndex < removeCount; buildIndex++)
-        {
-            // Deallocate all the buffers used for acceleration structures
-            if (buffers[buildIndex]->scratchGpuMemory.parentResource != nullptr)
-            {
-                _scratchPool->FreeSubAllocation(buffers[buildIndex]->scratchGpuMemory);
-            }
-            if (buffers[buildIndex]->resultGpuMemory.parentResource != nullptr)
-            {
-                _resultPool->FreeSubAllocation(buffers[buildIndex]->resultGpuMemory);
-            }
-            if (buffers[buildIndex]->compactionGpuMemory.parentResource != nullptr)
-            {
-                _compactionPool->FreeSubAllocation(buffers[buildIndex]->compactionGpuMemory);
-            }
-
-            _totalUncompactedMemory -= buffers[buildIndex]->resultGpuMemory.alignedBufferSizeInBytes;
-            _totalCompactedMemory   -= buffers[buildIndex]->compactionGpuMemory.alignedBufferSizeInBytes;
-
-            // This prevents compaction from being performed if an acceleration structure
-            // gets allocated and then deallocated between round trips
-            buffers[buildIndex]->requestedCompaction = false;
-        }
-    }
-
-    std::string GetLog()
-    {
-        return _buildLogger;
+        return _buildLogger.c_str();
     }
 }

@@ -372,7 +372,7 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
 
     ImGui::Text(_perfData.c_str());
 
-    ImGui::Text(RTCompaction::GetLog().c_str());
+    ImGui::Text(RTCompaction::GetLog());
 
     auto entityList = EngineManager::instance()->getEntityList();
     ResourceManager* resourceManager = EngineManager::getResourceManager();
