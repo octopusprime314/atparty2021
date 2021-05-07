@@ -21,6 +21,7 @@
 
 #pragma once
 #include "ColorPath.h"
+#include "Effect.h"
 #include "EventSubscriber.h"
 #include "MVP.h"
 #include "Shader.h"
@@ -45,7 +46,7 @@ enum class LightType
 // The amount of milliseconds in 24 hours
 const uint64_t dayLengthMilliseconds = 24 * 60 * 60 * 1000;
 
-class Light
+class Light : public Effect
 {
   private:
     VectorPath*   _vectorPath{nullptr};
@@ -72,7 +73,7 @@ class Light
 
   public:
     Light(const SceneLight& sceneLight);
-    Light(ViewEvents* eventWrapper, MVP mvp, LightType type, Vector4 color,
+    Light(ViewEvents* eventWrapper, MVP mvp, LightType type, EffectType effect, Vector4 color,
           Vector4 position, Vector4 scale);
     ~Light();
 

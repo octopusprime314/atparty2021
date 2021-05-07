@@ -5,6 +5,7 @@
 #include "Logger.h"
 #include "PathTracerShader.h"
 #include "StaticShader.h"
+#include "EffectShader.h"
 #include "DeferredShader.h"
 #include <algorithm>
 #include <cctype>
@@ -125,6 +126,10 @@ void ShaderBroker::_gatherShaderNames()
                         else if (mapName.find("deferredShader") != std::string::npos)
                         {
                             _shaders[upperCaseMapName] = new DeferredShader(mapName);
+                        }
+                        else if (mapName.find("fireShader") != std::string::npos)
+                        {
+                            _shaders[upperCaseMapName] = new EffectShader(mapName);
                         }
                         else if (mapName.find("pathTracerShader") != std::string::npos)
                         {

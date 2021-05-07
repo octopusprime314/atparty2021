@@ -233,6 +233,7 @@ void EngineManager::processLights(std::vector<Light*>&  lights,
             pointLightList.lightRangesArray[lightRangeIndex++] = light->getScale().getFlatBuffer()[0];
             totalLights++;
         }
+        light->render();
     }
     pointLightList.lightCount = pointLights;
 }

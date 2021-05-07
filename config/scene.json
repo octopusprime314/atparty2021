@@ -68,7 +68,37 @@
     "entities": [],
     "fbx_scene": "cave_lod1.gltf",
     "fluids": [],
-    "lights": [],
+    "lights": [
+      {
+        "color": {
+          "b": 0.0,
+          "g": 0.0,
+          "r": 1.0
+        },
+        "color_path": "",
+        "effect_type": "FIRE",
+        "light_name": "SHOUTOUTLIGHT",
+        "light_type": "POINT",
+        "locked": "",
+        "rotation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "scale": {
+          "x": 16.0,
+          "y": 16.0,
+          "z": 16.0
+        },
+        "translation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "vector_path": "",
+        "waypoint_path": ""
+      }
+    ],
     "name": "above_ground",
     "skybox_day": "skybox-day",
     "skybox_night": "skybox-night",
