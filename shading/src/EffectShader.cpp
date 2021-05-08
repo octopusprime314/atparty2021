@@ -26,11 +26,11 @@ void EffectShader::runShader(Effect* effectObject, float seconds)
     _shader->bindAttributes(nullptr, false);
     
     auto cameraMVP = effectObject->getCameraMVP();
-
-    auto view = cameraMVP.getViewMatrix();
+    
+    auto view = EngineManager::instance()->getViewManager()->getView();
     _shader->updateData("view", view.getFlatBuffer());
 
-    auto projection = cameraMVP.getProjectionMatrix();
+    auto projection = EngineManager::instance()->getViewManager()->getProjection();
     _shader->updateData("projection", projection.getFlatBuffer());
 
     if (effectObject->getType() == EffectType::Fire || effectObject->getType() == EffectType::Smoke)

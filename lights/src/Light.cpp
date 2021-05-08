@@ -279,4 +279,6 @@ void Light::_updateKinematics(int milliSeconds)
         _colorPath->updateColor(milliSeconds, _color);
         // LOG_INFO(_color);
     }
+
+    _updateTime(milliSeconds);
 }

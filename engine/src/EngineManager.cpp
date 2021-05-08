@@ -233,7 +233,6 @@ void EngineManager::processLights(std::vector<Light*>&  lights,
             pointLightList.lightRangesArray[lightRangeIndex++] = light->getScale().getFlatBuffer()[0];
             totalLights++;
         }
-        light->render();
     }
     pointLightList.lightCount = pointLights;
 }
@@ -303,6 +302,12 @@ void EngineManager::_postDraw()
         processLights(lightList, _viewManager, pointLightList, RandomInsertAndRemoveEntities);
 
         _deferredShader->runShader(&pointLightList, _viewManager, *_gBuffers);
+
+        // Render billboard effects associated with lights
+        for (Light* light : lightList)
+        {
+            light->render();
+        }
 
         HLSLShader::releaseOM(rts);
 
