@@ -8,7 +8,9 @@
 #include <random>
 
 Light::Light(const SceneLight& sceneLight)
-    : _type(sceneLight.lightType), _name(sceneLight.name), _color(sceneLight.color),
+    : Effect(ModelBroker::instance()->getViewManager()->getEventWrapper(), sceneLight.effectType,
+             sceneLight.position, sceneLight.rotation, sceneLight.scale),
+      _type(sceneLight.lightType), _name(sceneLight.name), _color(sceneLight.color),
       _milliSecondTime(0)
 {
     if (sceneLight.colorPath != "")
@@ -46,9 +48,9 @@ Light::Light(const SceneLight& sceneLight)
         std::bind(&Light::_updateKinematics, this, std::placeholders::_1));
 }
 
-Light::Light(ViewEvents* eventWrapper, MVP mvp, LightType type, Vector4 color,
+Light::Light(ViewEvents* eventWrapper, MVP mvp, LightType type, EffectType effect, Vector4 color,
              Vector4 position, Vector4 scale)
-    : _type(type),
+    : Effect(eventWrapper, effect, position, Vector4(0.0, 0.0, 0.0, 1.0), scale), _type(type),
       _lightMVP(mvp), _color(color), _milliSecondTime(0)
 {
 
@@ -174,7 +176,15 @@ void Light::_updateTime(int time)
 
 void Light::render()
 {
-
+    if (_effectType != EffectType::None && _color.getw() > 0.0)
+    {
+        // Bring the time back to real time for the effects shader
+        // The amount of milliseconds in 24 hours
+        uint64_t updateTimeAmplified = dayLengthMilliseconds / (60 * 1000);
+        float    realTimeMilliSeconds =
+            static_cast<float>(_milliSecondTime) / static_cast<float>(updateTimeAmplified);
+        _effectShader->runShader(this, realTimeMilliSeconds / 1000.f);
+    }
 }
 
 void Light::renderShadow(std::vector<Entity*> entityList){};

@@ -80,6 +80,19 @@ SceneLight build_light(nlohmann::json& l)
         light.lightType = LightType::SHADOWED_SPOTLIGHT;
     }
 
+    if (l["effect_type"] == "NONE")
+    {
+        light.effectType = EffectType::None;
+    }
+    else if (l["effect_type"] == "FIRE")
+    {
+        light.effectType = EffectType::Fire;
+    }
+    else if (l["effect_type"] == "SMOKE")
+    {
+        light.effectType = EffectType::Smoke;
+    }
+
     auto it = l.find("vector_path");
     if (it != l.end())
     {

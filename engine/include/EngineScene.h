@@ -2,6 +2,7 @@
 
 #include "Entity.h"
 #include "Light.h"
+#include "Effect.h"
 #include <vector>
 
 struct SceneEntity
@@ -21,6 +22,7 @@ struct SceneLight
     std::string lockedName;
     int         lockedIdx;
     LightType   lightType;
+    EffectType  effectType;
     Vector4     position;
     Vector4     rotation;
     Vector4     scale;

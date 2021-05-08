@@ -745,12 +745,13 @@ void BuildGltfMeshes(const Document*           document,
             for (auto& light : jd["lights"])
             {
                 SceneLight sceneLight;
-
+                
                 auto color           = light["color"];
                 auto intensity       = light["intensity"];
 
                 sceneLight.color     = Vector4(color[0], color[1], color[2]);
                 sceneLight.lightType = LightType::POINT;
+                sceneLight.effectType = EffectType::None;
                 sceneLight.name      = light["name"];
                 sceneLight.scale     = Vector4(intensity, intensity, intensity) / 10.0;
                 sceneLight.lockedIdx = -1;
