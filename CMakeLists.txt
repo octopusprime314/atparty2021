@@ -90,6 +90,7 @@ source_group("dxLayer"                FILES  ${DX_HEADER_FILES} ${DX_SRC_FILES})
 source_group("imgui"                  FILES  ${IMGUI_HEADER_FILES})
 source_group("compaction-lib"         FILES  ${COMPACTION_HEADER_FILES} ${COMPACTION_SRC_FILES})
 
+if (DXR EQUAL "1")
 add_executable(atparty2021
                ${MODEL_SRC_FILES}
                ${SHADING_SRC_FILES}
@@ -117,16 +118,49 @@ add_executable(atparty2021
                ${HLSL_VS_SHADER_FILES}
                ${HLSL_PS_SHADER_FILES}
                ${HLSL_CS_SHADER_FILES}
-if (DXR EQUAL "1")
                ${HLSL_CS_DXR1_1SHADER_FILES}
                ${HLSL_DXR_SHADER_FILES}
-endif()
                ${VIEW_SRC_FILES}
                ${DX_HEADER_FILES}
                ${DX_SRC_FILES}
                ${IMGUI_HEADER_FILES}
                ${COMPACTION_HEADER_FILES}
                ${COMPACTION_SRC_FILES})
+elseif (DXR EQUAL "0")
+add_executable(atparty2021
+               ${MODEL_SRC_FILES}
+               ${SHADING_SRC_FILES}
+               ${AUDIO_SRC_FILES}
+               ${MODEL_HEADER_FILES}
+               ${SHADING_HEADER_FILES}
+               ${AUDIO_HEADER_FILES}
+               ${DRAWBUFFERS_HEADER_FILES} 
+               ${DRAWBUFFERS_SRC_FILES}
+               ${ENGINE_HEADER_FILES}
+               ${ENGINE_SRC_FILES}
+               ${MATH_HEADER_FILES}
+               ${MATH_SRC_FILES}
+               ${RENDERER_HEADER_FILES} 
+               ${RENDERER_SRC_FILES}
+               ${EFFECTS_HEADER_FILES} 
+               ${EFFECTS_SRC_FILES}
+               ${TEXTURE_HEADER_FILES}
+               ${TEXTURE_SRC_FILES}
+               ${IO_HEADER_FILES}
+               ${IO_SRC_FILES}
+               ${LIGHTS_HEADER_FILES}
+               ${LIGHTS_SRC_FILES}
+               ${HLSL_INCLUDE_SHADER_FILES}
+               ${HLSL_VS_SHADER_FILES}
+               ${HLSL_PS_SHADER_FILES}
+               ${HLSL_CS_SHADER_FILES}
+               ${VIEW_SRC_FILES}
+               ${DX_HEADER_FILES}
+               ${DX_SRC_FILES}
+               ${IMGUI_HEADER_FILES}
+               ${COMPACTION_HEADER_FILES}
+               ${COMPACTION_SRC_FILES})
+endif()
 
 target_compile_features(atparty2021 PRIVATE cxx_range_for)
 
