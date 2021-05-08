@@ -6,6 +6,7 @@ set(TLS_VERIFY OFF)
 include(InstallRequiredSystemLibraries)
 include(FetchContent)
 
+set(DXR 0)
 
 set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/atparty2021-dist")
 
@@ -42,8 +43,10 @@ FILE(GLOB LIGHTS_HEADER_FILES        ${CMAKE_SOURCE_DIR}/lights/include/*.h)
 FILE(GLOB HLSL_VS_SHADER_FILES       ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/*.hlsl)
 FILE(GLOB HLSL_PS_SHADER_FILES       ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/*.hlsl)
 FILE(GLOB HLSL_CS_SHADER_FILES       ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/*.hlsl)
-FILE(GLOB HLSL_CS_DXR1_1SHADER_FILES ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/*.hlsl)
-FILE(GLOB HLSL_DXR_SHADER_FILES      ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/*.hlsl)
+if (DXR EQUAL "1")
+    FILE(GLOB HLSL_CS_DXR1_1SHADER_FILES ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/*.hlsl)
+    FILE(GLOB HLSL_DXR_SHADER_FILES      ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/*.hlsl)
+endif()
 FILE(GLOB HLSL_INCLUDE_SHADER_FILES  ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/*.hlsl)
 FILE(GLOB VIEW_HEADER_FILES          ${CMAKE_SOURCE_DIR}/view/include/*.h)
 FILE(GLOB DX_HEADER_FILES            ${CMAKE_SOURCE_DIR}/dxLayer/include/*.h)
@@ -78,8 +81,10 @@ source_group("shaders/hlsl/include"   FILES  ${HLSL_INCLUDE_SHADER_FILES})
 source_group("shaders/hlsl/vs"        FILES  ${HLSL_VS_SHADER_FILES})
 source_group("shaders/hlsl/ps"        FILES  ${HLSL_PS_SHADER_FILES})
 source_group("shaders/hlsl/cs"        FILES  ${HLSL_CS_SHADER_FILES})
-source_group("shaders/hlsl/cs/dxr1_1" FILES  ${HLSL_CS_DXR1_1SHADER_FILES})
-source_group("shaders/hlsl/dxr"       FILES  ${HLSL_DXR_SHADER_FILES})
+if (DXR EQUAL "1")
+    source_group("shaders/hlsl/cs/dxr1_1" FILES  ${HLSL_CS_DXR1_1SHADER_FILES})
+    source_group("shaders/hlsl/dxr"       FILES  ${HLSL_DXR_SHADER_FILES})
+endif()
 source_group("view"                   FILES  ${VIEW_HEADER_FILES} ${VIEW_SRC_FILES})
 source_group("dxLayer"                FILES  ${DX_HEADER_FILES} ${DX_SRC_FILES})
 source_group("imgui"                  FILES  ${IMGUI_HEADER_FILES})
@@ -112,8 +117,10 @@ add_executable(atparty2021
                ${HLSL_VS_SHADER_FILES}
                ${HLSL_PS_SHADER_FILES}
                ${HLSL_CS_SHADER_FILES}
+if (DXR EQUAL "1")
                ${HLSL_CS_DXR1_1SHADER_FILES}
                ${HLSL_DXR_SHADER_FILES}
+endif()
                ${VIEW_SRC_FILES}
                ${DX_HEADER_FILES}
                ${DX_SRC_FILES}
@@ -131,11 +138,13 @@ if (MSVC)
     # Disable individual compilation of hlsl include files
     set_source_files_properties(${HLSL_INCLUDE_SHADER_FILES}   PROPERTIES VS_TOOL_OVERRIDE "None")
     # Compile folders for hlsl
-    set_source_files_properties(${HLSL_VS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Vertex  VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
-    set_source_files_properties(${HLSL_PS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Pixel   VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
-    set_source_files_properties(${HLSL_CS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename)_compiled.h\"         -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
-    set_source_files_properties(${HLSL_DXR_SHADER_FILES}       PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename).cso\"        /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename)_compiled.h\"        -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Library VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT "")
-    set_source_files_properties(${HLSL_CS_DXR1_1SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename)_compiled.h\"  -Od /Zi -WX -Qembed_debug /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
+    set_source_files_properties(${HLSL_VS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/vs/%(Filename)_compiled.h\"         -O3 /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Vertex  VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
+    set_source_files_properties(${HLSL_PS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/ps/%(Filename)_compiled.h\"         -O3 /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Pixel   VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
+    set_source_files_properties(${HLSL_CS_SHADER_FILES}        PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename).cso\"         /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/%(Filename)_compiled.h\"         -O3 /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.2 VS_SHADER_ENTRYPOINT main)
+if (DXR EQUAL "1")
+    set_source_files_properties(${HLSL_DXR_SHADER_FILES}       PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename).cso\"        /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename)_compiled.h\"        -O3 /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Library VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT "")
+    set_source_files_properties(${HLSL_CS_DXR1_1SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename)_compiled.h\"  -O3 /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
+endif()
 endif()
 
 target_link_libraries(atparty2021           legacy_stdio_definitions.lib)
