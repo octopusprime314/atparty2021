@@ -18,6 +18,8 @@
 #include "StaticShader.h"
 #include "MRTFrameBuffer.h"
 #include "DeferredShader.h"
+#include "MergeShader.h"
+#include "SSAO.h"
 #include <chrono>
 
 ResourceManager* EngineManager::_rayTracingPipeline = nullptr;
@@ -73,6 +75,7 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
         _pathTracerShader = static_cast<PathTracerShader*>(ShaderBroker::instance()->getShader("pathTracerShader"));
     }
 
+    _ssaoPass         = new SSAO();
     _bloom            = new Bloom();
     _add              = new SSCompute("add",
                                        IOEventDistributor::screenPixelWidth,
@@ -157,7 +160,7 @@ void EngineManager::processLights(std::vector<Light*>&  lights,
     unsigned int pointLights = 0;
 
     Vector4 cameraPos  = viewEventDistributor->getCameraPos();
-    cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
+    //cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
 
     static unsigned int previousTime = 0;
     static constexpr unsigned int lightGenInternalMs = 250;
@@ -292,6 +295,9 @@ void EngineManager::_postDraw()
 
         HLSLShader::releaseOM(_gBuffers->getTextures());
 
+        // Only compute ssao for opaque objects
+        _ssaoPass->computeSSAO(_gBuffers, _viewManager);
+
         std::vector<RenderTexture> rts;
         rts.push_back(*_renderTexture);
         rts.push_back(*_depthTexture);
@@ -301,7 +307,7 @@ void EngineManager::_postDraw()
         PointLightList pointLightList;
         processLights(lightList, _viewManager, pointLightList, RandomInsertAndRemoveEntities);
 
-        _deferredShader->runShader(&pointLightList, _viewManager, *_gBuffers);
+        _deferredShader->runShader(&pointLightList, _viewManager, *_gBuffers, static_cast<RenderTexture*>(_ssaoPass->getBlur()->getTexture()));
 
         // Render billboard effects associated with lights
         for (Light* light : lightList)
@@ -310,6 +316,46 @@ void EngineManager::_postDraw()
         }
 
         HLSLShader::releaseOM(rts);
+
+        Bloom*     bloom = getBloomShader();
+        SSCompute* add   = getAddShader();
+
+        add->uavBarrier();
+
+        // Compute bloom from finalized render target
+        bloom->compute(_renderTexture);
+
+        // THE FINAL ADD TO THE COMPOSITION RENDER TARGET CAUSES CORRUPTION
+        // IN THE FORM OF OVERLAYING A RANDOM COLLECTION TEXTURE IN THE TOP
+        // LEFT CORNER OF THE SCREEN...LOOKS LIKE DOWNSAMPLING OR SOME PASS
+        // OF THE BLOOM SHADERS ARE BEING WRITTEN TO THE FINAL COMPOSITION???
+
+        //ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+        //barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        //barrierDesc[0].Transition.pResource =
+        //   bloom->getTexture()->getResource()->getResource().Get();
+        //barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        //barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        //barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        //cmdList->ResourceBarrier(1, barrierDesc);
+
+        // Adds bloom data back into the composite render target
+        add->compute(bloom->getTexture(), _renderTexture);
+
+        ///ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+        ///barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        ///barrierDesc[0].Transition.pResource =
+        ///   bloom->getTexture()->getResource()->getResource().Get();
+        ///barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        ///barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        ///barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        ///cmdList->ResourceBarrier(1, barrierDesc);
+
+        add->uavBarrier();
+
+        RenderTexture& velocityTexture = _gBuffers->getTextures()[3];
+        auto mergeShader = static_cast<MergeShader*>(ShaderBroker::instance()->getShader("mergeShader"));
+        mergeShader->runShader(_renderTexture, &velocityTexture);
 
         finalRender = _renderTexture;
     }

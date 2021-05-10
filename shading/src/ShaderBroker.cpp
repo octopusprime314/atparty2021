@@ -7,6 +7,8 @@
 #include "StaticShader.h"
 #include "EffectShader.h"
 #include "DeferredShader.h"
+#include "SSAOShader.h"
+#include "MergeShader.h"
 #include <algorithm>
 #include <cctype>
 
@@ -134,6 +136,14 @@ void ShaderBroker::_gatherShaderNames()
                         else if (mapName.find("pathTracerShader") != std::string::npos)
                         {
                             _shaders[upperCaseMapName] = new PathTracerShader(mapName);
+                        }
+                        else if (mapName.find("ssaoShader") != std::string::npos)
+                        {
+                            _shaders[upperCaseMapName] = new SSAOShader(mapName);
+                        }
+                        else if (mapName.find("mergeShader") != std::string::npos)
+                        {
+                            _shaders[upperCaseMapName] = new MergeShader(mapName);
                         }
                         else
                         {

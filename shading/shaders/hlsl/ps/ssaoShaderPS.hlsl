@@ -44,7 +44,7 @@ PixelOut main(float4 posH : SV_POSITION, float2 uv : UVOUT)
 
         float    occlusion = 0.0;
         float3   normal    = normalTexture.Sample(textureSampler, uv).rgb;
-        float3   randomVec = noiseTexture.Sample(textureSampler, uv * noiseScale).xyz;
+        float3   randomVec = noiseTexture.SampleLevel(textureSampler, uv * noiseScale, 0).xyz;
         float3   tangent   = normalize(randomVec - (normal * dot(randomVec, normal)));
         float3   bitangent = cross(normal, tangent);
         float3x3 TBN       = float3x3(tangent, bitangent, normal);

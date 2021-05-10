@@ -12,11 +12,13 @@ SamplerState bilinearWrap : register(s0);
 cbuffer objectData : register(b0)
 {
     uint     instanceBufferIndex;
+    //float4x4 prevModelMatrix;
     float4x4 modelMatrix;
 }
 
 cbuffer globalData : register(b1)
 {
+    float4x4 prevViewTransform;
     float4x4 projTransform;
     float4x4 viewTransform;
     float4x4 inverseView;
@@ -25,9 +27,10 @@ cbuffer globalData : register(b1)
 }
 struct MRT
 {
-    float4 color    : SV_Target0;
-    float4 normal   : SV_Target1;
-    float4 position : SV_Target2;
+    float4 color          : SV_Target0;
+    float4 normal         : SV_Target1;
+    float4 position       : SV_Target2;
+    float2 velocityBuffer : SV_Target3;
 };
 
 #include "../include/utils.hlsl"
@@ -35,6 +38,8 @@ struct MRT
 MRT main(in float4 position    : SV_POSITION,
          in float3 normal      : NORMALOUT,
          in float2 uv          : UVOUT,
+         in float4 prevPos     : PREVPOSOUT,
+         in float4 currPos     : CURRPOSOUT,
          in uint   primitiveID : SV_PrimitiveID)
 {
 
@@ -68,6 +73,11 @@ MRT main(in float4 position    : SV_POSITION,
     output.color    = float4(albedo, transmittance);
     output.normal   = float4(normal, roughness);
     output.position = float4(position.xyz, metallic);
+
+    float2 currProjPos = currPos.xy;
+    float2 prevProjPos = prevPos.xy;
+
+    output.velocityBuffer = float2(currProjPos - prevProjPos);
 
     return output;
 }

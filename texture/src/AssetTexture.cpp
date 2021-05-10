@@ -42,7 +42,7 @@ AssetTexture::AssetTexture(void* data, UINT width, UINT height,
 {
 
     _build2DTextureDX(data, width, height, cmdList, device);
-    buildMipLevels();
+    //buildMipLevels();
 }
 
 AssetTexture::AssetTexture(void* data, UINT width, UINT height) : Texture(""), _alphaValues(false)

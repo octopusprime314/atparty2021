@@ -40,5 +40,6 @@ class DeferredShader : public ShaderBase
     virtual ~DeferredShader();
     void runShader(PointLightList*       pointLightList,
                    ViewEventDistributor* viewEventDistributor,
-                   MRTFrameBuffer&       mrtFBO);
+                   MRTFrameBuffer&       mrtFBO,
+                   RenderTexture*        ssaoTexture);
 };

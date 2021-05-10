@@ -231,6 +231,25 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT byteSize, UINT width, 
                            &rowByteSize[0],
                            &data[0]);
     }
+    else
+    {
+        UINT8* mappedData = nullptr;
+        _uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+        memcpy(mappedData, initData, byteSize);
+        _uploadBuffer->Unmap(0, nullptr);
+        mappedData = nullptr;
+
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedTexture2D;
+        placedTexture2D.Footprint = pitchedDesc;
+        auto alignment512 =
+            ((reinterpret_cast<UINT64>(mappedData) + D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1) &
+             ~(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1));
+
+        placedTexture2D.Offset = alignment512 - reinterpret_cast<UINT64>(mappedData);
+        cmdList->CopyTextureRegion(
+            &CD3DX12_TEXTURE_COPY_LOCATION(_defaultBuffer.Get(), 0), 0, 0, 0,
+            &CD3DX12_TEXTURE_COPY_LOCATION(_uploadBuffer.Get(), placedTexture2D), nullptr);
+    }
 
     cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
                                     _defaultBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST,

@@ -12,6 +12,7 @@ StaticShader::StaticShader(std::string shaderName)
     formats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
     formats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
     formats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
+    formats->push_back(DXGI_FORMAT_R16G16_FLOAT);
     formats->push_back(DXGI_FORMAT_D32_FLOAT);
 
     _shader = new HLSLShader(shaderName, "", formats);
@@ -38,15 +39,18 @@ void StaticShader::runShader(Entity* entity)
     auto cameraView        = viewEventDistributor->getView();
     auto inverseCameraView = cameraView.inverse();
 
-    auto cameraProj        = viewEventDistributor->getProjection();
-    auto inverseCameraProj = cameraProj.inverse();
+    auto inverseCameraProj = projection.inverse();
 
     _shader->updateData("instanceBufferIndex", &_entityDrawIndex, false);
     _shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), false);
     _shader->updateData("viewTransform", cameraView.getFlatBuffer(), false);
     _shader->updateData("projTransform", projection.getFlatBuffer(), false);
 
-    _shader->updateData("modelMatrix",  entity->getWorldSpaceTransform().getFlatBuffer(), false);
+    _shader->updateData("prevViewTransform", viewEventDistributor->getPrevCameraView().getFlatBuffer(), false);
+
+     MVP* prevMVP = entity->getPrevMVP();
+    //_shader->updateData("prevModelMatrix", prevMVP->getModelMatrix().getFlatBuffer(), false);
+    _shader->updateData("modelMatrix", entity->getWorldSpaceTransform().getFlatBuffer(), false);
 
     float screenSize[] = {static_cast<float>(IOEventDistributor::screenPixelWidth),
                           static_cast<float>(IOEventDistributor::screenPixelHeight)};
@@ -68,6 +72,7 @@ void StaticShader::runShader(Entity* entity)
     for (auto vaoInstance : *vao)
     {
         _shader->bindAttributes(vaoInstance, false);
+        
 
         auto         indexAndVertexBufferStrides = vaoInstance->getVertexAndIndexBufferStrides();
         unsigned int strideLocation = 0;

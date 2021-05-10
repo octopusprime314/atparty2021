@@ -110,13 +110,21 @@ void WaypointCamera::updateState(int milliseconds)
         {
             if (_elapsedTime >= _waypoints[_currentWaypoint].time)
             {
-                _elapsedTime = 0;
                 _currentWaypoint++;
 
                 if (_currentWaypoint >= _waypoints.size())
                 {
                     _currentWaypoint = -1;
                     return;
+                }
+
+                for (int i = _currentWaypoint; i < _waypoints.size(); i++)
+                {
+                    if (_elapsedTime > _waypoints[i].time)
+                    {
+                        _currentWaypoint = i;
+                        break;
+                    }
                 }
 
                 state->setLinearPosition(_waypoints[_currentWaypoint].position);

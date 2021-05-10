@@ -751,7 +751,7 @@ void BuildGltfMeshes(const Document*           document,
 
                 sceneLight.color     = Vector4(color[0], color[1], color[2]);
                 sceneLight.lightType = LightType::POINT;
-                sceneLight.effectType = EffectType::None;
+                sceneLight.effectType = EffectType::Fire;
                 sceneLight.name      = light["name"];
                 sceneLight.scale     = Vector4(intensity, intensity, intensity) / 10.0;
                 sceneLight.lockedIdx = -1;
@@ -765,7 +765,7 @@ void BuildGltfMeshes(const Document*           document,
                     {
                         Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
                         sceneLight.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
-                        sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+                        //sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
 
                         std::string::size_type sz; // alias of size_t
                         auto nodeIndex = std::stoi(node.children[0], &sz);

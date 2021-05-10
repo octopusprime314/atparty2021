@@ -8,7 +8,7 @@ float4 main(float4 posH : SV_POSITION, float2 uv : UVOUT) : SV_Target
 {
 
     float4 result = float4(0.0, 0.0, 0.0, 0.0);
-    // Divide by 2 to prevent overblurring
+    // Divide by 8.0 to prevent overblurring
     float2 velocityVector = velocityTexture.Sample(textureSampler, uv).xy / 8.0;
     float2 texCoords      = uv;
 

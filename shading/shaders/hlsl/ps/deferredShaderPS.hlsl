@@ -4,6 +4,7 @@ Texture2D diffuseTexture  : register(t0);    // Diffuse texture data array
 Texture2D normalTexture   : register(t1);    // Normal texture data array
 Texture2D depthTexture    : register(t2);    // Depth texture data array
 Texture2D positionTexture : register(t3);    // Position texture data array
+Texture2D ssaoTexture     : register(t4);
 
 sampler textureSampler : register(s0);
 
@@ -66,6 +67,8 @@ PixelOut main(float4 posH : SV_POSITION,
     float metallic      = positionTexture.Sample(textureSampler, uv).w;
     float roughness     = normalTexture.Sample(textureSampler, uv).w;
 
+    float occlusion = ssaoTexture.Sample(textureSampler, uv).r;
+
     // blit depth
     pixel.depth = depthTexture.Sample(textureSampler, uv).r;
 
@@ -81,9 +84,8 @@ PixelOut main(float4 posH : SV_POSITION,
     else
     {
         uint   recursionCount = 0;
-        float3 reflectionColor = GetBRDFPointLight(albedo, normal, position, roughness, metallic, uint2(0,0), false, recursionCount);
-
-        pixel.color = float4(reflectionColor, 1.0);
+        float3 color = GetBRDFPointLight(albedo, normal, position, roughness, metallic, uint2(0,0), false, recursionCount);
+        pixel.color = float4(color * occlusion, 1.0);
     }
 
     return pixel;

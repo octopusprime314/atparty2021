@@ -661,7 +661,7 @@ void ResourceManager::_updateGeometryData()
 
     auto    cameraView = viewEventDistributor->getView();
     Vector4 cameraPos  = viewEventDistributor->getCameraPos();
-    cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
+    //cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
 
     auto    dxLayer              = DXLayer::instance();
     auto    commandList          = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()

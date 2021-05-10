@@ -120,10 +120,6 @@ void ViewEventDistributor::displayViewFrustum()
 Vector4 ViewEventDistributor::getCameraPos()
 {
     auto cameraView                = _currCamera->getView();
-    cameraView.getFlatBuffer()[8]  = -cameraView.getFlatBuffer()[8];
-    cameraView.getFlatBuffer()[9]  = -cameraView.getFlatBuffer()[9];
-    cameraView.getFlatBuffer()[10] = -cameraView.getFlatBuffer()[10];
-    cameraView.getFlatBuffer()[11] = -cameraView.getFlatBuffer()[11];
 
      Vector4 cameraPos = Vector4(cameraView.getFlatBuffer()[3],
                                  cameraView.getFlatBuffer()[7],
@@ -135,10 +131,6 @@ Vector4 ViewEventDistributor::getCameraPos()
 Vector4 ViewEventDistributor::getPrevCameraPos()
 {
     auto cameraView                = _prevCameraView;
-    cameraView.getFlatBuffer()[8]  = -cameraView.getFlatBuffer()[8];
-    cameraView.getFlatBuffer()[9]  = -cameraView.getFlatBuffer()[9];
-    cameraView.getFlatBuffer()[10] = -cameraView.getFlatBuffer()[10];
-    cameraView.getFlatBuffer()[11] = -cameraView.getFlatBuffer()[11];
 
     Vector4 cameraPos = Vector4(cameraView.getFlatBuffer()[3], cameraView.getFlatBuffer()[7],
                                 cameraView.getFlatBuffer()[11]);
@@ -147,13 +139,7 @@ Vector4 ViewEventDistributor::getPrevCameraPos()
 
 Matrix ViewEventDistributor::getPrevCameraView()
 {
-    auto cameraView                = _prevCameraView;
-    cameraView.getFlatBuffer()[8]  = -cameraView.getFlatBuffer()[8];
-    cameraView.getFlatBuffer()[9]  = -cameraView.getFlatBuffer()[9];
-    cameraView.getFlatBuffer()[10] = -cameraView.getFlatBuffer()[10];
-    cameraView.getFlatBuffer()[11] = -cameraView.getFlatBuffer()[11];
-
-    return cameraView;
+    return _prevCameraView;
 }
 
 Vector4 ViewEventDistributor::getCameraRot()
@@ -345,7 +331,7 @@ void ViewEventDistributor::_updateKeyboard(int key, int x, int y)
         {
 
             Vector4     trans;
-            const float velMagnitude = 4000.0f;
+            const float velMagnitude = 80.0f;
 
             if (key == KEY_W)
             { // forward w

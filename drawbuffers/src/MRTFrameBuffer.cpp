@@ -20,6 +20,10 @@ MRTFrameBuffer::MRTFrameBuffer()
 
     _gBufferTextures.push_back(RenderTexture(IOEventDistributor::screenPixelWidth,
                                              IOEventDistributor::screenPixelHeight,
+                                             TextureFormat::R16G16_FLOAT));
+
+    _gBufferTextures.push_back(RenderTexture(IOEventDistributor::screenPixelWidth,
+                                             IOEventDistributor::screenPixelHeight,
                                              TextureFormat::DEPTH32_FLOAT));
 }
 

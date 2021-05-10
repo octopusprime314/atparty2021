@@ -12,11 +12,13 @@ SamplerState bilinearWrap : register(s0);
 cbuffer objectData : register(b0)
 {
     uint     instanceBufferIndex;
+    //float4x4 prevModelMatrix;
     float4x4 modelMatrix;
 }
 
 cbuffer globalData : register(b1)
 {
+    float4x4 prevViewTransform;
     float4x4 projTransform;
     float4x4 viewTransform;
     float4x4 inverseView;
@@ -29,7 +31,9 @@ cbuffer globalData : register(b1)
 void main(    uint   id          : SV_VERTEXID,
           out float4 outPosition : SV_POSITION,
           out float3 outNormal   : NORMALOUT,
-          out float2 outUV       : UVOUT)
+          out float2 outUV       : UVOUT,
+          out float4 outPrevPos  : PREVPOSOUT,
+          out float4 outCurrPos  : CURRPOSOUT)
 {
 
     float4x4 model        = modelMatrix;
@@ -57,4 +61,9 @@ void main(    uint   id          : SV_VERTEXID,
     outPosition  = mul(float4(position, 1.0f), mvp);
     outNormal    = mul(normal, normalMatrix).rgb;
     outUV        = uv;
+
+    float4x4 prevMV  = mul(/*prevModelMatrix*/model, prevViewTransform);
+    float4x4 prevMVP = mul(prevMV, projTransform);
+    outPrevPos       = mul(float4(position, 1.0f), prevMV);
+    outCurrPos       = mul(float4(position, 1.0f), mv);
 }

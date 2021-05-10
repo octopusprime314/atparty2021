@@ -18,7 +18,8 @@ DeferredShader::~DeferredShader() {}
 
 void DeferredShader::runShader(PointLightList*       pointLightList,
                                ViewEventDistributor* viewEventDistributor,
-                               MRTFrameBuffer&       gBuffers)
+                               MRTFrameBuffer&       gBuffers,
+                               RenderTexture*        ssaoTexture)
 {
     _shader->bind();
     _shader->bindAttributes(nullptr, false);
@@ -40,7 +41,8 @@ void DeferredShader::runShader(PointLightList*       pointLightList,
     _shader->updateData("diffuseTexture",  0, &textures[0]);
     _shader->updateData("normalTexture",   0, &textures[1]);
     _shader->updateData("positionTexture", 0, &textures[2]);
-    _shader->updateData("depthTexture",    0, &textures[3]);
+    _shader->updateData("depthTexture",    0, &textures[4]);
+    _shader->updateData("ssaoTexture",     0, ssaoTexture);
 
     _shader->draw(0, 1, 3);
 
