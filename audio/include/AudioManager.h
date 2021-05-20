@@ -20,48 +20,28 @@
  */
 
 #pragma once
-#include "BackgroundTheme.h"
 #include "fmod.hpp"
-#include <chrono>
+#include <fmod_studio.hpp>
+#include <fmod_errors.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-struct SoundEntry
-{
-    FMOD::Sound*   sound{nullptr};
-    FMOD::Channel* channel{nullptr};
-    int            startTime;
-    int            endTime;
-    float          volume;
-};
-
 class AudioManager
 {
   public:
-    using SoundMap = std::unordered_map<std::string, SoundEntry>;
     AudioManager();
     ~AudioManager();
 
-    FMOD_RESULT     update();
-    void            startAll();
-    void            stopAll();
-    FMOD_RESULT     playSound(const std::string& name);
-    FMOD_RESULT     pauseSound(const std::string& name);
-    FMOD_RESULT     restartSound(const std::string& name);
-    bool            isPlaying(const std::string& name);
-    bool            isPaused(const std::string& name);
-    bool            updateStartTime(const std::string& name, int startTime);
-    bool            updateEndTime(const std::string& name, int endTime);
-    bool            updateVolume(const std::string& name, float volume);
-    void            restart();
-    void            loadSoundConfig(const std::string& file);
-    void            saveSoundConfig(const std::string& file);
-    const SoundMap& getSounds() const { return _sounds; }
+    void            loadBankFile(const std::string& bankFile);
+    void            update();
+    void            playEvent(const std::string& eventName);
 
   private:
-    bool                 _started;
-    std::chrono::seconds _initial_time;
-    FMOD::System*        _system;
-    SoundMap             _sounds;
+    using EventDescriptions = std::unordered_map<std::string, FMOD::Studio::EventDescription*>;
+
+    FMOD::Studio::System*                       _studioSystem;
+    FMOD::Studio::Bank*                         _masterBank;
+    std::vector<FMOD::Studio::EventInstance*>   _events;
+    EventDescriptions                           _eventDescriptions;
 };

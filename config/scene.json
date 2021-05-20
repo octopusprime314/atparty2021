@@ -1,77 +1,77 @@
 {
-    "emitters": [],
-    "commented": [
-        {
-            "entity_name": "HELMET",
-            "model_name": "DAMAGEDHELMET",
-            "rotation": {
-                "x": 0.0,
-                "y": 0.0,
-                "z": 0.0
-            },
-            "scale": {
-                "x": 13.0,
-                "y": 13.0,
-                "z": 13.0
-            },
-            "translation": {
-                "x": -520.1300048828125,
-                "y": -32.459999084472656,
-                "z": 4068.77001953125
-            },
-            "vector_path": [],
-            "waypoint_path": ""
-        },
-        {
-            "entity_name": "CAVETEST",
-            "model_name": "EXPERIMENTALCAVE",
-            "rotation": {
-                "x": 0.0,
-                "y": 0.0,
-                "z": 0.0
-            },
-            "scale": {
-                "x": 130.0,
-                "y": 130.0,
-                "z": 130.0
-            },
-            "translation": {
-                "x": -520.1300048828125,
-                "y": -32.459999084472656,
-                "z": 4068.77001953125
-            },
-            "vector_path": [],
-            "waypoint_path": ""
-        },
-        {
-            "entity_name": "RADDLANTERN",
-            "model_name": "FANCYLANTERN",
-            "rotation": {
-                "x": 0.0,
-                "y": 0.0,
-                "z": 0.0
-            },
-            "scale": {
-                "x": 13.0,
-                "y": 13.0,
-                "z": 13.0
-            },
-            "translation": {
-                "x": -520.1300048828125,
-                "y": -32.459999084472656,
-                "z": 4068.77001953125
-            },
-            "vector_path": [],
-            "waypoint_path": ""
-        }
-    ],
-    "entities": [],
-    "fbx_scene": "cave_lod1.gltf",
-    "fluids": [],
-    "lights": [],
-    "name": "above_ground",
-    "skybox_day": "skybox-day",
-    "skybox_night": "skybox-night",
-    "sound_file": "../config/soundconfig.txt",
-    "strings": []
+  "emitters": [],
+  "commented": [
+    {
+      "entity_name": "HELMET",
+      "model_name": "DAMAGEDHELMET",
+      "rotation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "scale": {
+        "x": 13.0,
+        "y": 13.0,
+        "z": 13.0
+      },
+      "translation": {
+        "x": -520.1300048828125,
+        "y": -32.459999084472656,
+        "z": 4068.77001953125
+      },
+      "vector_path": [],
+      "waypoint_path": ""
+    },
+    {
+      "entity_name": "CAVETEST",
+      "model_name": "EXPERIMENTALCAVE",
+      "rotation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "scale": {
+        "x": 130.0,
+        "y": 130.0,
+        "z": 130.0
+      },
+      "translation": {
+        "x": -520.1300048828125,
+        "y": -32.459999084472656,
+        "z": 4068.77001953125
+      },
+      "vector_path": [],
+      "waypoint_path": ""
+    },
+    {
+      "entity_name": "RADDLANTERN",
+      "model_name": "FANCYLANTERN",
+      "rotation": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "scale": {
+        "x": 13.0,
+        "y": 13.0,
+        "z": 13.0
+      },
+      "translation": {
+        "x": -520.1300048828125,
+        "y": -32.459999084472656,
+        "z": 4068.77001953125
+      },
+      "vector_path": [],
+      "waypoint_path": ""
+    }
+  ],
+  "entities": [],
+  "fbx_scene": "cave_lod1.gltf",
+  "fluids": [],
+  "lights": [],
+  "name": "above_ground",
+  "skybox_day": "skybox-day",
+  "skybox_night": "skybox-night",
+  "sound_file": "../assets/audio/Master.bank",
+  "strings": []
 }
