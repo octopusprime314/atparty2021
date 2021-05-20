@@ -1,270 +1,73 @@
 #include "AudioManager.h"
-#include "MasterClock.h"
-
-#define THEME_MP3 "assets/audio/divineapprehension.mp3"
-
-#include <Windows.h>
-#include <fstream>
-#include <iostream>
-#include <iterator>
-#include <sstream>
 
 AudioManager::AudioManager()
+    : _masterBank(nullptr)
 {
     // Core System
     FMOD_RESULT result;
-    _system = nullptr;
-    result  = FMOD::System_Create(&_system);
+
+    result = FMOD::Studio::System::create(&_studioSystem);
     if (result != FMOD_OK)
     {
         __debugbreak();
     }
 
-    result = _system->init(512, FMOD_INIT_NORMAL, /*extra*/ nullptr);
+    result = _studioSystem->initialize(1024, FMOD_STUDIO_INIT_NORMAL, FMOD_INIT_NORMAL, NULL);
     if (result != FMOD_OK)
     {
         __debugbreak();
     }
-
-    _started = false;
 }
 
 AudioManager::~AudioManager()
 {
-    _system->release();
-    _system = nullptr;
+    _studioSystem->release();
 }
 
-FMOD_RESULT AudioManager::update()
+void AudioManager::loadBankFile(const std::string& bankFile)
 {
-    if (_started)
+    FMOD_RESULT result;
+    result = _studioSystem->loadBankFile(bankFile.c_str(), FMOD_STUDIO_LOAD_BANK_NORMAL, &_masterBank);
+    if (result != FMOD_OK)
     {
+        __debugbreak();
+    }
 
-        std::chrono::seconds seconds = std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch());
-
-        int time_passed = (seconds.count() - _initial_time.count());
-
-        for (auto& s : _sounds)
+    int numEventDescriptions = 0;
+    _masterBank->getEventCount(&numEventDescriptions);
+    if (numEventDescriptions > 0)
+    {
+        std::vector<FMOD::Studio::EventDescription*> eventDescriptions(numEventDescriptions);
+        _masterBank->getEventList(eventDescriptions.data(), numEventDescriptions, &numEventDescriptions);
+        char eventDescriptionName[512];
+        for (int i = 0; i < numEventDescriptions; ++i)
         {
-            if ((!isPlaying(s.first) || isPaused(s.first)) && time_passed >= s.second.startTime &&
-                time_passed < s.second.endTime)
-            {
-                // END command means the audio is finished and terminate executable
-                const std::string teminateString = "END";
-                if (s.first.compare(teminateString.c_str()) == 0)
-                {
-                    exit(0);
-                }
-
-                playSound(s.first);
-            }
-
-            if (time_passed >= s.second.endTime)
-            {
-                pauseSound(s.first);
-            }
+            FMOD::Studio::EventDescription* eventDescription = eventDescriptions[i];
+            eventDescription->getPath(eventDescriptionName, 512, nullptr);
+            _eventDescriptions.emplace(eventDescriptionName, eventDescription);
         }
     }
-
-    return _system->update();
 }
 
-void AudioManager::startAll()
+void AudioManager::update() 
 {
-    _initial_time = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch());
-    _started = true;
+    _studioSystem->update();
 }
 
-void AudioManager::stopAll()
+void AudioManager::playEvent(const std::string& eventName)
 {
-    _started = false;
-    for (auto& s : _sounds)
-    {
-        pauseSound(s.first);
-        restartSound(s.first);
-    }
-}
+    FMOD_RESULT result;
 
-FMOD_RESULT AudioManager::playSound(const std::string& name)
-{
-    FMOD_RESULT result = FMOD_OK;
-
-    if (_sounds.find(name) == _sounds.end())
-    {
-        return FMOD_ERR_BADCOMMAND;
-    }
-
-    FMOD::Sound* sound = _sounds[name].sound;
-
-    if (isPlaying(name) && isPaused(name))
-    {
-        result = _sounds[name].channel->setPaused(false);
-    }
-    else
-    {
-        result = _system->playSound(sound, nullptr, false, &_sounds[name].channel);
-    }
-
-    if (result == FMOD_OK)
-    {
-        result = _sounds[name].channel->setVolume(_sounds[name].volume);
-    }
-
-    return result;
-}
-
-FMOD_RESULT AudioManager::pauseSound(const std::string& name)
-{
-    FMOD_RESULT result = FMOD_OK;
-
-    if (_sounds.find(name) == _sounds.end())
-    {
-        return FMOD_ERR_BADCOMMAND;
-    }
-
-    bool isplaying = false;
-
-    if (_sounds[name].sound != nullptr && _sounds[name].channel != nullptr)
-    {
-        result = _sounds[name].channel->isPlaying(&isplaying);
-        if (isplaying && result == FMOD_RESULT::FMOD_OK)
-            result = _sounds[name].channel->setPaused(true);
-    }
-
-    return result;
-}
-
-FMOD_RESULT AudioManager::restartSound(const std::string& name)
-{
-    FMOD_RESULT result = FMOD_OK;
-
-    if (_sounds.find(name) == _sounds.end())
-    {
-        return FMOD_ERR_BADCOMMAND;
-    }
-
-    bool isplaying = false;
-
-    if (_sounds[name].sound != nullptr && _sounds[name].channel != nullptr)
-    {
-        result = _sounds[name].channel->setPosition(0, FMOD_TIMEUNIT_MS);
-    }
-
-    return result;
-}
-
-bool AudioManager::isPlaying(const std::string& name)
-{
-    if (_sounds.find(name) == _sounds.end())
-    {
-        return false;
-    }
-
-    bool isplaying = false;
-    if (_sounds[name].sound != nullptr && _sounds[name].channel != nullptr)
-    {
-        FMOD_RESULT result = _sounds[name].channel->isPlaying(&isplaying);
+    if (_eventDescriptions.find(eventName) != _eventDescriptions.end()) {
+        FMOD::Studio::EventInstance* eventInstance = NULL;
+        result = _eventDescriptions[eventName]->createInstance(&eventInstance);
         if (result != FMOD_OK)
-            return false;
-    }
-
-    return isplaying;
-}
-
-bool AudioManager::isPaused(const std::string& name)
-{
-    if (_sounds.find(name) == _sounds.end())
-    {
-        return false;
-    }
-
-    bool ispaused = false;
-    if (_sounds[name].sound != nullptr && _sounds[name].channel != nullptr)
-    {
-        FMOD_RESULT result = _sounds[name].channel->getPaused(&ispaused);
-        if (result != FMOD_OK)
-            return false;
-    }
-
-    return ispaused;
-}
-
-bool AudioManager::updateStartTime(const std::string& name, int startTime)
-{
-    if (_sounds.find(name) == _sounds.end())
-    {
-        return false;
-    }
-
-    _sounds[name].startTime = startTime;
-
-    return true;
-}
-
-bool AudioManager::updateEndTime(const std::string& name, int endTime)
-{
-    if (_sounds.find(name) == _sounds.end())
-    {
-        return false;
-    }
-
-    _sounds[name].endTime = endTime;
-
-    return true;
-}
-
-bool AudioManager::updateVolume(const std::string& name, float volume)
-{
-    if (_sounds.find(name) == _sounds.end())
-    {
-        return false;
-    }
-
-    _sounds[name].volume = volume;
-    _sounds[name].channel->setVolume(volume);
-
-    return true;
-}
-
-void AudioManager::restart() {}
-
-void AudioManager::loadSoundConfig(const std::string& file)
-{
-    std::ifstream infile(file);
-    _sounds.clear();
-
-    std::string line;
-    while (std::getline(infile, line))
-    {
-        SoundEntry entry;
-
-        std::stringstream                  ss(line);
-        std::istream_iterator<std::string> begin(ss);
-        std::istream_iterator<std::string> end;
-        std::vector<std::string>           vstrings(begin, end);
-        std::copy(vstrings.begin(), vstrings.end(),
-                  std::ostream_iterator<std::string>(std::cout, "\n"));
-
-        std::string name     = vstrings[0];
-        std::string fileName = vstrings[1];
-        entry.startTime      = std::stoi(vstrings[2]);
-        entry.endTime        = std::stoi(vstrings[3]);
-        entry.volume         = std::stof(vstrings[4]);
-
-        FMOD_RESULT result =
-            _system->createStream(fileName.c_str(), FMOD_DEFAULT, nullptr, &entry.sound);
-
-        if (result == FMOD_OK)
         {
-            _sounds[name] = entry;
+            __debugbreak();
         }
-        else if (name == "END")
-        {
-            _sounds[name] = entry;
-        }
+
+        eventInstance->start();
+        _events.push_back(eventInstance);
     }
 }
 
-void AudioManager::saveSoundConfig(const std::string& file) {}

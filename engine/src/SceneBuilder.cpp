@@ -179,7 +179,7 @@ std::shared_ptr<EngineScene> parse(const std::string& file, ViewEventDistributor
     // Load and compile all models for the model broker
     ModelBroker::instance()->buildModels(scene->fbxScene, viewManager);
 
-    audioManager->loadSoundConfig(scene->soundFile);
+    audioManager->loadBankFile(scene->soundFile);
     for (auto& e : jd["entities"])
     {
         SceneEntity sceneEntity                = build_entity(e);
