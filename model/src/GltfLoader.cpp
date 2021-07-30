@@ -383,7 +383,7 @@ void AnimatingNodes(const Document* document, const GLTFResourceReader* resource
         }
 
         // Way points are in milliseconds
-        PathWaypoint waypoint(translation, rotation, scale, currentTime * 500.0);
+        PathWaypoint waypoint(translation, rotation, scale, currentTime * 1000.0);
 
         waypoints.push_back(waypoint);
 
