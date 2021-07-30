@@ -189,7 +189,8 @@ endif()
 endif()
 
 target_link_libraries(atparty2021           legacy_stdio_definitions.lib)
-target_link_libraries(atparty2021           ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod64_vc.lib)
+target_link_libraries(atparty2021           ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod_vc.lib)
+target_link_libraries(atparty2021           ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmodstudio_vc.lib)
 target_link_libraries(atparty2021 debug     ${CMAKE_SOURCE_DIR}/libs/gltf/lib/debug/GLTFSDK.lib)
 target_link_libraries(atparty2021 optimized ${CMAKE_SOURCE_DIR}/libs/gltf/lib/release/GLTFSDK.lib)
 
@@ -217,9 +218,10 @@ file(REMOVE_RECURSE ${CMAKE_SOURCE_DIR}/build/libs/)
 
 #dxil and dxcompiler dlls are needed for dxr
 add_custom_command(TARGET atparty2021 POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod64.dll   $<TARGET_FILE_DIR:atparty2021>
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll $<TARGET_FILE_DIR:atparty2021>
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll       $<TARGET_FILE_DIR:atparty2021>)
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod.dll        $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmodstudio.dll    $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll      $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll            $<TARGET_FILE_DIR:atparty2021>)
 
 install(TARGETS atparty2021 RUNTIME DESTINATION bin)
 install(FILES "${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll"
