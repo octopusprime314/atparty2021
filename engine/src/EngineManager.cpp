@@ -99,8 +99,6 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
     _viewManager->triggerEvents();
     _viewManager->setEntityList(_scene->entityList);
 
-    _audioManager->playEvent("");
-
     MasterClock::instance()->start();
     DXLayer::instance()->fenceCommandList();
     _inputLayer->run();
@@ -367,5 +365,12 @@ void EngineManager::_postDraw()
     auto thread = new std::thread(&DXLayer::flushCommandList, DXLayer::instance(), finalRender);
     thread->detach();
 
-    _audioManager->update();
+    // Pass waypoint idx to the audio manager if we're using a waypoint camera
+    if (_viewManager->getCameraType() == ViewEventDistributor::CameraType::WAYPOINT) {
+        auto waypointCamera = _viewManager->getWaypointCamera();
+        _audioManager->update(waypointCamera->getCurrentWaypointIdx());
+    }
+    else {
+        _audioManager->update();
+    }
 }

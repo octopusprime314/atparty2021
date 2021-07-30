@@ -6,7 +6,7 @@ set(TLS_VERIFY OFF)
 include(InstallRequiredSystemLibraries)
 include(FetchContent)
 
-set(DXR 1)
+set(DXR 0)
 set(DEBUG_SHADERS 1)
 
 set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/atparty2021-dist")

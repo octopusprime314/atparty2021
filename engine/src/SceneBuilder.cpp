@@ -172,6 +172,7 @@ std::shared_ptr<EngineScene> parse(const std::string& file, ViewEventDistributor
 
     scene->name        = jd["name"];
     scene->soundFile   = jd["sound_file"];
+    scene->soundMetadataFile = jd["sound_metadata_file"];
     scene->skyboxDay   = jd["skybox_day"];
     scene->skyboxNight = jd["skybox_night"];
     scene->fbxScene    = jd["fbx_scene"];
@@ -179,7 +180,7 @@ std::shared_ptr<EngineScene> parse(const std::string& file, ViewEventDistributor
     // Load and compile all models for the model broker
     ModelBroker::instance()->buildModels(scene->fbxScene, viewManager);
 
-    audioManager->loadBankFile(scene->soundFile);
+    audioManager->loadBankFile(scene->soundFile, scene->soundMetadataFile);
     for (auto& e : jd["entities"])
     {
         SceneEntity sceneEntity                = build_entity(e);
@@ -307,6 +308,25 @@ std::shared_ptr<EngineScene> parse(const std::string& file, ViewEventDistributor
         }
         scene->cameraSettings = settings;
     }
+
+    AudioManager::WaypointEvents waypointEvents;
+    for (auto& se : jd["sound_events"]) {
+        std::vector<AudioManager::WaypointEvent> events;
+        int idx = se["idx"];
+        for (auto& we : se["events"]) {
+            AudioManager::WaypointEvent ev;
+            if (we["action"] == "start") {
+                ev.type = AudioManager::EventType::START;
+            }
+            else if (we["action"] == "stop") {
+                ev.type = AudioManager::EventType::STOP;
+            }
+            ev.eventName = we["eventName"];
+            events.emplace_back(ev);
+        }
+        waypointEvents[idx] = events;
+    }
+    audioManager->setWaypointEvents(waypointEvents);
 
     return scene;
 }
