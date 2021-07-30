@@ -52,6 +52,7 @@ class Entity : public EventSubscriber
     void setLayeredTexture(LayeredTexture* layeredTexture);
     void setPosition(Vector4 position);
     void setState(const Vector4& position, const Vector4& rotation, const Vector4& scale);
+    void setState( Matrix& transform);
     void setVelocity(Vector4 velocity);
     void setSelected(bool isSelected);
     void setVectorPaths(const std::vector<std::string>& pathFiles);
@@ -86,6 +87,7 @@ class Entity : public EventSubscriber
     std::vector<RenderBuffers>* _frustumRenderBuffers;
     unsigned int                _rayTracingTextureId;
     Matrix                      _worldSpaceTransform;
+    Matrix                      _initialWorldSpaceTransform;
     std::vector<VectorPath*>    _vectorPaths;
     WaypointPath*               _waypointPath = nullptr;
 

@@ -35,7 +35,7 @@ WaypointPath::WaypointPath(const std::string& name, Vector4 finalPos, Vector4 fi
     : _name(name), _accelerate(accelerate)
 {
     _name = name;
-    _waypoints.emplace_back(finalPos, finalRotation, time);
+    _waypoints.emplace_back(finalPos, finalRotation, Vector4(1.0, 1.0, 1.0), time);
     _elapsedTime     = 0;
     _currentWaypoint = 0;
 }
@@ -51,7 +51,7 @@ WaypointPath::WaypointPath(const std::string& name, const std::vector<PathWaypoi
 
 void WaypointPath::updateState(int milliseconds, StateVector* state)
 {
-    if (_currentWaypoint != -1 && _currentWaypoint < _waypoints.size())
+    /*if (_currentWaypoint != -1 && _currentWaypoint < _waypoints.size())
     {
         if (_elapsedTime >= _waypoints[_currentWaypoint].time)
         {
@@ -85,6 +85,35 @@ void WaypointPath::updateState(int milliseconds, StateVector* state)
             state->setTorque(_currentAngularAcceleration);
         }
         state->update(milliseconds);
+    }
+    else
+    {*/
+     
+    if (_currentWaypoint != -1 && _currentWaypoint < _waypoints.size())
+    {
+        if (_elapsedTime >= _waypoints[_currentWaypoint].time)
+        {
+            _currentWaypoint++;
+
+            if (_currentWaypoint >= _waypoints.size())
+            {
+                _currentWaypoint = -1;
+                return;
+            }
+
+            for (int i = _currentWaypoint; i < _waypoints.size(); i++)
+            {
+                if (_elapsedTime > _waypoints[i].time)
+                {
+                    _currentWaypoint = i;
+                    break;
+                }
+            }
+
+            state->setLinearPosition(_waypoints[_currentWaypoint].position);
+            state->setAngularPosition(_waypoints[_currentWaypoint].rotation);
+        }
+        _elapsedTime += milliseconds;
     }
 }
 
@@ -154,7 +183,8 @@ void WaypointPath::_loadWaypointsFromFile(const std::string& file)
         time = static_cast<float>(::atof(vstrings[6].c_str()));
         Vector4 d(static_cast<float>(v_x), static_cast<float>(v_y), static_cast<float>(v_z));
         Vector4 r(static_cast<float>(r_x), static_cast<float>(r_y), static_cast<float>(r_z));
-        _waypoints.emplace_back(d, r, time);
+        Vector4 s(1.0, 1.0, 1.0);
+        _waypoints.emplace_back(d, r, s, time);
 
         // Probably don't know initial position for first entry
         if (_waypoints.size() > 1)

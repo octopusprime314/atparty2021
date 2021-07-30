@@ -60,10 +60,10 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     std::vector<DXGI_FORMAT>* sunLightRaysFormats = new std::vector<DXGI_FORMAT>();
     // Albedo in R8G8B8 and maybe transparency in A8 to indicate water or something...
     sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
-    sunLightRaysFormats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
+    /*sunLightRaysFormats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
     sunLightRaysFormats->push_back(DXGI_FORMAT_R16G16_FLOAT);
     sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
-    sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
+    sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);*/
 
     _sunLightRaysShader =
         new HLSLShader(DXR1_1_SHADERS_LOCATION + "sunLightRaysShaderCS", "", sunLightRaysFormats);
@@ -186,8 +186,8 @@ PathTracerShader::PathTracerShader(std::string shaderName)
 
     computeCmdList->ResourceBarrier(7, barrierDesc);
 
-    _dxrStateObject = new DXRStateObject(_primaryRaysShader->getRootSignature(),
-                                         _reflectionRaysShader->getRootSignature());
+    //_dxrStateObject = new DXRStateObject(_primaryRaysShader->getRootSignature(),
+    //                                     _reflectionRaysShader->getRootSignature());
 }
 
 PathTracerShader::~PathTracerShader() {}
@@ -325,9 +325,10 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     EngineManager::instance()->processLights(lights, viewEventDistributor, pointLightList, RandomInsertAndRemoveEntities);
 
     // Process directional light
-    Vector4 sunLightColor  = Vector4(1.0, 1.0, 1.0);
+    Vector4 sunLightColor  = Vector4(1.0, 0.85, 0.4);
     float   sunLightRange  = 100000.0;
-    Vector4 sunLightPos    = cameraView * Vector4(700.0, 700.0, 0.0);
+    Vector4 sunLightPos    = Vector4(10000.0 / 4.0, 10000.0, 10000.0 / 4.0);
+    //Vector4 sunLightPos    = Vector4(30.1, 14.9, 46.1)* 1000;
     float   sunLightRadius = 100.0f;
 
     for (auto& light : lights)
@@ -358,30 +359,30 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     cmdList->BeginEvent(0, L"Sun light Rays", sizeof(L"Sun light Rays"));
 
-    //// Sun light rays
+    // Sun light rays
 
-    //shader = _sunLightRaysShader;
+    shader = _sunLightRaysShader;
 
-    //shader->bind();
+    shader->bind();
 
-    //shader->updateData("albedoSRV", 0, _albedoPrimaryRays, true, false);
-    //shader->updateData("positionSRV", 0, _positionPrimaryRays, true, false);
-    //shader->updateData("normalSRV", 0, _normalPrimaryRays, true, false);
+    shader->updateData("albedoSRV", 0, _albedoPrimaryRays, true, false);
+    shader->updateData("positionSRV", 0, _positionPrimaryRays, true, false);
+    shader->updateData("normalSRV", 0, _normalPrimaryRays, true, false);
 
-    //auto resourceBindings  = shader->_resourceIndexes;
-    //ID3D12DescriptorHeap* descriptorHeaps[] = {resourceManager->getDescHeap().Get()};
-    //cmdList->SetDescriptorHeaps(1, descriptorHeaps);
-    //
-    //cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],
-    //                                       _hemisphereSamplesGPUBuffer->gpuDescriptorHandle);
+    auto resourceBindings  = shader->_resourceIndexes;
+    /*ID3D12DescriptorHeap* descriptorHeaps[] = {resourceManager->getDescHeap().Get()};
+    cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+    
+    cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],
+                                           _hemisphereSamplesGPUBuffer->gpuDescriptorHandle);
 
-    //auto              texBroker        = TextureBroker::instance();
-    //const std::string noiseTextureName = "../assets/textures/noise/fluidnoise.png";
-    //auto noiseTexture = texBroker->getTexture(noiseTextureName);
+    auto              texBroker        = TextureBroker::instance();
+    const std::string noiseTextureName = "../assets/textures/noise/fluidnoise.png";
+    auto noiseTexture = texBroker->getTexture(noiseTextureName);*/
 
-    ////shader->updateData("noiseSRV", 0, noiseTexture, true, false);
+    //shader->updateData("noiseSRV", 0, noiseTexture, true, false);
 
-    //shader->updateData("sunLightUAV", 0, _sunLightRays, true, true);
+    shader->updateData("sunLightUAV", 0, _sunLightRays, true, true);
     //shader->updateData("occlusionUAV", 0, _occlusionRays, true, true);
     //shader->updateData("occlusionHistoryUAV", 0, _svgfDenoiser->getOcclusionHistoryBuffer(), true, true);
     //shader->updateData("indirectLightRaysUAV", 0, _indirectLightRays, true, true);
@@ -391,37 +392,39 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     //shader->updateData("debug1UAV", 0, _debug1, true, true);
     //shader->updateData("debug2UAV", 0, _debug2, true, true);
 
-    //shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
+    shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
 
-    //shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
+    shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
 
     //resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
-    //resourceManager->updateStructuredBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
+    //resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
+    //resourceManager->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
 
-    //resourceManager->updateAndBindMaterialBuffer(shader->_resourceIndexes);
-    //resourceManager->updateAndBindAttributeBuffer(shader->_resourceIndexes);
-    //resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes);
+    //resourceManager->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
+    //resourceManager->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
+    //resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
+    //resourceManager->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
 
-    //shader->updateData("numPointLights", &pointLights, true);
-    //shader->updateData("pointLightColors", lightColorsArray, true);
-    //shader->updateData("pointLightRanges", lightRangesArray, true);
-    //shader->updateData("pointLightPositions", lightPosArray, true);
+    shader->updateData("numPointLights", &pointLightList.lightCount, true);
+    shader->updateData("pointLightColors", pointLightList.lightColorsArray, true);
+    shader->updateData("pointLightRanges", pointLightList.lightRangesArray, true);
+    shader->updateData("pointLightPositions", pointLightList.lightPosArray, true);
 
-    //shader->updateData("sunLightColor", sunLightColor.getFlatBuffer(), true);
-    //shader->updateData("sunLightRange", &sunLightRange, true);
-    //shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), true);
-    //shader->updateData("sunLightRadius", &sunLightRadius, true);
-    //shader->updateData("screenSize", screenSize, true);
-    //shader->updateData("texturesPerMaterial", &texturesPerMaterial, true);
+    shader->updateData("sunLightColor", sunLightColor.getFlatBuffer(), true);
+    shader->updateData("sunLightRange", &sunLightRange, true);
+    shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), true);
+    shader->updateData("sunLightRadius", &sunLightRadius, true);
+    shader->updateData("screenSize", screenSize, true);
+    shader->updateData("texturesPerMaterial", &texturesPerMaterial, true);
 
-    //if (isCameraMoving)
-    //{
-    //    _frameIndex = 0;
-    //}
-    //shader->updateData("frameIndex", &_frameIndex, true);
+    if (isCameraMoving)
+    {
+        _frameIndex = 0;
+    }
+    shader->updateData("frameIndex", &_frameIndex, true);
 
-    //float timeAsFloat = static_cast<float>(MasterClock::instance()->getGameTime()) / 1000.0f;
-    //shader->updateData("time", &timeAsFloat, true);
+    float timeAsFloat = static_cast<float>(MasterClock::instance()->getGameTime()) / 1000.0f;
+    shader->updateData("time", &timeAsFloat, true);
 
     //shader->updateData("seed", &seed, true);
     //shader->updateData("numSamplesPerSet", &numSamplesPerSet, true);
@@ -429,12 +432,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     //shader->updateData("numPixelsPerDimPerSet", &numPixelsPerDimPerSet, true);
 
 
-    //shader->dispatch(
-    //    ceilf(static_cast<float>(_sunLightRays->getWidth()) / threadGroupWidth),
-    //    ceilf(static_cast<float>(_sunLightRays->getHeight()) / threadGroupHeight),
-    //    1);
+    if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
+    {
+        shader->dispatch(ceilf(screenSize[0] / static_cast<float>(threadGroupWidth)),
+                         ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
+    }
 
-    //shader->unbind();
+    shader->unbind();
 
     cmdList->EndEvent();
     cmdList->BeginEvent(0, L"Reflection Rays", sizeof(L"Reflection Rays"));
@@ -451,9 +455,9 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("normalSRV", 0, _normalPrimaryRays, true, false);
 
     shader->updateData("reflectionUAV", 0, _reflectionRays, true, true);
-    shader->updateData("pointLightOcclusionUAV", 0, _pointLightOcclusion, true, true);
-    shader->updateData("pointLightOcclusionHistoryUAV", 0, _pointLightOcclusionHistory, true, true);
-    shader->updateData("debugUAV", 0, _occlusionRays, true, true);
+    //shader->updateData("pointLightOcclusionUAV", 0, _pointLightOcclusion, true, true);
+    //shader->updateData("pointLightOcclusionHistoryUAV", 0, _pointLightOcclusionHistory, true, true);
+    //shader->updateData("debugUAV", 0, _occlusionRays, true, true);
 
     shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
 
@@ -480,13 +484,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("sunLightRange", &sunLightRange, true);
     shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), true);
     shader->updateData("sunLightRadius", &sunLightRadius, true);
-
-    //auto resourceBindings  = shader->_resourceIndexes;
-    //ID3D12DescriptorHeap* descriptorHeaps[] = {resourceManager->getDescHeap().Get()};
-    //cmdList->SetDescriptorHeaps(1, descriptorHeaps);
-    //
-    //cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],
-    //                                      _hemisphereSamplesGPUBuffer->gpuDescriptorHandle);
 
     shader->updateData("seed", &seed, true);
     shader->updateData("numSamplesPerSet", &numSamplesPerSet, true);

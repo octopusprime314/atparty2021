@@ -133,15 +133,15 @@ float3 GetBRDFPointLight(in    float3 albedo,
 #ifdef RAYTRACING_ENABLED
     // pointLightOcclusionUAV[threadId.xy].x = noOcclusion ? 1.0 : 0.0;
     //pointLightOcclusionUAV[threadId.xy].xyz = color;
-    pointLightOcclusionUAV[threadId.xy].x = (1.0f - totalOcclusion);
+    //pointLightOcclusionUAV[threadId.xy].x = (1.0f - totalOcclusion);
 
     const float temporalFade = 0.01666666666;
     // const float temporalFade = 0.2;
     //pointLightOcclusionHistoryUAV[threadId.xy].xyz = (temporalFade * pointLightOcclusionUAV[threadId.xy].xyz) +
     //                                               ((1.0 - temporalFade) * pointLightOcclusionHistoryUAV[threadId.xy].xyz);
 
-    pointLightOcclusionHistoryUAV[threadId.xy].x = (temporalFade * (1.0f - totalOcclusion)) +
-                                                   ((1.0 - temporalFade) * pointLightOcclusionHistoryUAV[threadId.xy].x);
+    //pointLightOcclusionHistoryUAV[threadId.xy].x = (temporalFade * (1.0f - totalOcclusion)) +
+    //                                               ((1.0 - temporalFade) * pointLightOcclusionHistoryUAV[threadId.xy].x);
 #endif
 
     return color;

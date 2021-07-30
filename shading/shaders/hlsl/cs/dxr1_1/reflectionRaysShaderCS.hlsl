@@ -15,9 +15,9 @@ StructuredBuffer<UniformMaterial>           uniformMaterials                 : r
 StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : register(t11, space0);
 
 RWTexture2D<float4> reflectionUAV : register(u0);
-RWTexture2D<float4> pointLightOcclusionUAV : register(u1);
-RWTexture2D<float4> pointLightOcclusionHistoryUAV : register(u2);
-RWTexture2D<float4> debugUAV : register(u3);
+//RWTexture2D<float4> pointLightOcclusionUAV : register(u1);
+//RWTexture2D<float4> pointLightOcclusionHistoryUAV : register(u2);
+//RWTexture2D<float4> debugUAV : register(u3);
 
 SamplerState bilinearWrap : register(s0);
 
@@ -148,7 +148,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                       hitPosition,
                                       transmittance);
 
-                debugUAV[threadId.xy].xyz = hitPosition;
+                //debugUAV[threadId.xy].xyz = hitPosition;
 
                 // Reflection ray direction
                 if (transmittance == 0.0)
