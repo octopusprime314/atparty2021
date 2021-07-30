@@ -9,10 +9,11 @@ struct PathWaypoint
 {
     Vector4 position;
     Vector4 rotation;
+    Vector4 scale;
     Vector4 linearVelocity; // calculated
     float   time;
 
-    PathWaypoint(const Vector4& p, const Vector4& r, float t) : position(p), rotation(r), time(t) {}
+    PathWaypoint(const Vector4& p, const Vector4& r, const Vector4& s, float t) : position(p), rotation(r), scale(s), time(t) {}
 };
 
 class WaypointPath

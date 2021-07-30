@@ -260,10 +260,16 @@ Matrix ViewEventDistributor::getProjection() { return _currCamera->getProjection
 Matrix ViewEventDistributor::getView()
 {
     auto cameraView                = _currCamera->getView();
+
     cameraView.getFlatBuffer()[8]  = -cameraView.getFlatBuffer()[8];
     cameraView.getFlatBuffer()[9]  = -cameraView.getFlatBuffer()[9];
     cameraView.getFlatBuffer()[10] = -cameraView.getFlatBuffer()[10];
     cameraView.getFlatBuffer()[11] = -cameraView.getFlatBuffer()[11];
+
+    //cameraView.getFlatBuffer()[4] = -cameraView.getFlatBuffer()[4];
+    //cameraView.getFlatBuffer()[5] = -cameraView.getFlatBuffer()[];
+    //cameraView.getFlatBuffer()[6] = -cameraView.getFlatBuffer()[2];
+    //cameraView.getFlatBuffer()[7] = -cameraView.getFlatBuffer()[3];
     return cameraView;
 }
 
@@ -556,13 +562,13 @@ void ViewEventDistributor::_updateView(Camera* camera, Vector4 posV, Vector4 rot
     _translation = Matrix::translation(-pos[0], -pos[1], -pos[2]);
     // Update the rotation state matrix
 
-    _rotation        = Matrix::rotationAroundY(rotV.gety()) * 
-                       Matrix::rotationAroundZ(rotV.getz()) *
-                       Matrix::rotationAroundX(rotV.getx());
+    _rotation = Matrix::rotationAroundX(rotV.getx()) *
+                Matrix::rotationAroundY(rotV.gety()) *
+                Matrix::rotationAroundZ(rotV.getz());
 
-    _inverseRotation = Matrix::rotationAroundY(-rotV.gety()) *
-                       Matrix::rotationAroundZ(-rotV.getz()) *
-                       Matrix::rotationAroundX(-rotV.getx());
+    _inverseRotation = Matrix::rotationAroundX(-rotV.getx()) *
+                        Matrix::rotationAroundY(-rotV.gety()) *
+                       Matrix::rotationAroundZ(-rotV.getz());
 
     // translate then rotate around point
     camera->setViewMatrix(_rotation * _translation);

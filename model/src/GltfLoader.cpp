@@ -249,6 +249,192 @@ float GetYaw(Vector4 q)
     return z;
 }
 
+void AnimatingNodes(const Document* document, const GLTFResourceReader* resourceReader,
+                    std::vector<PathWaypoint> waypoints, int nodeIndex, int animationIndex,
+                    std::map<int, std::vector<PathWaypoint>>& nodeWayPoints,
+                    std::map<int, std::map<TargetPath, int>>& nodeToSamplerIndex,
+    Vector4 cameraPosition, Vector4 cameraRotation)
+{
+    std::string::size_type sz;
+
+    const auto& node = document->nodes.Elements()[nodeIndex];
+
+    auto samplerIds = document->animations[animationIndex].samplers.Elements();
+
+    auto targetPaths = nodeToSamplerIndex[nodeIndex];
+
+    std::map<TargetPath, Accessor> inputAccessorForAnimation;
+    std::map<TargetPath, Accessor> outputAccessorForAnimation;
+
+    for (auto sampleKind : targetPaths)
+    {
+        inputAccessorForAnimation[sampleKind.first] = document->accessors.Get(samplerIds[sampleKind.second].inputAccessorId);
+        outputAccessorForAnimation[sampleKind.first] = document->accessors.Get(samplerIds[sampleKind.second].outputAccessorId);
+    }
+        
+    // Load instances of geometry using node hierarchy
+
+    std::vector<float> translationTimeFloats;
+    std::vector<float> translationVectors;
+    std::vector<float> rotationTimeFloats;
+    std::vector<float> rotationVectors;
+    std::vector<float> scaleTimeFloats;
+    std::vector<float> scaleVectors;
+
+    if (inputAccessorForAnimation.find(TargetPath::TARGET_TRANSLATION) != inputAccessorForAnimation.end())
+    {
+        translationTimeFloats =
+            resourceReader->ReadBinaryData<float>(*document, inputAccessorForAnimation[TARGET_TRANSLATION]);
+        translationVectors =
+            resourceReader->ReadBinaryData<float>(*document, outputAccessorForAnimation[TARGET_TRANSLATION]);
+    }
+
+    if (inputAccessorForAnimation.find(TargetPath::TARGET_ROTATION) != inputAccessorForAnimation.end())
+    {
+        rotationTimeFloats =
+            resourceReader->ReadBinaryData<float>(*document, inputAccessorForAnimation[TARGET_ROTATION]);
+        rotationVectors =
+            resourceReader->ReadBinaryData<float>(*document, outputAccessorForAnimation[TARGET_ROTATION]);
+    }
+
+    if (inputAccessorForAnimation.find(TargetPath::TARGET_SCALE) != inputAccessorForAnimation.end())
+    {
+        scaleTimeFloats =
+            resourceReader->ReadBinaryData<float>(*document, inputAccessorForAnimation[TARGET_SCALE]);
+        scaleVectors =
+            resourceReader->ReadBinaryData<float>(*document, outputAccessorForAnimation[TARGET_SCALE]);
+    }
+
+    int rotationIndex    = 0;
+    int scaleIndex       = 0;
+    int translationIndex = 0;
+    int timeIndex        = 0;
+    float previousTime   = 0.0;
+
+    int iterations = std::max(scaleTimeFloats.size(), std::max(translationTimeFloats.size(), rotationTimeFloats.size()));
+
+    if (iterations < 2)
+    {
+        return;
+    }
+
+    Vector4 translation = Vector4(0.0, 0.0, 0.0);
+    Vector4 rotation = Vector4(0.0, 0.0, 0.0);
+    Vector4 scale    = Vector4(1.0, 1.0, 1.0);
+                
+    // Offset animation by timeOffset in seconds
+    float timeOffset  = 0;
+    float currentTime = timeOffset;
+    // Don't process step interpolation by making sure iterations are greater than 1
+    while (timeIndex < iterations)
+    {
+
+        if (timeIndex < translationTimeFloats.size() &&
+            inputAccessorForAnimation.find(TargetPath::TARGET_TRANSLATION) != inputAccessorForAnimation.end())
+        {
+            translation = Vector4(translationVectors[translationIndex],
+                                  translationVectors[translationIndex + 1],
+                                  translationVectors[translationIndex + 2]);
+            translationIndex += 3;
+
+            currentTime = (translationTimeFloats[timeIndex]) + timeOffset;
+        }
+
+        if (timeIndex < rotationTimeFloats.size() &&
+            inputAccessorForAnimation.find(TargetPath::TARGET_ROTATION) != inputAccessorForAnimation.end())
+        {
+            Vector4 quaternion(rotationVectors[rotationIndex],
+                                rotationVectors[rotationIndex + 1],
+                                rotationVectors[rotationIndex + 2],
+                                rotationVectors[rotationIndex + 3]);
+
+            // Default camera orients in the negative Y direction
+            if (/*(node.children.size() > 0 && document->nodes.Elements()[std::stoi(node.children[0], &sz)].cameraId.empty() == false)*/
+                (node.name == "Camera"))
+            {
+
+                rotation = Vector4(-(90.0f - GetRoll(quaternion)), GetPitch(quaternion), GetYaw(quaternion));
+            }
+            else
+            {
+                rotation =
+                    Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+            }
+
+            rotationIndex += 4;
+
+            currentTime = (rotationTimeFloats[timeIndex]) + timeOffset;
+        }
+
+        if (timeIndex < scaleTimeFloats.size() &&
+            inputAccessorForAnimation.find(TargetPath::TARGET_SCALE) != inputAccessorForAnimation.end())
+        {
+            scale = Vector4(scaleVectors[scaleIndex], scaleVectors[scaleIndex + 1],
+                            scaleVectors[scaleIndex + 2]);
+
+            scaleIndex += 3;
+
+            currentTime = (scaleTimeFloats[timeIndex]) + timeOffset;
+        }
+
+        if (timeIndex == 0)
+        {
+            previousTime = currentTime;
+        }
+
+        // Way points are in milliseconds
+        PathWaypoint waypoint(translation, rotation, scale, currentTime * 500.0);
+
+        waypoints.push_back(waypoint);
+
+        timeIndex++;
+    }
+
+    nodeWayPoints[nodeIndex] = waypoints;
+}
+
+void ProcessChild(const Document* document, const GLTFResourceReader* resourceReader,
+                  int childNodeIndex,
+                  std::map<int, Matrix>& meshNodeTransforms, Matrix currentTransform,
+                  std::map<int, std::map<TargetPath, int>> nodeToSamplerIndex,
+                  std::map<int, std::vector<PathWaypoint>> nodeWayPoints)
+{
+    std::vector<PathWaypoint> waypoints;
+    const auto& node = document->nodes.Elements()[childNodeIndex];
+    if (node.meshId.empty() == false)
+    {
+        Vector4 position = Vector4(node.translation.x, node.translation.y, node.translation.z);
+        Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
+        Vector4 rotation = Vector4(GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+        Vector4 scale = Vector4(node.scale.x, node.scale.y, node.scale.z);
+
+        auto transform = Matrix::translation(position.getx(), position.gety(), position.getz()) *
+                         Matrix::rotationAroundY(rotation.gety()) *
+                         Matrix::rotationAroundZ(rotation.getz()) *
+                         Matrix::rotationAroundX(rotation.getx()) *
+                         Matrix::scale(scale.getx(), scale.gety(), scale.getz());
+
+        currentTransform = currentTransform * transform;
+
+        std::string::size_type sz; // alias of size_t
+        int meshId = std::stoi(node.meshId, &sz);
+
+        for (int childIndex = 0; childIndex < node.children.size(); childIndex++)
+        {
+            std::string::size_type sz; // alias of size_t
+            int                    childNodeIndex = std::stoi(node.children[childIndex], &sz);
+            ProcessChild(document, resourceReader, childNodeIndex, meshNodeTransforms,
+                         currentTransform, nodeToSamplerIndex, nodeWayPoints);
+        }
+
+        meshNodeTransforms[childNodeIndex] = currentTransform;
+    }
+    else
+    {
+
+    }
+}
+
 // Uses the Document and GLTFResourceReader classes to print information about various glTF binary resources
 void BuildGltfMeshes(const Document*           document,
                      const GLTFResourceReader* resourceReader,
@@ -277,11 +463,119 @@ void BuildGltfMeshes(const Document*           document,
 
             modelsPending.push_back(model);
 
-           
         }
         saveMaster->setLoadModelCount(modelsPending.size());
     }
-    
+
+    std::map<int, Matrix> meshNodeTransforms;
+    std::vector<int> rootNodes;
+    for (int sceneIndex = 0; sceneIndex < document->scenes.Size(); sceneIndex++)
+    {
+        const auto& scene = document->scenes.Elements()[sceneIndex];
+
+        std::string::size_type sz; // alias of size_t
+
+        for (int rootNodeIndex = 0; rootNodeIndex < scene.nodes.size(); rootNodeIndex++)
+        {
+            int rootNode = std::stoi(scene.nodes[rootNodeIndex], &sz);
+            rootNodes.push_back(rootNode);
+        }
+    }
+
+    std::string::size_type                   sz;
+    std::map<int, std::vector<PathWaypoint>> nodeWayPoints;
+
+    std::map<int, std::map<TargetPath, int>> nodeToSamplerIndex;
+
+    for (const auto& animation : document->animations.Elements())
+    {
+        for (const auto& channel : animation.channels.Elements())
+        {
+
+            int        nodeIndex   = std::stoi(channel.target.nodeId, &sz);
+            TargetPath sampleType  = channel.target.path;
+            int        sampleIndex = std::stoi(channel.samplerId, &sz);
+
+            nodeToSamplerIndex[nodeIndex][sampleType] = sampleIndex;
+        }
+    }
+
+    Vector4 cameraQuaternion = Vector4(0.0, 0.0, 0.0);
+    Vector4 cameraPosition = Vector4(0.0, 0.0, 0.0);
+    //if (loadType == ModelLoadType::Scene)
+    //{
+    //    // Use the resource reader to get each mesh primitive's position data
+    //    for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
+    //    {
+    //        const auto& node = document->nodes.Elements()[nodeIndex];
+
+    //        // Load camera from child nodes
+    //        if (node.meshId.empty() == true && node.children.empty() == false)
+    //        {
+    //            std::string::size_type sz; // alias of size_t
+    //            auto                   childNodeIndex = std::stoi(node.children[0], &sz);
+
+    //            auto cameraNode = document->nodes.Elements()[childNodeIndex];
+
+    //            if (cameraNode.cameraId.empty() == true)
+    //            {
+    //                continue;
+    //            }
+
+    //            cameraPosition = Vector4(node.translation.x, node.translation.y, node.translation.z);
+    //            cameraQuaternion = Vector4(node.rotation.x + cameraNode.rotation.x,
+    //                                       node.rotation.y + cameraNode.rotation.y,
+    //                                       node.rotation.z + cameraNode.rotation.z,
+    //                                       node.rotation.w + cameraNode.rotation.w);
+    //        }
+    //    }
+    //}
+
+    std::vector<PathWaypoint> waypoints;
+    // Use the resource reader to get each mesh primitive's position data
+    for (int nodeIndex : rootNodes)
+    {
+        const auto& node = document->nodes.Elements()[nodeIndex];
+
+        Matrix currentTransform = Matrix();
+
+        if (node.meshId.empty() == false)
+        {
+
+            std::string::size_type sz; // alias of size_t
+            int                    meshId = std::stoi(node.meshId, &sz);
+
+            Vector4 position = Vector4(node.translation.x, node.translation.y, node.translation.z);
+            Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
+            Vector4 rotation =
+                Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+            Vector4 scale = Vector4(node.scale.x, node.scale.y, node.scale.z);
+
+            currentTransform =
+                Matrix::translation(position.getx(), position.gety(), position.getz()) *
+                Matrix::rotationAroundY(rotation.gety()) *
+                Matrix::rotationAroundZ(rotation.getz()) *
+                Matrix::rotationAroundX(rotation.getx()) *
+                Matrix::scale(scale.getx(), scale.gety(), scale.getz());
+
+            meshNodeTransforms[nodeIndex] = currentTransform;
+        }
+        if (nodeToSamplerIndex.find(nodeIndex) != nodeToSamplerIndex.end()/* &&
+            (node.name == "Camera")*/)
+        {
+            AnimatingNodes(document, resourceReader, waypoints, nodeIndex, 0, nodeWayPoints,
+                          nodeToSamplerIndex, cameraPosition, cameraQuaternion);
+        }
+
+        for (int childIndex = 0; childIndex < node.children.size(); childIndex++)
+        {
+            std::string::size_type sz; // alias of size_t
+            int childNodeIndex = std::stoi(node.children[childIndex], &sz);
+            ProcessChild(document, resourceReader, childNodeIndex, meshNodeTransforms,
+                         currentTransform, nodeToSamplerIndex, nodeWayPoints);
+        }
+    }
+
     int modelIndex = 0;
     while (modelIndex < document->meshes.Elements().size())
     {
@@ -361,8 +655,12 @@ void BuildGltfMeshes(const Document*           document,
                     indexStrides.push_back(indices.size());
                     is32BitIndices = true;
                 }
-                std::string::size_type sz; // alias of size_t
-                materialIndices.push_back(std::stoi(meshPrimitive.materialId, &sz));
+
+                if (meshPrimitive.materialId.empty() == false)
+                {
+                    std::string::size_type sz; // alias of size_t
+                    materialIndices.push_back(std::stoi(meshPrimitive.materialId, &sz));
+                }
             }
 
             if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
@@ -611,6 +909,7 @@ void BuildGltfMeshes(const Document*           document,
         model->_isLoaded = true;
     }
 
+
     if (loadType == ModelLoadType::Scene)
     {
         ViewEventDistributor::CameraSettings camSettings;
@@ -634,28 +933,61 @@ void BuildGltfMeshes(const Document*           document,
                 sceneEntity.modelname = meshModel->getName();
                 sceneEntity.name      = meshModel->getName() + std::to_string(nodeIndex);
                 sceneEntity.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
-                sceneEntity.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+                sceneEntity.rotation = Vector4(GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
                 sceneEntity.scale    = Vector4(node.scale.x, node.scale.y, node.scale.z);
+
+                sceneEntity.useTransform = true;
+                sceneEntity.transform    = meshNodeTransforms[nodeIndex];
+
+                if (nodeWayPoints.find(nodeIndex) != nodeWayPoints.end())
+                {
+                    sceneEntity.waypointVectors = nodeWayPoints[nodeIndex];
+                }
 
                 EngineManager::instance()->addEntity(sceneEntity);
             }
             // Load camera from child nodes
-            else if (node.children.empty() == false)
+            //else if (node.children.empty() == false)
+            //{
+            //    std::string::size_type sz; // alias of size_t
+            //    auto                   childNodeIndex = std::stoi(node.children[0], &sz);
+
+            //    auto cameraNode = document->nodes.Elements()[childNodeIndex];
+
+            //    if (cameraNode.cameraId.empty() == true)
+            //    {
+            //        continue;
+            //    }
+
+            //    Vector4 cameraPosition(node.translation.x, node.translation.y, node.translation.z);
+            //    Vector4 quaternion(node.rotation.x + cameraNode.rotation.x,
+            //                       node.rotation.y + cameraNode.rotation.y,
+            //                       node.rotation.z + cameraNode.rotation.z,
+            //                       node.rotation.w + cameraNode.rotation.w);
+
+            //    camSettings.bobble           = false;
+            //    camSettings.lockedEntity     = -1;
+            //    camSettings.lockedEntityName = "";
+            //    camSettings.lockOffset       = Vector4(0.0, 0.0, 0.0, 0.0);
+            //    camSettings.path             = "";
+            //    camSettings.position         = cameraPosition;
+            //    // Default camera orients in the negative Y direction
+            //    camSettings.rotation = Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+            //    //camSettings.rotation = Vector4(0, -45, 0);
+
+            //    auto viewMan = ModelBroker::getViewManager();
+            //    camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
+            //    viewMan->setCamera(camSettings, &nodeWayPoints[nodeIndex]);
+            //}
+
+            else if (node.name == "Camera")
             {
-                std::string::size_type        sz; // alias of size_t
-                auto                          nodeIndex = std::stoi(node.children[0], &sz);
 
-                auto cameraNode = document->nodes.Elements()[nodeIndex];
-
-                if(cameraNode.cameraId.empty() == true)
-                {
-                    continue;
-                }
                 Vector4 cameraPosition(node.translation.x, node.translation.y, node.translation.z);
-                Vector4 quaternion(node.rotation.x + cameraNode.rotation.x,
-                                    node.rotation.y + cameraNode.rotation.y,
-                                    node.rotation.z + cameraNode.rotation.z,
-                                    node.rotation.w + cameraNode.rotation.w);
+                Vector4 quaternion(node.rotation.x,
+                                   node.rotation.y,
+                                   node.rotation.z,
+                                   node.rotation.w);
 
                 camSettings.bobble           = false;
                 camSettings.lockedEntity     = -1;
@@ -664,62 +996,14 @@ void BuildGltfMeshes(const Document*           document,
                 camSettings.path             = "";
                 camSettings.position         = cameraPosition;
                 // Default camera orients in the negative Y direction
-                camSettings.rotation = Vector4(GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+                camSettings.rotation =
+                    Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+                // camSettings.rotation = Vector4(0, -45, 0);
+
+                auto viewMan     = ModelBroker::getViewManager();
+                camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
+                viewMan->setCamera(camSettings, &nodeWayPoints[nodeIndex]);
             }
-        }
-
-        // Use the resource reader to get each mesh primitive's position data
-        for (const auto& animation : document->animations.Elements())
-        {
-            std::vector<PathWaypoint> waypoints;
-
-            std::string::size_type sz; // alias of size_t
-            int                    cameraIndex         = std::stoi(animation.id, &sz);
-            auto                   samplerIds          = document->animations[cameraIndex].samplers.Elements();
-
-            const Accessor& translationTimeAccessor = document->accessors.Get(samplerIds[0].inputAccessorId);
-            const Accessor& rotationTimeAccessor    = document->accessors.Get(samplerIds[1].inputAccessorId);
-            const Accessor& translationAccessor     = document->accessors.Get(samplerIds[0].outputAccessorId);
-            const Accessor& rotationAccessor        = document->accessors.Get(samplerIds[1].outputAccessorId);
-
-            auto translationTimeFloats = resourceReader->ReadBinaryData<float>(*document, translationTimeAccessor);
-            auto rotationTimeFloats    = resourceReader->ReadBinaryData<float>(*document, rotationTimeAccessor);
-            auto translationVectors    = resourceReader->ReadBinaryData<float>(*document, translationAccessor);
-            auto rotationVectors       = resourceReader->ReadBinaryData<float>(*document, rotationAccessor);
-
-            int rotationIndex    = 0;
-            int translationIndex = 0;
-            int timeIndex        = 0;
-            float previousTime   = 0.0;
-            while (timeIndex < translationTimeFloats.size())
-            {
-                Vector4 quaternion(rotationVectors[rotationIndex],
-                                    rotationVectors[rotationIndex + 1],
-                                    rotationVectors[rotationIndex + 2],
-                                    rotationVectors[rotationIndex + 3]);
-
-                // Default camera orients in the negative Y direction
-                Vector4 rotation = Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
-
-                // Way points are in milliseconds
-                PathWaypoint waypoint(Vector4(translationVectors[translationIndex],
-                                                translationVectors[translationIndex + 1],
-                                                translationVectors[translationIndex + 2]), 
-                                        rotation,
-                                        (translationTimeFloats[timeIndex] - previousTime) * 1000.0);
-
-                previousTime = translationTimeFloats[timeIndex];
-
-                waypoints.push_back(waypoint);
-
-                rotationIndex += 4;
-                translationIndex += 3;
-                timeIndex++;
-            }
-
-            auto viewMan = ModelBroker::getViewManager();
-            camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
-            viewMan->setCamera(camSettings, &waypoints);
         }
 
         // If camera has no keyframes then just load camera position with no waypoints
@@ -729,7 +1013,6 @@ void BuildGltfMeshes(const Document*           document,
             camSettings.type = ViewEventDistributor::CameraType::GOD;
             viewMan->setCamera(camSettings, nullptr);
         }
-
 
         // Use the resource reader to get each mesh primitive's position data
         int nodeIndex  = 0;
@@ -753,7 +1036,7 @@ void BuildGltfMeshes(const Document*           document,
                 sceneLight.lightType = LightType::POINT;
                 sceneLight.effectType = EffectType::Fire;
                 sceneLight.name      = light["name"];
-                sceneLight.scale     = Vector4(intensity, intensity, intensity) / 10.0;
+                sceneLight.scale     = Vector4(intensity, intensity, intensity) * 100.0;
                 sceneLight.lockedIdx = -1;
 
                 bool foundLight = false;

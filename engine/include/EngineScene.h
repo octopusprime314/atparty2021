@@ -12,8 +12,11 @@ struct SceneEntity
     Vector4                  position;
     Vector4                  rotation;
     Vector4                  scale;
+    bool                     useTransform = false;
+    Matrix                   transform;
     std::string              waypointPath;
     std::vector<std::string> vectorPaths;
+    std::vector<PathWaypoint> waypointVectors;
 };
 
 struct SceneLight

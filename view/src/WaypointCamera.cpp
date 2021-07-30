@@ -203,7 +203,8 @@ void WaypointCamera::_loadWaypointsFromFile(const std::string& file)
         time = static_cast<float>(::atof(vstrings[6].c_str()));
         Vector4 d(static_cast<float>(v_x), static_cast<float>(v_y), static_cast<float>(v_z));
         Vector4 r(static_cast<float>(r_x), static_cast<float>(r_y), static_cast<float>(r_z));
-        _waypoints.emplace_back(d, r, time);
+        Vector4 s(1.0, 1.0, 1.0);
+        _waypoints.emplace_back(d, r, s, time);
 
         // Probably don't know initial position for first entry
         if (_waypoints.size() > 1)

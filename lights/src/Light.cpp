@@ -183,7 +183,7 @@ void Light::render()
         uint64_t updateTimeAmplified = dayLengthMilliseconds / (60 * 1000);
         float    realTimeMilliSeconds =
             static_cast<float>(_milliSecondTime) / static_cast<float>(updateTimeAmplified);
-        _effectShader->runShader(this, realTimeMilliSeconds / 1000.f);
+        //_effectShader->runShader(this, realTimeMilliSeconds / 1000.f);
     }
 }
 

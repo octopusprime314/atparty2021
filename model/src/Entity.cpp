@@ -67,7 +67,16 @@ void Entity::reset(const SceneEntity& sceneEntity, ViewEventDistributor* viewMan
 {
     _model = ModelBroker::instance()->getModel(sceneEntity.modelname);
     _name  = sceneEntity.name;
-    setState(sceneEntity.position, sceneEntity.rotation, sceneEntity.scale);
+
+    if (sceneEntity.useTransform)
+    {
+        Matrix xform = sceneEntity.transform;
+        setState(xform);
+    }
+    else
+    {
+        setState(sceneEntity.position, sceneEntity.rotation, sceneEntity.scale);
+    }
 
     if (sceneEntity.vectorPaths.empty() == false)
     {
@@ -82,6 +91,18 @@ void Entity::reset(const SceneEntity& sceneEntity, ViewEventDistributor* viewMan
 
         _state.setGravity(false);
         _waypointPath = new WaypointPath(_model->getName(), sceneEntity.waypointPath, false, false);
+        _waypointPath->resetState(&_state);
+        _state.setActive(true);
+    }
+
+    if (sceneEntity.waypointVectors.size() > 0)
+    {
+        _state.setGravity(false);
+        _waypointPath = new WaypointPath(_model->getName(), sceneEntity.waypointVectors, false, false);
+
+        // Use the first scale value and assume it never changes
+        _scale = sceneEntity.waypointVectors[0].scale;
+
         _waypointPath->resetState(&_state);
         _state.setActive(true);
     }
@@ -223,14 +244,20 @@ void Entity::_updatePathKinematics(int milliSeconds)
     Matrix rotation = Matrix::rotationAroundY(static_cast<float>(angularPos.gety())) *
                       Matrix::rotationAroundZ(static_cast<float>(angularPos.getz())) *
                       Matrix::rotationAroundX(static_cast<float>(angularPos.getx()));
+
     Matrix kinematicTransform =
-        Matrix::translation(linearPos.getx(), linearPos.gety(), linearPos.getz()) * rotation *
-        Matrix::scale(_scale.getx(), _scale.gety(), _scale.getz());
+        Matrix::translation(linearPos.getx(), linearPos.gety(), linearPos.getz()) * rotation
+         * Matrix::scale(_scale.getx(), _scale.gety(), _scale.getz());
 
-    Matrix objectSpaceTransform = Matrix();
-
-    _worldSpaceTransform = kinematicTransform * objectSpaceTransform;
-
+    if (_waypointPath != nullptr)
+    {
+        _worldSpaceTransform = kinematicTransform;
+    }
+    else
+    {
+        _worldSpaceTransform = _initialWorldSpaceTransform;
+    }
+    
     _mvp.setModel(_worldSpaceTransform);
 }
 
@@ -348,6 +375,26 @@ void Entity::setState(const Vector4& position, const Vector4& rotation, const Ve
 
     _state.setLinearPosition(position);
     _state.setAngularPosition(rotation);
+}
+
+void Entity::setState(Matrix& transform)
+{
+    _scale = Vector4(1.0, 1.0, 1.0, 1.0); //scale;
+
+    MVP worldSpaceTransform;
+    worldSpaceTransform.setProjection(ModelBroker::getViewManager()->getProjection());
+    worldSpaceTransform.setView(ModelBroker::getViewManager()->getView());
+    worldSpaceTransform.setModel(transform);
+
+    _worldSpaceTransform = worldSpaceTransform.getModelMatrix();
+    _mvp.setProjection(worldSpaceTransform.getProjectionMatrix());
+    _mvp.setView(worldSpaceTransform.getViewMatrix());
+
+    _initialWorldSpaceTransform = _worldSpaceTransform;
+
+    //_state.setLinearPosition(transform * Vector4(0.0, 0.0, 0.0, 1.0));
+
+    //_state.setAngularPosition(rotation);
 }
 
 void Entity::setVelocity(Vector4 velocity) { _state.setLinearVelocity(velocity); }
