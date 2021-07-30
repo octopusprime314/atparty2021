@@ -73,7 +73,7 @@ ViewEventDistributor::ViewEventDistributor(int* argc, char** argv, unsigned int 
     _godState     = true;  // Start in god view mode
     _trackedState = false; // Don't start on the track...yet
     _entityIndex  = 0;     // Start at index 0
-
+    _cameraType = ViewEventDistributor::CameraType::GOD;
     _prevMouseX = IOEventDistributor::screenPixelWidth / 2;
     _prevMouseY = IOEventDistributor::screenPixelHeight / 2;
     _gameState  = EngineState::getEngineState();
@@ -148,6 +148,10 @@ Vector4 ViewEventDistributor::getCameraRot()
     return Vector4(rotation.getx(), rotation.gety(), rotation.getz());
 }
 
+ViewEventDistributor::CameraType ViewEventDistributor::getCameraType() {
+    return _cameraType;
+}
+
 void ViewEventDistributor::setProjection(unsigned int viewportWidth, unsigned int viewportHeight,
                                          float nearPlaneDistance, float farPlaneDistance)
 {
@@ -184,6 +188,7 @@ void ViewEventDistributor::setCamera(const CameraSettings&            settings,
     _lockedEntity = settings.lockedEntity;
     _lockOffset   = settings.lockOffset;
     _bobble       = settings.bobble;
+    _cameraType   = settings.type;
     if (settings.type == CameraType::VECTOR)
     {
         std::string vec_file = settings.path;

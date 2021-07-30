@@ -49,16 +49,43 @@ void AudioManager::loadBankFile(const std::string& bankFile)
     }
 }
 
-void AudioManager::update() 
+void AudioManager::setWaypointEvents(const WaypointEvents& waypointEvents) {
+    _waypointEvents = waypointEvents;
+}
+
+void AudioManager::update(int waypointIdx) 
+{
+    if (_waypointEvents.find(waypointIdx) != _waypointEvents.end()) {
+        auto& events = _waypointEvents[waypointIdx];
+        for (auto& e : events) {
+            switch (e.type) {
+            case EventType::START:
+                playEvent(e.eventName);
+                break;
+            case EventType::STOP:
+                stopEvent(e.eventName);
+                break;
+            }
+        }
+    }
+    _studioSystem->update();
+}
+
+void AudioManager::update()
 {
     _studioSystem->update();
 }
+
 
 void AudioManager::playEvent(const std::string& eventName)
 {
     FMOD_RESULT result;
 
-    if (_eventDescriptions.find(eventName) != _eventDescriptions.end()) {
+    if (_events.find(eventName) != _events.end()) {
+        FMOD::Studio::EventInstance* eventInstance = _events[eventName];
+        eventInstance->start();
+    }
+    else if (_eventDescriptions.find(eventName) != _eventDescriptions.end()) {
         FMOD::Studio::EventInstance* eventInstance = NULL;
         result = _eventDescriptions[eventName]->createInstance(&eventInstance);
         if (result != FMOD_OK)
@@ -67,7 +94,18 @@ void AudioManager::playEvent(const std::string& eventName)
         }
 
         eventInstance->start();
-        _events.push_back(eventInstance);
+        _events[eventName] = eventInstance;
     }
 }
+
+void AudioManager::stopEvent(const std::string& eventName)
+{
+    FMOD_RESULT result;
+
+    if (_events.find(eventName) != _events.end()) {
+        FMOD::Studio::EventInstance* eventInstance = _events[eventName];
+        eventInstance->stop(FMOD_STUDIO_STOP_IMMEDIATE);
+    }
+}
+
 

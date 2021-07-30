@@ -308,6 +308,25 @@ std::shared_ptr<EngineScene> parse(const std::string& file, ViewEventDistributor
         scene->cameraSettings = settings;
     }
 
+    AudioManager::WaypointEvents waypointEvents;
+    for (auto& se : jd["sound_events"]) {
+        std::vector<AudioManager::WaypointEvent> events;
+        int idx = se["idx"];
+        for (auto& we : se["events"]) {
+            AudioManager::WaypointEvent ev;
+            if (we["action"] == "start") {
+                ev.type = AudioManager::EventType::START;
+            }
+            else if (we["action"] == "stop") {
+                ev.type = AudioManager::EventType::STOP;
+            }
+            ev.eventName = we["eventName"];
+            events.emplace_back(ev);
+        }
+        waypointEvents[idx] = events;
+    }
+    audioManager->setWaypointEvents(waypointEvents);
+
     return scene;
 }
 

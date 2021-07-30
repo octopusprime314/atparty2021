@@ -101,6 +101,7 @@ class ViewEventDistributor : public EventSubscriber
     bool                 _bobble;
     Vector4              _prevCameraPos;
     Matrix               _prevCameraView;
+    CameraType           _cameraType;
 
     void _updateKinematics(int milliSeconds);
     void _updateView(Camera* camera, Vector4 posV, Vector4 rotV);
@@ -122,6 +123,7 @@ class ViewEventDistributor : public EventSubscriber
     void              triggerEvents();
     Vector4           getCameraPos();
     Vector4           getCameraRot();
+    CameraType        getCameraType();
     Camera::ViewState getViewState();
     Matrix            getView();
     void              setCamera(const CameraSettings& settings, const std::vector<PathWaypoint>* waypoints = nullptr);

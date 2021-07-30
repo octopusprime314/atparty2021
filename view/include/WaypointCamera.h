@@ -38,6 +38,7 @@ class WaypointCamera : public Camera
     void         setInversion(const Matrix& inversion);
     void         setWaypointsFromFile(const std::string& file);
     void         setWaypoints(const std::vector<PathWaypoint>& waypoints);
+    int          getCurrentWaypointIdx();
     virtual void updateState(int milliseconds);
 
   private:

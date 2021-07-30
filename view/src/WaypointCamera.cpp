@@ -40,6 +40,10 @@ void WaypointCamera::setWaypoints(const std::vector<PathWaypoint>& waypoints)
     reset();
 }
 
+int WaypointCamera::getCurrentWaypointIdx() {
+    return _currentWaypoint;
+}
+
 void WaypointCamera::setWaypointsFromFile(const std::string& file)
 {
     _wayPointType = WaypointType::AcceleratingWaypoints;

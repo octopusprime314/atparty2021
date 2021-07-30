@@ -66,12 +66,32 @@
     }
   ],
   "entities": [],
-  "fbx_scene": "please_work_lod1.gltf",
+  "fbx_scene": "cave_lod1.gltf",
   "fluids": [],
   "lights": [],
   "name": "above_ground",
   "skybox_day": "skybox-day",
   "skybox_night": "skybox-night",
   "sound_file": "../assets/audio/Master.bank",
+  "sound_events": [
+    {
+      "idx": 0,
+      "events": [
+        {
+          "action": "start",
+          "eventName": ""
+        }
+      ]
+    },
+    {
+      "idx": 1000,
+      "events": [
+        {
+          "action": "stop",
+          "eventName": ""
+        }
+      ]
+    }
+  ],
   "strings": []
 }
