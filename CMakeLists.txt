@@ -201,8 +201,8 @@ FetchContent_Populate(assets
 
 #pre fetches lib dependencies during cmake -G configuration
 FetchContent_Populate(libs
-                      URL        https://www.dropbox.com/s/k6uatfwg2ixlvio/compaction-demo-libs.zip?dl=0
-                      URL_HASH   MD5=57bf31cf16d6f54c233f80d599003c19
+                      URL        https://www.dropbox.com/s/nkred738hhssal1/libs.zip?dl=0
+                      URL_HASH   MD5=7ba73e0ab57b29fe729fe2096f2009ce
                       SOURCE_DIR libs)
 
 #Copy over the contents of the unzipped folder
