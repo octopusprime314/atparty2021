@@ -2,6 +2,7 @@
 
 AudioManager::AudioManager()
     : _masterBank(nullptr)
+    , _stringsBank(nullptr)
 {
     // Core System
     FMOD_RESULT result;
@@ -21,13 +22,21 @@ AudioManager::AudioManager()
 
 AudioManager::~AudioManager()
 {
+    _masterBank->unload();
+    _stringsBank->unload();
     _studioSystem->release();
 }
 
-void AudioManager::loadBankFile(const std::string& bankFile)
+void AudioManager::loadBankFile(const std::string& bankFile, const std::string& metadataFile)
 {
     FMOD_RESULT result;
     result = _studioSystem->loadBankFile(bankFile.c_str(), FMOD_STUDIO_LOAD_BANK_NORMAL, &_masterBank);
+    if (result != FMOD_OK)
+    {
+        __debugbreak();
+    }
+
+    result = _studioSystem->loadBankFile(metadataFile.c_str(), FMOD_STUDIO_LOAD_BANK_NORMAL, &_stringsBank);
     if (result != FMOD_OK)
     {
         __debugbreak();

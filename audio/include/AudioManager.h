@@ -44,7 +44,7 @@ class AudioManager
     AudioManager();
     ~AudioManager();
 
-    void            loadBankFile(const std::string& bankFile);
+    void            loadBankFile(const std::string& bankFile, const std::string& metadataFile);
     void            setWaypointEvents(const WaypointEvents& waypointEvents);
     void            update(int waypointIdx);
     void            update();
@@ -56,6 +56,7 @@ class AudioManager
 
     FMOD::Studio::System*                                                       _studioSystem;
     FMOD::Studio::Bank*                                                         _masterBank;
+    FMOD::Studio::Bank*                                                         _stringsBank;
     std::unordered_map<std::string, FMOD::Studio::EventInstance*>               _events;
     EventDescriptions                                                           _eventDescriptions;
     WaypointEvents                                                              _waypointEvents;

@@ -172,6 +172,7 @@ std::shared_ptr<EngineScene> parse(const std::string& file, ViewEventDistributor
 
     scene->name        = jd["name"];
     scene->soundFile   = jd["sound_file"];
+    scene->soundMetadataFile = jd["sound_metadata_file"];
     scene->skyboxDay   = jd["skybox_day"];
     scene->skyboxNight = jd["skybox_night"];
     scene->fbxScene    = jd["fbx_scene"];
@@ -179,7 +180,7 @@ std::shared_ptr<EngineScene> parse(const std::string& file, ViewEventDistributor
     // Load and compile all models for the model broker
     ModelBroker::instance()->buildModels(scene->fbxScene, viewManager);
 
-    audioManager->loadBankFile(scene->soundFile);
+    audioManager->loadBankFile(scene->soundFile, scene->soundMetadataFile);
     for (auto& e : jd["entities"])
     {
         SceneEntity sceneEntity                = build_entity(e);

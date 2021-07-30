@@ -52,6 +52,7 @@ struct EngineScene
     std::string                          name;
     std::string                          fbxScene;
     std::string                          soundFile;
+    std::string                          soundMetadataFile;
     std::string                          skyboxDay;
     std::string                          skyboxNight;
     ViewEventDistributor::CameraSettings cameraSettings;

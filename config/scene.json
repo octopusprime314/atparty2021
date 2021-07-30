@@ -73,13 +73,14 @@
   "skybox_day": "skybox-day",
   "skybox_night": "skybox-night",
   "sound_file": "../assets/audio/Master.bank",
+  "sound_metadata_file": "../assets/audio/Master.strings.bank",
   "sound_events": [
     {
       "idx": 0,
       "events": [
         {
           "action": "start",
-          "eventName": ""
+          "eventName": "event:/SFX Bin/3D Events/Hydraulic Lift"
         }
       ]
     },
@@ -88,7 +89,7 @@
       "events": [
         {
           "action": "stop",
-          "eventName": ""
+          "eventName": "event:/SFX Bin/3D Events/Hydraulic Lift"
         }
       ]
     }
