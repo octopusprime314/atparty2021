@@ -33,7 +33,7 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
 
     // initialize engine manager pointer so it can be used a singleton
     _engineManager = this;
-    _graphicsLayer = GraphicsLayer::DXR_1_1_PATHTRACER;
+    _graphicsLayer = GraphicsLayer::DX12;
     _generatorMode = false;
     _shadowEntity  = nullptr;
 
@@ -99,9 +99,12 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
     _viewManager->triggerEvents();
     _viewManager->setEntityList(_scene->entityList);
 
+    _audioManager->playEvent("");
+
     MasterClock::instance()->start();
     DXLayer::instance()->fenceCommandList();
     _inputLayer->run();
+
 }
 
 EngineManager::~EngineManager()
