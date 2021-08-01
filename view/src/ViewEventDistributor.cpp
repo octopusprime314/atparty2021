@@ -160,7 +160,7 @@ void ViewEventDistributor::setProjection(unsigned int viewportWidth, unsigned in
     // near plane from camera location
     // far plane from camera location
     _currCamera->setProjection(Matrix::projection(
-        45.0f, static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight),
+        30.0f, static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight),
         nearPlaneDistance, farPlaneDistance));
     _godCamera.setProjection(_currCamera->getProjection());
     _viewCamera.setProjection(_currCamera->getProjection());

@@ -116,7 +116,8 @@ static float refractionIndex = 1.0 - reflectionIndex;
             float3 sampleVector = -normalize(rayDir);
             float4 dayColor     = skyboxTexture.SampleLevel(bilinearWrap, float3(sampleVector.x, sampleVector.y, sampleVector.z), 0);
 
-            albedoUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 0.0);
+            albedoUAV[threadId.xy]   = float4(137.0 / 256.0, 207.0 / 256.0, 240.0 / 256.0, 0.0) * (1.0 + (sampleVector.y*3)) + 
+                                       float4(0.0, 0.0, 0.22, 0.0) * (-sampleVector.y*3);
             normalUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 0.0);
             positionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, 0.0);
         }

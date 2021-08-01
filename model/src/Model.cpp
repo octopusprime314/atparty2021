@@ -14,7 +14,7 @@ Model::Model(std::string name, ModelClass classId)
     _isLoaded = false;
 
     // trim extension off
-    _name = _name.substr(0, _name.find_last_of("."));
+    //_name = _name.substr(0, _name.find_last_of("."));
     _vao.push_back(new VAO());
 
     std::string postScript = name.substr(name.find("_"));

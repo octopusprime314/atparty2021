@@ -363,7 +363,7 @@ void AnimatingNodes(const Document* document, const GLTFResourceReader* resource
 
             rotationIndex += 4;
 
-            currentTime = (rotationTimeFloats[timeIndex]) + timeOffset;
+            //currentTime = (rotationTimeFloats[timeIndex]) + timeOffset;
         }
 
         if (timeIndex < scaleTimeFloats.size() &&
@@ -374,7 +374,7 @@ void AnimatingNodes(const Document* document, const GLTFResourceReader* resource
 
             scaleIndex += 3;
 
-            currentTime = (scaleTimeFloats[timeIndex]) + timeOffset;
+            //currentTime = (scaleTimeFloats[timeIndex]) + timeOffset;
         }
 
         if (timeIndex == 0)
@@ -454,10 +454,13 @@ void BuildGltfMeshes(const Document*           document,
         int    modelWorkerThreadIndex = 0;
         for (int meshIndex = 0; meshIndex < document->meshes.Elements().size(); meshIndex++)
         {
+            const auto& mesh              = document->meshes.Elements()[meshIndex];
+            std::string meshName          = mesh.name;
+
             std::string strippedLod = pathFile.substr(0, pathFile.find("_"));
-            std::string strippedExtension = pathFile.substr(0, pathFile.find("."));
+            std::string strippedExtension = pathFile.substr(0, pathFile.find_last_of("."));
             std::string name = COLLECTIONS_MESH_LOCATION + strippedLod + "/" + strippedExtension +
-                               std::to_string(meshIndex) + "collection";
+                               std::to_string(meshIndex) + meshName + "collection";
             model = new Model(name);
             ModelBroker::instance()->addCollectionEntry(model);
 
@@ -593,6 +596,7 @@ void BuildGltfMeshes(const Document*           document,
 
         bool             is32BitIndices = false;
         std::vector<int> materialIndices;
+
         // Use the resource reader to get each mesh primitive's position data
         for (int meshIndex = modelIndex; meshIndex < document->meshes.Elements().size(); meshIndex++)
         {
@@ -790,8 +794,11 @@ void BuildGltfMeshes(const Document*           document,
 
         if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
         {
-            std::string strippedExtension = pathFile.substr(0, pathFile.find("."));
-            std::string name = strippedExtension + std::to_string(modelIndex) + "collection";
+            const auto& mesh              = document->meshes.Elements()[modelIndex];
+            std::string meshName          = mesh.name;
+            std::string strippedExtension = pathFile.substr(0, pathFile.find_last_of("."));
+            std::string name =
+                strippedExtension + std::to_string(modelIndex) + meshName + "collection";
             model = ModelBroker::instance()->getModel(name);
         }
 
@@ -1073,13 +1080,17 @@ void BuildGltfMeshes(const Document*           document,
                         }
                     }
 
-                    nodeIndex++;
-
                     if (foundLight == true)
                     {
+                        if (nodeWayPoints.find(nodeIndex) != nodeWayPoints.end())
+                        {
+                            sceneLight.waypointVectors = nodeWayPoints[nodeIndex];
+                        }
                         EngineManager::instance()->addLight(sceneLight);
                         break;
                     }
+
+                    nodeIndex++;
                 }
                 lightIndex++;
             }

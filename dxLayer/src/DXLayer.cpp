@@ -31,13 +31,13 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
     int height = GetSystemMetrics(SM_CYSCREEN);
 
     // windowed fullscreen
-    _window = CreateWindowEx(NULL, windowClass.lpszClassName, windowClass.lpszClassName,
-                             WS_OVERLAPPEDWINDOW, 0, 0, width, height, NULL, NULL, hInstance, NULL);
+    //_window = CreateWindowEx(NULL, windowClass.lpszClassName, windowClass.lpszClassName,
+    //                         WS_OVERLAPPEDWINDOW, 0, 0, width, height, NULL, NULL, hInstance, NULL);
 
     // borderless fullscreen
-    //_window = CreateWindowEx(NULL, windowClass.lpszClassName, windowClass.lpszClassName,
-    //               WS_EX_TOPMOST | WS_POPUP,
-    //               0, 0, width, height, NULL, NULL, hInstance, NULL);
+    _window = CreateWindowEx(NULL, windowClass.lpszClassName, windowClass.lpszClassName,
+                   WS_EX_TOPMOST | WS_POPUP,
+                   0, 0, width, height, NULL, NULL, hInstance, NULL);
 
     RECT rect = {0};
     GetWindowRect(_window, &rect);
@@ -355,37 +355,37 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
     _gfxCmdLists[prevCmdListIndex]->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
     _gfxCmdLists[prevCmdListIndex]->SetDescriptorHeaps(1, _descHeapForImguiFonts.GetAddressOf());
 
-    _mtx.lock();
+    //_mtx.lock();
 
-    // Start the Dear ImGui frame
-    ImGui_ImplDX12_NewFrame();
-    ImGui_ImplWin32_NewFrame();
-    ImGui::NewFrame();
+    //// Start the Dear ImGui frame
+    //ImGui_ImplDX12_NewFrame();
+    //ImGui_ImplWin32_NewFrame();
+    //ImGui::NewFrame();
 
-    ImGui::SetNextWindowSize(ImVec2(500, 500));
+    //ImGui::SetNextWindowSize(ImVec2(500, 500));
 
-    ImGui::Begin("Perf window");
+    //ImGui::Begin("Perf window");
 
-    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-                1000.0f / ImGui::GetIO().Framerate,
-                ImGui::GetIO().Framerate);
+    //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
+    //            1000.0f / ImGui::GetIO().Framerate,
+    //            ImGui::GetIO().Framerate);
 
-    ImGui::Text(_perfData.c_str());
+    //ImGui::Text(_perfData.c_str());
 
-    ImGui::Text(RTCompaction::GetLog());
+    //ImGui::Text(RTCompaction::GetLog());
 
-    auto entityList = EngineManager::instance()->getEntityList();
-    ResourceManager* resourceManager = EngineManager::getResourceManager();
+    //auto entityList = EngineManager::instance()->getEntityList();
+    //ResourceManager* resourceManager = EngineManager::getResourceManager();
 
-    ImGui::Text(("TLAS count: " + std::to_string(entityList->size())).c_str());
-    ImGui::Text(("BLAS count: " + std::to_string(resourceManager->getBLASCount())).c_str());
+    //ImGui::Text(("TLAS count: " + std::to_string(entityList->size())).c_str());
+    //ImGui::Text(("BLAS count: " + std::to_string(resourceManager->getBLASCount())).c_str());
 
-    ImGui::End();
+    //ImGui::End();
 
-    ImGui::Render();
-    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), _gfxCmdLists[prevCmdListIndex].Get());
+    //ImGui::Render();
+    //ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), _gfxCmdLists[prevCmdListIndex].Get());
 
-    _mtx.unlock();
+    //_mtx.unlock();
 
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
 

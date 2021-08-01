@@ -66,7 +66,7 @@
     }
   ],
   "entities": [],
-  "fbx_scene": "cave_lod1.gltf",
+  "fbx_scene": "final_final_lod1.gltf",
   "fluids": [],
   "lights": [],
   "name": "above_ground",
@@ -74,13 +74,13 @@
   "skybox_night": "skybox-night",
   "sound_file": "../assets/audio/Master.bank",
   "sound_metadata_file": "../assets/audio/Master.strings.bank",
-  "sound_events": [
+   "sound_events": [
     {
       "idx": 0,
       "events": [
         {
           "action": "start",
-          "eventName": "event:/SFX Bin/3D Events/Hydraulic Lift"
+          "eventName": "event:/FullSound"
         }
       ]
     },
@@ -88,8 +88,8 @@
       "idx": 1000,
       "events": [
         {
-          "action": "stop",
-          "eventName": "event:/SFX Bin/3D Events/Hydraulic Lift"
+          "action": "start",
+          "eventName": "event:/Music"
         }
       ]
     }

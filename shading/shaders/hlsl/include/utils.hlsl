@@ -280,7 +280,7 @@ void GenerateCameraRay(uint2 index, out float3 origin, out float3 direction, in 
     float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
     origin                = cameraPosition;
 
-    float fov              = 45.0f;
+    float fov              = 30.0f;
     float imageAspectRatio = screenSize.x / screenSize.y; // assuming width > height
     float Px = (2.0 * ((index.x + 0.5) / screenSize.x) - 1.0) * tan(fov / 2.0 * PI / 180.0) *
                imageAspectRatio;

@@ -76,7 +76,14 @@ void main(int3 threadId : SV_DispatchThreadID,
     float3 sunLighting =
         GetBRDFSunLight(albedo, normal, position, roughness, metallic, threadId.xy);
 
-    sunLightUAV[threadId.xy] = float4(sunLighting.xyz, 1.0);
+    if (normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0)
+    {
+        sunLightUAV[threadId.xy] = float4(albedo.xyz, 1.0);
+    }
+    else
+    {
+        sunLightUAV[threadId.xy] = float4(sunLighting.xyz, 1.0);
+    }
 
 
     //// Random indirect light ray from the hit position

@@ -6,7 +6,7 @@ set(TLS_VERIFY OFF)
 include(InstallRequiredSystemLibraries)
 include(FetchContent)
 
-set(DXR 0)
+set(DXR 1)
 set(DEBUG_SHADERS 1)
 
 set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/atparty2021-dist")
@@ -225,7 +225,8 @@ add_custom_command(TARGET atparty2021 POST_BUILD
 
 install(TARGETS atparty2021 RUNTIME DESTINATION bin)
 install(FILES "${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll"
-              "${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod64.dll"
+              "${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod.dll"
+              "${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmodstudio.dll"
               "${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll"
         DESTINATION bin)
 # FYI: Keep the trailing '/'s here.

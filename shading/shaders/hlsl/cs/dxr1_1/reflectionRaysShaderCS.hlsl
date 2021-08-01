@@ -28,8 +28,13 @@ cbuffer globalData : register(b0)
     float4 pointLightColors[MAX_LIGHTS];
     float4 pointLightRanges[MAX_LIGHTS / 4];
     float4 pointLightPositions[MAX_LIGHTS];
+
+    float4 sunLightColor;
+    float4 sunLightPosition;
+    float2 screenSize;
+    float  sunLightRadius;
+    float  sunLightRange;
     
-    float2   screenSize;
     int      numPointLights;
 
     uint seed;
@@ -40,6 +45,7 @@ cbuffer globalData : register(b0)
 }
 
 #include "../../include/pointLightCommon.hlsl"
+#include "../../include/sunLightCommon.hlsl"
 #include "../../include/utils.hlsl"
 
 static float reflectionIndex = 0.5;
@@ -163,7 +169,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                      metallic,
                                                      threadId.xy,
                                                      false,
-                                                     bounceIndex);
+                                                     bounceIndex) / 2.0;
+
+                reflectionColor +=
+                    GetBRDFSunLight(albedo, normal, hitPosition, roughness, metallic, threadId.xy) / 10.0f;
+
                 bounceIndex++;
             }
             else

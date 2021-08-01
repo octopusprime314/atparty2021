@@ -17,7 +17,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     float3 lightDirection = normalize(hitPosition - sunLightPosition.xyz);
     float3 halfVector     = normalize(eyeVector + lightDirection);
     float  distance       = length(hitPosition - sunLightPosition.xyz);
-    float3 radiance       = sunLightColor.xyz * 100;
+    float3 radiance       = sunLightColor.xyz * (100 / 8.0);
     // Treat the sun as an infinite power light source so no need to apply attenuation
     // float  attenuation    = 1.0f / (distance * distance);
     // float3 lightIntensity = float3(23.47f, 21.31f, 20.79f) * 500000000.0f;
@@ -28,6 +28,9 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     // Weird sun light leaking is occuring and for now just basically disable the sun light within
     // the cave for pbr testing
     float lightRange = sunLightRange;
+
+    // Main occlusion test passes so assume completely in shadow
+    float occlusion = 0.0;
 
     if (distance < lightRange)
     {
@@ -71,17 +74,15 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
 
         rayQuery.Proceed();
 
-        // Main occlusion test passes so assume completely in shadow
-        float occlusion = 0.0;
 
         if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
         {
             // Main occlusion test passes so assume completely in shadow
-            occlusion                   = 0.0;
+            occlusion                   = 0.7;
             //occlusionUAV[threadId.xy].x = 1.0;
         }
-        else
-        {
+        /*else
+        {*/
             //// W component = 1.0 indicates front face so we need to negate the surface normal
             //if (positionSRV[threadId].w == 0.0)
             //{
@@ -114,7 +115,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
             // will be scattered within the surface (diffuse lighting) rather than get reflected (specular)
             // which will get color from the diffuse surface the reflected light hits after the bounce.
             Lo += (diffuse + specular) * radiance * NdotL * (1.0f - occlusion);
-        }
+        //}
     }
 
 
@@ -169,7 +170,15 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     //occlusionHistoryUAV[threadId.xy].y = (temporalFade * occlusionUAV[threadId.xy].y) +
     //                                    ((1.0 - temporalFade) * occlusionHistoryUAV[threadId.xy].y);
 
-    float3 ambient = float3(0.03f, 0.03f, 0.03f) * albedo;
+    float3 ambient = (float3(0.03f, 0.03f, 0.03f) * albedo);
+
+    /*if (occlusion != 0.0)
+    {
+        ambient *= (float3(137.0 / 256.0, 207.0 / 256.0, 240.0 / 256.0));
+
+        ambient *= 10.0;
+    }*/
+                     
     float3 color   = ambient + Lo;
 
     // Gamma correction

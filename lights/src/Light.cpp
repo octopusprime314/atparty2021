@@ -41,6 +41,20 @@ Light::Light(const SceneLight& sceneLight)
         _state.setActive(true);
     }
 
+    if (sceneLight.waypointVectors.size() > 0)
+    {
+        if (_waypointPath != nullptr)
+        {
+            delete _waypointPath;
+        }
+
+        _state.setGravity(false);
+        _waypointPath = new WaypointPath(sceneLight.name, sceneLight.waypointVectors, false, false);
+
+        _waypointPath->resetState(&_state);
+        _state.setActive(true);
+    }
+
     setLightState(sceneLight.position, sceneLight.rotation, sceneLight.scale, sceneLight.color);
 
     // Hook up to kinematic update for proper physics handling

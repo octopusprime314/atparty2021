@@ -33,6 +33,7 @@ struct SceneLight
     std::string vectorPath;
     std::string waypointPath;
     std::string colorPath;
+    std::vector<PathWaypoint> waypointVectors;
 };
 
 struct SceneString

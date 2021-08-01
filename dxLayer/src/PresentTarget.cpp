@@ -145,5 +145,6 @@ ComPtr<ID3D12Resource> PresentTarget::getBackBuffer(int swapChainIndex)
 
 HRESULT PresentTarget::present()
 {
-    return _swapChain->Present(0, 0);
+    // forces vsync when setting sync interval to 1
+    return _swapChain->Present(1, 0);
 }

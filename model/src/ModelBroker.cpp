@@ -59,9 +59,13 @@ Model* ModelBroker::getModel(std::string modelName)
     {
         return _models[upperCaseMapName + "_LOD1"];
     }
-    else
+    else if (_models.find(upperCaseMapName) != _models.end())
     {
         return _models[upperCaseMapName];
+    }
+    else
+    {
+        return nullptr;
     }
 }
 
