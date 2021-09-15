@@ -3,7 +3,7 @@ Texture2D   textureMap : register(t0);
 Texture2D   cameraDepthTexture : register(t1);
 Texture2D   mapDepthTexture : register(t2);
 TextureCube depthMap : register(t3);
-sampler     textureSampler : register(s0);
+SamplerState bilinearWrap : register(s0);
 
 // Constant Buffer data
 cbuffer globalData : register(b0)
@@ -43,7 +43,7 @@ PixelOut main(float4 posH : SV_POSITION, float3 normal : NORMALOUT, float2 uv : 
 
     PixelOut pixel;
 
-    float4 diffuse = textureMap.Sample(textureSampler, uv);
+    float4 diffuse = textureMap.Sample(bilinearWrap, uv);
     // If any transparency just discard this fragment
     if (diffuse.a < 0.1)
     {
@@ -73,7 +73,7 @@ PixelOut main(float4 posH : SV_POSITION, float3 normal : NORMALOUT, float2 uv : 
         float  pointShadow       = 1.0;
         // TODO: need to fix cpu
         float2 invertedYCoord = float2(shadowTextureCoordinates.x, -shadowTextureCoordinates.y);
-        float  d              = cameraDepthTexture.Sample(textureSampler, invertedYCoord).r;
+        float  d              = cameraDepthTexture.Sample(bilinearWrap, invertedYCoord).r;
 
         // illumination is from directional light but we don't want to illuminate when the sun is
         // past the horizon aka night time
@@ -99,7 +99,7 @@ PixelOut main(float4 posH : SV_POSITION, float3 normal : NORMALOUT, float2 uv : 
                 // TODO: need to fix cpu
                 float2 invertedYCoord =
                     float2(shadowTextureCoordinatesMap.x, -shadowTextureCoordinatesMap.y);
-                if (mapDepthTexture.Sample(textureSampler, invertedYCoord).r <
+                if (mapDepthTexture.Sample(bilinearWrap, invertedYCoord).r <
                     shadowMappingMap.z - bias)
                 {
                     directionalShadow = shadowEffect;
@@ -132,8 +132,7 @@ PixelOut main(float4 posH : SV_POSITION, float3 normal : NORMALOUT, float2 uv : 
                     mul(float4(posH.xyz, 1.0), viewToModelMatrix).xyz -
                     mul(float4(pointLightPositions[i].xyz, 1.0), viewToModelMatrix).xyz;
                 float distance = length(cubeMapTexCoords);
-                float cubeDepth =
-                    depthMap.Sample(textureSampler, normalize(cubeMapTexCoords.xyz)).x *
+                float cubeDepth = depthMap.Sample(bilinearWrap, normalize(cubeMapTexCoords.xyz)).x *
                     pointLightRanges[i];
 
                 if (cubeDepth + bias < distance)

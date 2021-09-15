@@ -316,14 +316,15 @@ void Entity::setLayeredTexture(LayeredTexture* layeredTexture) { _layeredTexture
 
 std::vector<VAO*>* Entity::getFrustumVAO()
 {
-    auto pos =
-        Vector4(_worldSpaceTransform.getFlatBuffer()[3], _worldSpaceTransform.getFlatBuffer()[7],
-                _worldSpaceTransform.getFlatBuffer()[11]);
-    auto model = ModelBroker::instance()->getModel(_model->getName(), pos);
+    //auto pos =
+    //    Vector4(_worldSpaceTransform.getFlatBuffer()[3], _worldSpaceTransform.getFlatBuffer()[7],
+    //            _worldSpaceTransform.getFlatBuffer()[11]);
+    //auto model = ModelBroker::instance()->getModel(_model->getName(), pos);
+
 
     
     _frustumVAOs.clear();
-    auto addedVAOs = model->getVAO();
+    auto addedVAOs = _model->getVAO();
     // Do not add the original non frustum culled vao that needs to be used for shadows only
     int i = 0;
     for (auto vaoIndex : *addedVAOs)

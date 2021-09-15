@@ -1,5 +1,4 @@
 Texture2D inDepthTexture : register(t0);
-sampler   textureSampler : register(s0);
 
 void main(uint id : SV_VERTEXID, out float4 outPosition : SV_POSITION, out float2 outUV : UVOUT)
 {

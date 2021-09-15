@@ -67,6 +67,7 @@ class ResourceManager
     D3D12_SHADER_RESOURCE_VIEW_DESC                                   _rtASSrvDesc;
 
     std::vector<float>                                                _instanceNormalMatrixTransforms;
+    std::vector<float>                                                _instanceModelMatrixTransforms;
     std::vector<float>                                                _instanceWorldToObjectMatrixTransforms;
     std::vector<float>                                                _instanceTransforms;
     std::vector<float>                                                _prevInstanceTransforms;
@@ -95,6 +96,9 @@ class ResourceManager
 
     ComPtr<ID3D12Resource>                                            _instanceNormalMatrixTransformsUpload[CMD_LIST_NUM];
     D3DBuffer*                                                        _instanceNormalMatrixTransformsGPUBuffer;
+
+    ComPtr<ID3D12Resource>                                            _instanceModelMatrixTransformsUpload[CMD_LIST_NUM];
+    D3DBuffer*                                                        _instanceModelMatrixTransformsGPUBuffer;
 
     std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS> _bottomLevelBuildDescs;
     std::vector<Model*>                                               _bottomLevelBuildModels;
@@ -138,6 +142,7 @@ class ResourceManager
     void                                          updateAndBindAttributeBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
+    void                                          updateAndBindModelMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateResources();
     UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize, DXGI_FORMAT format);
     void                                          buildGeometry(Entity* entity);

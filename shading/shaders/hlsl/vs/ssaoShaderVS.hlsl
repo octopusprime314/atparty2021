@@ -1,4 +1,3 @@
-sampler   textureSampler : register(s0);
 Texture2D normalTexture : register(t0);
 Texture2D noiseTexture : register(t1);
 Texture2D depthTexture : register(t2);

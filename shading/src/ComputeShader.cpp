@@ -25,9 +25,9 @@ void ComputeShader::runShader(Texture* writeTexture, Texture* readTexture, Textu
     {
         imageInfo.format = 1;
     }
-    _shader->updateData("readTexture", 0, readTexture, imageInfo);
+    _shader->updateData("readTexture", _shader->_resourceIndexes["readTexture"], readTexture, true);
     imageInfo.readOnly = false;
-    _shader->updateData("writeTexture", 1, writeTexture, imageInfo);
+    _shader->updateData("writeTexture", _shader->_resourceIndexes["writeTexture"], writeTexture, true);
 
     Vector4 threadGroupSize =_shader->getThreadGroupSize();
 

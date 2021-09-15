@@ -1,7 +1,6 @@
 // Object Declarations
 Texture2D deferredTexture : register(t0);
 Texture2D velocityTexture : register(t1);
-sampler   textureSampler : register(s0);
 
 void main(uint id : SV_VERTEXID, out float4 outPosition : SV_POSITION, out float2 outUV : UVOUT)
 {

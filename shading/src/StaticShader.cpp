@@ -23,6 +23,39 @@ StaticShader::~StaticShader() {}
 void StaticShader::startEntity()
 {
     _entityDrawIndex = 0;
+   
+    _shader->bind();
+    ResourceManager* resourceManager = EngineManager::getResourceManager();
+    resourceManager->updateTextureUnbounded(_shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, false);
+    resourceManager->updateStructuredAttributeBufferUnbounded(_shader->_resourceIndexes["vertexBuffer"], nullptr, false);
+
+    resourceManager->updateAndBindMaterialBuffer(_shader->_resourceIndexes, false);
+    resourceManager->updateAndBindAttributeBuffer(_shader->_resourceIndexes, false);
+    resourceManager->updateAndBindNormalMatrixBuffer(_shader->_resourceIndexes, false);
+    resourceManager->updateAndBindUniformMaterialBuffer(_shader->_resourceIndexes, false);
+    resourceManager->updateAndBindModelMatrixBuffer(_shader->_resourceIndexes, false);
+
+    auto             viewEventDistributor = EngineManager::instance()->getViewManager();
+    auto             cmdList              = DXLayer::instance()->getCmdList();
+
+    auto projection        = viewEventDistributor->getProjection();
+    auto cameraView        = viewEventDistributor->getView();
+    auto inverseCameraView = cameraView.inverse();
+
+    auto inverseCameraProj = projection.inverse();
+
+    _shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), false);
+    _shader->updateData("viewTransform", cameraView.getFlatBuffer(), false);
+    _shader->updateData("projTransform", projection.getFlatBuffer(), false);
+
+    _shader->updateData("prevViewTransform", viewEventDistributor->getPrevCameraView().getFlatBuffer(), false);
+
+    float screenSize[] = {static_cast<float>(IOEventDistributor::screenPixelWidth),
+                          static_cast<float>(IOEventDistributor::screenPixelHeight)};
+
+    _shader->updateData("screenSize", screenSize, false);
+    int texturesPerMaterial = Material::TexturesPerMaterial;
+    _shader->updateData("texturesPerMaterial", &texturesPerMaterial, false);
 }
 
 
@@ -31,41 +64,8 @@ void StaticShader::runShader(Entity* entity)
     // LOAD IN SHADER
     _shader->bind();
 
-    ResourceManager* resourceManager = EngineManager::getResourceManager();
-    auto viewEventDistributor = EngineManager::instance()->getViewManager();
-    auto cmdList              = DXLayer::instance()->getCmdList();
-
-    auto projection        = viewEventDistributor->getProjection();
-    auto cameraView        = viewEventDistributor->getView();
-    auto inverseCameraView = cameraView.inverse();
-
-    auto inverseCameraProj = projection.inverse();
-
     _shader->updateData("instanceBufferIndex", &_entityDrawIndex, false);
-    _shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), false);
-    _shader->updateData("viewTransform", cameraView.getFlatBuffer(), false);
-    _shader->updateData("projTransform", projection.getFlatBuffer(), false);
-
-    _shader->updateData("prevViewTransform", viewEventDistributor->getPrevCameraView().getFlatBuffer(), false);
-
-     MVP* prevMVP = entity->getPrevMVP();
-    //_shader->updateData("prevModelMatrix", prevMVP->getModelMatrix().getFlatBuffer(), false);
-    _shader->updateData("modelMatrix", entity->getWorldSpaceTransform().getFlatBuffer(), false);
-
-    float screenSize[] = {static_cast<float>(IOEventDistributor::screenPixelWidth),
-                          static_cast<float>(IOEventDistributor::screenPixelHeight)};
-
-    _shader->updateData("screenSize", screenSize, false);
-    int texturesPerMaterial = Material::TexturesPerMaterial;
-    _shader->updateData("texturesPerMaterial", &texturesPerMaterial, false);
-
-    resourceManager->updateTextureUnbounded(_shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, false);
-    resourceManager->updateStructuredAttributeBufferUnbounded(_shader->_resourceIndexes["vertexBuffer"], nullptr, false);
-
-    resourceManager->updateAndBindMaterialBuffer(_shader->_resourceIndexes, false);
-    resourceManager->updateAndBindAttributeBuffer(_shader->_resourceIndexes, false);
-    resourceManager->updateAndBindNormalMatrixBuffer(_shader->_resourceIndexes, false);
-    resourceManager->updateAndBindUniformMaterialBuffer(_shader->_resourceIndexes, false);
+    //_shader->updateData("modelMatrix", entity->getWorldSpaceTransform().getFlatBuffer(), false);
 
     // Special vao call that factors in frustum culling for the scene
     std::vector<VAO*>* vao = entity->getFrustumVAO();

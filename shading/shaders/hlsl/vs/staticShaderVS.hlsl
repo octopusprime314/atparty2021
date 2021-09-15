@@ -6,6 +6,7 @@ Buffer<uint>                          instanceIndexToMaterialMapping   : registe
 Buffer<uint>                          instanceIndexToAttributesMapping : register(t3, space0);
 StructuredBuffer<UniformMaterial>     uniformMaterials                 : register(t4, space0);
 Texture2D                             diffuseTexture[]                 : register(t5, space1);
+Buffer<float>                         instanceModelMatrixTransforms    : register(t6, space0);
 
 SamplerState bilinearWrap : register(s0);
 
@@ -13,7 +14,7 @@ cbuffer objectData : register(b0)
 {
     uint     instanceBufferIndex;
     //float4x4 prevModelMatrix;
-    float4x4 modelMatrix;
+    //float4x4 modelMatrix;
 }
 
 cbuffer globalData : register(b1)
@@ -35,9 +36,26 @@ void main(    uint   id          : SV_VERTEXID,
           out float4 outPrevPos  : PREVPOSOUT,
           out float4 outCurrPos  : CURRPOSOUT)
 {
+    int modelMatrixOffset = instanceBufferIndex * 16;
 
-    float4x4 model        = modelMatrix;
-    int      offset       = instanceBufferIndex * 9;
+    float4x4 model  = {float4(instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 4)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 8)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 12)]),
+                       float4(instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 1)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 5)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 9)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 13)]),
+                       float4(instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 2)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 6)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 10)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 14)]),
+                       float4(instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 3)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 7)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 11)],
+                              instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 15)])};
+
+    int offset = instanceBufferIndex * 9;
 
     float3x3 normalMatrix = {
         float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset)],

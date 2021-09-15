@@ -3,7 +3,6 @@ Texture2D   textureMap : register(t0);
 Texture2D   cameraDepthTexture : register(t1);
 Texture2D   mapDepthTexture : register(t2);
 TextureCube depthMap : register(t3);
-sampler     textureSampler : register(s0);
 
 // Constant Buffer data
 cbuffer globalData : register(b0)

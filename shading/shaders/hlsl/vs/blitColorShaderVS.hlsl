@@ -1,5 +1,4 @@
 Texture2D inTexture : register(t0);
-sampler   textureSampler : register(s0);
 
 cbuffer globalData : register(b0) { int conversionType; }
 

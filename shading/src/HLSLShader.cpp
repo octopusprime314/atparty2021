@@ -453,7 +453,7 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
     }
     // all s0 aka sampler shader resources must be in this loop
     rootParameterIndex = static_cast<int>(_resourceIndexes.size());
-    for (auto resource : _resourceDescriptorTable)
+    /*for (auto resource : _resourceDescriptorTable)
     {
         if (resource.second.Type == D3D_SHADER_INPUT_TYPE::D3D_SIT_SAMPLER && csResult != S_OK)
         {
@@ -464,7 +464,7 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
             _resourceIndexes[resource.second.Name] = resource.second.uID + rootParameterIndex;
             i++;
         }
-    }
+    }*/
     // all t0 aka SRV shader resources must be in this loop
     rootParameterIndex = static_cast<int>(_resourceIndexes.size());
     for (auto resource : _resourceDescriptorTable)
@@ -539,8 +539,8 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
     ComPtr<ID3DBlob>            pOutBlob, pErrorBlob;
     CD3DX12_ROOT_SIGNATURE_DESC descRootSignature;
     D3D12_STATIC_SAMPLER_DESC   samplerDesc = {};
-    if (csResult == S_OK)
-    {
+    /*if (csResult == S_OK)
+    {*/
 
         bool foundStaticSampler = false;
         for (auto resource : _resourceDescriptorTable)
@@ -578,13 +578,13 @@ void HLSLShader::build(std::vector<DXGI_FORMAT>* rtvs)
                                    0, nullptr,
                                    D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
         }
-    }
-    else
-    {
-        descRootSignature.Init(static_cast<UINT>(_resourceIndexes.size()), &rootParameters[0], 0,
-                               nullptr,
-                               D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-    }
+    //}
+    //else
+    //{
+    //    descRootSignature.Init(static_cast<UINT>(_resourceIndexes.size()), &rootParameters[0], 0,
+    //                           nullptr,
+    //                           D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+    //}
 
     D3D12SerializeRootSignature(&descRootSignature, D3D_ROOT_SIGNATURE_VERSION_1,
                                 pOutBlob.GetAddressOf(), pErrorBlob.GetAddressOf());
@@ -835,6 +835,7 @@ void HLSLShader::updateData(std::string id, void* data, bool isCompute)
 
     auto cmdList = DXLayer::instance()->getCmdList();
     auto cmdListIndex = DXLayer::instance()->getCmdListIndex();
+    bool found        = false;
     for (auto constBuffEntry : _constBuffDescriptorTable)
     {
         for (auto entry : constBuffEntry.second)
@@ -851,7 +852,15 @@ void HLSLShader::updateData(std::string id, void* data, bool isCompute)
                     cmdList, cmdListIndex, data, constBuffEntry.first,
                     _resourceIndexes[constBuffEntry.first],
                     entry.Size, entry.StartOffset, isCompute);
+
+                found = true;
+                break;
             }
+        }
+
+        if (found)
+        {
+            break;
         }
     }
 }

@@ -1,6 +1,6 @@
 // Object Declarations
 Texture2D noiseTexture : register(t0);
-sampler   textureSampler : register(s0);
+SamplerState bilinearWrap : register(s0);
 
 cbuffer objectData : register(b0)
 {
@@ -44,7 +44,7 @@ float noise1(in float2 x)
 
 float noise(float2 p)
 {
-    return noiseTexture.Sample(textureSampler, p * float2(1. / 256., 1. / 256.)).x;
+    return noiseTexture.Sample(bilinearWrap, p * float2(1. / 256., 1. / 256.)).x;
 }
 
 float heightMap(float2 p)

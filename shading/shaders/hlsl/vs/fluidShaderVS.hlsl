@@ -1,6 +1,5 @@
 // Object Declarations
 Texture2D noiseTexture : register(t0);
-sampler   textureSampler : register(s0);
 
 cbuffer objectData : register(b0)
 {

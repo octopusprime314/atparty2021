@@ -1,5 +1,5 @@
 Texture2D inTexture : register(t0);
-sampler   textureSampler : register(s0);
+SamplerState bilinearWrap : register(s0);
 
 cbuffer globalData : register(b0) { int conversionType; }
 
@@ -14,11 +14,11 @@ PixelOut main(float4 position : SV_POSITION, float2 uv : UVOUT)
 
     if (conversionType == 0)
     {
-        pixel.color = float4(inTexture.Sample(textureSampler, uv).rgb, 1.0);
+        pixel.color = float4(inTexture.Sample(bilinearWrap, uv).rgb, 1.0);
     }
     else if (conversionType == 1)
     {
-        pixel.color = float4(inTexture.Sample(textureSampler, uv).rrr, 1.0);
+        pixel.color = float4(inTexture.Sample(bilinearWrap, uv).rrr, 1.0);
     }
     return pixel;
 }

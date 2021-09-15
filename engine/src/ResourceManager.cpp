@@ -39,7 +39,11 @@ void ResourceManager::init(ComPtr<ID3D12Device> device)
     constexpr auto normalTransformOffset    = 9; // 3x3
     UINT instanceNormalTransformSizeInBytes = InitInstancesForRayTracing * normalTransformOffset;
 
+    constexpr auto modelTransformOffset    = 16; // 4x4
+    UINT instanceModelTransformSizeInBytes = InitInstancesForRayTracing * modelTransformOffset;
+
     _instanceNormalMatrixTransforms       .resize(instanceNormalTransformSizeInBytes);
+    _instanceModelMatrixTransforms        .resize(instanceModelTransformSizeInBytes);
     _instanceWorldToObjectMatrixTransforms.resize(instanceTransformSizeInBytes);
     _instanceTransforms                   .resize(instanceTransformSizeInBytes);
     _prevInstanceTransforms               .resize(instanceTransformSizeInBytes);
@@ -213,6 +217,33 @@ void ResourceManager::updateAndBindUniformMaterialBuffer(std::map<std::string, U
         cmdList->SetGraphicsRootDescriptorTable(
             resourceBindings["uniformMaterials"],
             _instanceUniformMaterialMappingGPUBuffer->gpuDescriptorHandle);
+    }
+}
+
+void ResourceManager::updateAndBindModelMatrixBuffer(std::map<std::string, UINT> resourceIndexes,
+                                                      bool                       isCompute)
+{
+    BYTE* mappedData = nullptr;
+    _instanceModelMatrixTransformsGPUBuffer->resource->Map(0, nullptr,
+                                                            reinterpret_cast<void**>(&mappedData));
+    memcpy(&mappedData[0], _instanceModelMatrixTransforms.data(),
+           sizeof(float) * _instanceModelMatrixTransforms.size());
+
+    auto                  cmdList           = DXLayer::instance()->getCmdList();
+    auto                  resourceBindings  = resourceIndexes;
+    ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
+    cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+    if (isCompute)
+    {
+        cmdList->SetComputeRootDescriptorTable(
+            resourceBindings["instanceModelMatrixTransforms"],
+            _instanceModelMatrixTransformsGPUBuffer->gpuDescriptorHandle);
+    }
+    else
+    {
+        cmdList->SetGraphicsRootDescriptorTable(
+            resourceBindings["instanceModelMatrixTransforms"],
+            _instanceModelMatrixTransformsGPUBuffer->gpuDescriptorHandle);
     }
 }
 
@@ -430,6 +461,7 @@ void ResourceManager::_updateTransformData()
 
     constexpr int transformOffset       = sizeof(float) * 12;
     constexpr int normalTransformOffset = sizeof(float) * 9;
+    constexpr int modelTransformOffset = sizeof(float) * 16;
 
     // Copy over all the previous instance transforms for motion vectors
     memcpy(_prevInstanceTransforms.data(), _instanceTransforms.data(), sizeof(float) * 12 * entityList->size());
@@ -457,6 +489,8 @@ void ResourceManager::_updateTransformData()
         memcpy(&_instanceNormalMatrixTransforms[offset + 3], normalMatrix.getFlatBuffer() + 4, normalTransformOffset / 3);
         memcpy(&_instanceNormalMatrixTransforms[offset + 6], normalMatrix.getFlatBuffer() + 8, normalTransformOffset / 3);
 
+        memcpy(&_instanceModelMatrixTransforms[instanceDescIndex * (modelTransformOffset / sizeof(float))],
+               worldSpaceTransform.getFlatBuffer(), sizeof(float) * 16);
 
         if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
         {
@@ -519,9 +553,6 @@ void ResourceManager::_updateTransformData()
                  (_instanceDescriptionCPUBuffer[cmdListIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size())))
         {
             newTopLevelAllocation = true;
-            //_topLevelIndex++;
-
-            //_topLevelIndex %= CMD_LIST_NUM;
         }
 
         if (newTopLevelAllocation)
@@ -590,11 +621,13 @@ void ResourceManager::_updateResourceMappingBuffers()
     if ((_instanceIndexToMaterialMappingGPUBuffer == nullptr) ||
         (_instanceIndexToAttributeMappingGPUBuffer == nullptr) ||
         (_instanceNormalMatrixTransformsGPUBuffer == nullptr) ||
+        (_instanceModelMatrixTransformsGPUBuffer == nullptr) ||
         (_instanceUniformMaterialMappingGPUBuffer == nullptr))
     {
         _instanceIndexToMaterialMappingGPUBuffer  = new D3DBuffer();
         _instanceIndexToAttributeMappingGPUBuffer = new D3DBuffer();
         _instanceNormalMatrixTransformsGPUBuffer  = new D3DBuffer();
+        _instanceModelMatrixTransformsGPUBuffer  = new D3DBuffer();
         _instanceUniformMaterialMappingGPUBuffer  = new D3DBuffer();
 
         newInstanceMappingAllocation = true;
@@ -617,8 +650,11 @@ void ResourceManager::_updateResourceMappingBuffers()
         UINT           instanceTransformSizeInBytes       = newInstanceSize * transformOffset;
         constexpr auto normalTransformOffset              = 9; // 3x3
         UINT           instanceNormalTransformSizeInBytes = newInstanceSize * normalTransformOffset;
+        constexpr auto modelTransformOffset               = 16; // 4x4
+        UINT           instanceModelTransformSizeInBytes = newInstanceSize * modelTransformOffset;
 
         _instanceNormalMatrixTransforms.resize(instanceNormalTransformSizeInBytes);
+        _instanceModelMatrixTransforms.resize(instanceModelTransformSizeInBytes);
         _instanceWorldToObjectMatrixTransforms.resize(instanceTransformSizeInBytes);
         _instanceTransforms.resize(instanceTransformSizeInBytes);
         _prevInstanceTransforms.resize(instanceTransformSizeInBytes);
@@ -664,6 +700,16 @@ void ResourceManager::_updateResourceMappingBuffers()
         _instanceNormalMatrixTransformsGPUBuffer->count = newInstanceSize;
 
         createBufferSRV(_instanceNormalMatrixTransformsGPUBuffer, 9 * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
+
+        allocateUploadBuffer(
+            DXLayer::instance()->getDevice().Get(), nullptr, sizeof(float) * 16 * newInstanceSize,
+            &_instanceModelMatrixTransformsUpload[_instanceMappingIndex], L"instanceModelMatrix");
+
+        _instanceModelMatrixTransformsGPUBuffer->resource =
+            _instanceModelMatrixTransformsUpload[_instanceMappingIndex];
+        _instanceModelMatrixTransformsGPUBuffer->count = newInstanceSize;
+
+        createBufferSRV(_instanceModelMatrixTransformsGPUBuffer, 16 * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
     }
 }
 

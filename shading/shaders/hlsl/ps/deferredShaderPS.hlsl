@@ -6,7 +6,7 @@ Texture2D depthTexture    : register(t2);    // Depth texture data array
 Texture2D positionTexture : register(t3);    // Position texture data array
 Texture2D ssaoTexture     : register(t4);
 
-sampler textureSampler : register(s0);
+SamplerState bilinearWrap : register(s0);
 
 cbuffer globalData : register(b0)
 {
@@ -44,7 +44,7 @@ float3 decodeLocation(float2 uv)
     // TODO: need to fix cpu
     clipSpaceLocation.y = -clipSpaceLocation.y;
     // dx z clip space is [0,1]
-    clipSpaceLocation.z       = depthTexture.Sample(textureSampler, uv).r;
+    clipSpaceLocation.z       = depthTexture.Sample(bilinearWrap, uv).r;
     clipSpaceLocation.w       = 1.0f;
     float4 homogenousLocation = mul(clipSpaceLocation, inverseProjection);
     return homogenousLocation.xyz / homogenousLocation.w;
@@ -60,17 +60,17 @@ PixelOut main(float4 posH : SV_POSITION,
 
     // extract position from depth texture
     float3 position = mul(float4(decodeLocation(uv), 1.0), inverseView).xyz;
-    float3 normal   = normalTexture.Sample(textureSampler, uv).xyz;
-    float3 albedo   = diffuseTexture.Sample(textureSampler, uv).xyz;
+    float3 normal   = normalTexture.Sample(bilinearWrap, uv).xyz;
+    float3 albedo   = diffuseTexture.Sample(bilinearWrap, uv).xyz;
 
-    float transmittance = diffuseTexture.Sample(textureSampler, uv).w;
-    float metallic      = positionTexture.Sample(textureSampler, uv).w;
-    float roughness     = normalTexture.Sample(textureSampler, uv).w;
+    float transmittance = diffuseTexture.Sample(bilinearWrap, uv).w;
+    float metallic      = positionTexture.Sample(bilinearWrap, uv).w;
+    float roughness     = normalTexture.Sample(bilinearWrap, uv).w;
 
-    float occlusion = ssaoTexture.Sample(textureSampler, uv).r;
+    float occlusion = ssaoTexture.Sample(bilinearWrap, uv).r;
 
     // blit depth
-    pixel.depth = depthTexture.Sample(textureSampler, uv).r;
+    pixel.depth = depthTexture.Sample(bilinearWrap, uv).r;
 
     // Detects if there is no screen space information and then displays skybox!
     if (normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0)

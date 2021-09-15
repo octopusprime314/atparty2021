@@ -30,31 +30,22 @@ void Texture::bindToDXShader(ComPtr<ID3D12GraphicsCommandList4>& cmdList, UINT t
                              bool isUAV)
 {
 
-    if (_srvDescriptorHeap != nullptr && _samplerDescriptorHeap != nullptr &&
-        resourceBindings.find("textureSampler") != resourceBindings.end())
+    if (_srvDescriptorHeap != nullptr && _samplerDescriptorHeap != nullptr)
     {
 
         ID3D12DescriptorHeap* descriptorHeaps[] = {_srvDescriptorHeap.Get(),
                                                    _samplerDescriptorHeap.Get()};
-        cmdList->SetDescriptorHeaps(2, descriptorHeaps);
+        cmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
         if (isCompute)
         {
             cmdList->SetComputeRootDescriptorTable(
                 textureBinding, _srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-
-            cmdList->SetComputeRootDescriptorTable(
-                resourceBindings["textureSampler"],
-                _samplerDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
         }
         else
         {
             cmdList->SetGraphicsRootDescriptorTable(
                 textureBinding, _srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-
-            cmdList->SetGraphicsRootDescriptorTable(
-                resourceBindings["textureSampler"],
-                _samplerDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
         }
     }
     // No sampler and probably just a compute shader

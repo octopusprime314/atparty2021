@@ -1,4 +1,4 @@
-sampler   textureSampler : register(s0);
+SamplerState bilinearWrap : register(s0);
 Texture2D normalTexture : register(t0);
 Texture2D noiseTexture : register(t1);
 Texture2D depthTexture : register(t2);
@@ -17,7 +17,7 @@ float3 decodeLocation(float2 uv)
     // TODO: need to fix cpu
     clipSpaceLocation.y = -clipSpaceLocation.y;
     // dx z clip space is [0,1]
-    clipSpaceLocation.z       = depthTexture.Sample(textureSampler, uv).r;
+    clipSpaceLocation.z       = depthTexture.Sample(bilinearWrap, uv).r;
     clipSpaceLocation.w       = 1.0f;
     float4 homogenousLocation = mul(clipSpaceLocation, projectionToViewMatrix);
     return homogenousLocation.xyz / homogenousLocation.w;
@@ -43,8 +43,8 @@ PixelOut main(float4 posH : SV_POSITION, float2 uv : UVOUT)
     {
 
         float    occlusion = 0.0;
-        float3   normal    = normalTexture.Sample(textureSampler, uv).rgb;
-        float3   randomVec = noiseTexture.SampleLevel(textureSampler, uv * noiseScale, 0).xyz;
+        float3   normal    = normalTexture.Sample(bilinearWrap, uv).rgb;
+        float3   randomVec = noiseTexture.SampleLevel(bilinearWrap, uv * noiseScale, 0).xyz;
         float3   tangent   = normalize(randomVec - (normal * dot(randomVec, normal)));
         float3   bitangent = cross(normal, tangent);
         float3x3 TBN       = float3x3(tangent, bitangent, normal);
