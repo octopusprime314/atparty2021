@@ -59,7 +59,16 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
     pDredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
 #endif
 
-    D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(_device.GetAddressOf()));
+    ComPtr<IDXGIFactory> pDxgiFactory;
+    CreateDXGIFactory1(IID_PPV_ARGS(&pDxgiFactory));
+
+    IDXGIAdapter* pAdapter = nullptr;
+    pDxgiFactory->EnumAdapters(0, &_dxgiAdapter);
+
+    DXGI_ADAPTER_DESC testing123;
+    _dxgiAdapter->GetDesc(&testing123);
+
+    D3D12CreateDevice(_dxgiAdapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(_device.GetAddressOf()));
 
     D3D12_COMMAND_QUEUE_DESC cqDesc;
     ZeroMemory(&cqDesc, sizeof(cqDesc));
@@ -271,6 +280,27 @@ void DXLayer::initCmdLists()
         }
     }
 
+    /*while (_pendingCmdListIndices.size() > 0)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(0));
+    }
+
+    int prevCommandList = _cmdListIndex;
+    _cmdListIndex       = ++_cmdListIndex % CMD_LIST_NUM;
+    int nextCommandList = _cmdListIndex;
+    if (_frameIndex == 0)
+    {
+        nextCommandList = 0;
+        _cmdListIndex   = 0;
+    }
+
+    while (_cmdListFinishedExecution[prevCommandList] == false)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(0));
+    }
+
+    _cmdListIndex = nextCommandList;*/
+
     _cmdListFinishedExecution[_cmdListIndex] = false;
     // Open command list
     _gfxCmdAllocator[_cmdListIndex]->Reset();
@@ -355,37 +385,37 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
     _gfxCmdLists[prevCmdListIndex]->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
     _gfxCmdLists[prevCmdListIndex]->SetDescriptorHeaps(1, _descHeapForImguiFonts.GetAddressOf());
 
-    //_mtx.lock();
+    _mtx.lock();
 
-    //// Start the Dear ImGui frame
-    //ImGui_ImplDX12_NewFrame();
-    //ImGui_ImplWin32_NewFrame();
-    //ImGui::NewFrame();
+    // Start the Dear ImGui frame
+    ImGui_ImplDX12_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
 
-    //ImGui::SetNextWindowSize(ImVec2(500, 500));
+    ImGui::SetNextWindowSize(ImVec2(500, 500));
 
-    //ImGui::Begin("Perf window");
+    ImGui::Begin("Perf window");
 
-    //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-    //            1000.0f / ImGui::GetIO().Framerate,
-    //            ImGui::GetIO().Framerate);
+    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
+                1000.0f / ImGui::GetIO().Framerate,
+                ImGui::GetIO().Framerate);
 
-    //ImGui::Text(_perfData.c_str());
+    ImGui::Text(_perfData.c_str());
 
-    //ImGui::Text(RTCompaction::GetLog());
+    ImGui::Text(RTCompaction::GetLog());
 
-    //auto entityList = EngineManager::instance()->getEntityList();
-    //ResourceManager* resourceManager = EngineManager::getResourceManager();
+    auto entityList = EngineManager::instance()->getEntityList();
+    ResourceManager* resourceManager = EngineManager::getResourceManager();
 
-    //ImGui::Text(("TLAS count: " + std::to_string(entityList->size())).c_str());
-    //ImGui::Text(("BLAS count: " + std::to_string(resourceManager->getBLASCount())).c_str());
+    ImGui::Text(("TLAS count: " + std::to_string(entityList->size())).c_str());
+    ImGui::Text(("BLAS count: " + std::to_string(resourceManager->getBLASCount())).c_str());
 
-    //ImGui::End();
+    ImGui::End();
 
-    //ImGui::Render();
-    //ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), _gfxCmdLists[prevCmdListIndex].Get());
+    ImGui::Render();
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), _gfxCmdLists[prevCmdListIndex].Get());
 
-    //_mtx.unlock();
+    _mtx.unlock();
 
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
 
@@ -651,3 +681,4 @@ ComPtr<ID3D12CommandQueue>         DXLayer::getGfxCmdQueue()     { return _gfxCm
 ComPtr<ID3D12CommandQueue>         DXLayer::getComputeCmdQueue() { return _computeCmdQueue; }
 ComPtr<ID3D12CommandQueue>         DXLayer::getCopyCmdQueue()    { return _copyCmdQueue; }
 UINT                               DXLayer::getCmdListIndex()    { return _cmdListIndex; }
+ComPtr<IDXGIAdapter>               DXLayer::getAdapter()        { return _dxgiAdapter; }

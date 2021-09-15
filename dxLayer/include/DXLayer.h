@@ -44,6 +44,7 @@ class DXLayer
     ComPtr<ID3D12GraphicsCommandList4> getComputeCmdList();
     ComPtr<ID3D12GraphicsCommandList4> getCmdList();
     ComPtr<ID3D12Device>               getDevice();
+    ComPtr<IDXGIAdapter>               getAdapter();
     static DXLayer*                    instance();
     void                               addCmdListIndex();
     void                               getTimestamp(int cmdListIndex);
@@ -109,4 +110,6 @@ class DXLayer
     clock_t                            _previousCpuTime;
     std::mutex                         _lock;
     int                                _frameIndex;
+    ComPtr<IDXGIDevice>                _dxgiDevice;
+    ComPtr<IDXGIAdapter>               _dxgiAdapter;
 };

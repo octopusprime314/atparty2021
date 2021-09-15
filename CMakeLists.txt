@@ -30,6 +30,10 @@ include_directories("${CMAKE_SOURCE_DIR}/view/include")
 include_directories("${CMAKE_SOURCE_DIR}/dxLayer/include")
 include_directories("${CMAKE_SOURCE_DIR}/imgui")
 include_directories("${CMAKE_SOURCE_DIR}/compaction-lib/include")
+include_directories("${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/Include")
+include_directories("${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/Integration")
+include_directories("${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/_NRI_SDK/Include")
+include_directories("${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/_NRI_SDK/Include/Extensions")
 
 FILE(GLOB MODEL_HEADER_FILES         ${CMAKE_SOURCE_DIR}/model/include/*.h)
 FILE(GLOB SHADING_HEADER_FILES       ${CMAKE_SOURCE_DIR}/shading/include/*.h)
@@ -47,6 +51,7 @@ FILE(GLOB HLSL_CS_SHADER_FILES       ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs
 if (DXR EQUAL "1")
     FILE(GLOB HLSL_CS_DXR1_1SHADER_FILES ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/*.hlsl)
     FILE(GLOB HLSL_DXR_SHADER_FILES      ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/*.hlsl)
+    FILE(GLOB HLSL_CS_DENOISING_SHADER_FILES ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/denoising/*.hlsl)
 endif()
 FILE(GLOB HLSL_INCLUDE_SHADER_FILES  ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/*.hlsl)
 FILE(GLOB VIEW_HEADER_FILES          ${CMAKE_SOURCE_DIR}/view/include/*.h)
@@ -85,6 +90,7 @@ source_group("shaders/hlsl/cs"        FILES  ${HLSL_CS_SHADER_FILES})
 if (DXR EQUAL "1")
     source_group("shaders/hlsl/cs/dxr1_1" FILES  ${HLSL_CS_DXR1_1SHADER_FILES})
     source_group("shaders/hlsl/dxr"       FILES  ${HLSL_DXR_SHADER_FILES})
+    source_group("shaders/hlsl/cs/denoising" FILES  ${HLSL_CS_DENOISING_SHADER_FILES})
 endif()
 source_group("view"                   FILES  ${VIEW_HEADER_FILES} ${VIEW_SRC_FILES})
 source_group("dxLayer"                FILES  ${DX_HEADER_FILES} ${DX_SRC_FILES})
@@ -120,6 +126,7 @@ add_executable(atparty2021
                ${HLSL_PS_SHADER_FILES}
                ${HLSL_CS_SHADER_FILES}
                ${HLSL_CS_DXR1_1SHADER_FILES}
+               ${HLSL_CS_DENOISING_SHADER_FILES}
                ${HLSL_DXR_SHADER_FILES}
                ${VIEW_SRC_FILES}
                ${DX_HEADER_FILES}
@@ -185,6 +192,7 @@ endif()
 if (DXR EQUAL "1")
     set_source_files_properties(${HLSL_DXR_SHADER_FILES}       PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename).cso\"        /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/dxr/%(Filename)_compiled.h\"        ${HLSL_COMPILER_FLAGS} /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Library VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT "")
     set_source_files_properties(${HLSL_CS_DXR1_1SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/dxr1_1/%(Filename)_compiled.h\"  ${HLSL_COMPILER_FLAGS} /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
+    set_source_files_properties(${HLSL_CS_DENOISING_SHADER_FILES}  PROPERTIES VS_SHADER_FLAGS "/Fo \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/denoising/%(Filename).cso\"  /Fh \"${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/cs/denoising/%(Filename)_compiled.h\"  ${HLSL_COMPILER_FLAGS} /I ${CMAKE_SOURCE_DIR}/shading/shaders/hlsl/include/" VS_SHADER_TYPE Compute VS_SHADER_MODEL 6.5 VS_SHADER_ENTRYPOINT main)
 endif()
 endif()
 
@@ -193,6 +201,10 @@ target_link_libraries(atparty2021           ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fm
 target_link_libraries(atparty2021           ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmodstudio_vc.lib)
 target_link_libraries(atparty2021 debug     ${CMAKE_SOURCE_DIR}/libs/gltf/lib/debug/GLTFSDK.lib)
 target_link_libraries(atparty2021 optimized ${CMAKE_SOURCE_DIR}/libs/gltf/lib/release/GLTFSDK.lib)
+target_link_libraries(atparty2021 debug     ${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/Lib/Debug/NRD.lib)
+target_link_libraries(atparty2021 optimized ${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/Lib/Release/NRD.lib)
+target_link_libraries(atparty2021 debug     ${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/_NRI_SDK/Lib/Debug/NRI.lib)
+target_link_libraries(atparty2021 optimized ${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/_NRI_SDK/Lib/Release/NRI.lib)
 
 #pre fetches assets during cmake -G configuration
 FetchContent_Populate(assets
@@ -218,10 +230,12 @@ file(REMOVE_RECURSE ${CMAKE_SOURCE_DIR}/build/libs/)
 
 #dxil and dxcompiler dlls are needed for dxr
 add_custom_command(TARGET atparty2021 POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod.dll        $<TARGET_FILE_DIR:atparty2021>
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmodstudio.dll    $<TARGET_FILE_DIR:atparty2021>
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll      $<TARGET_FILE_DIR:atparty2021>
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll            $<TARGET_FILE_DIR:atparty2021>)
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod.dll                     $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmodstudio.dll               $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll                 $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll                       $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/Lib/Release/NRD.dll          $<TARGET_FILE_DIR:atparty2021>
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/_NRI_SDK/Lib/Release/NRI.dll $<TARGET_FILE_DIR:atparty2021>)
 
 install(TARGETS atparty2021 RUNTIME DESTINATION bin)
 install(FILES "${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll"

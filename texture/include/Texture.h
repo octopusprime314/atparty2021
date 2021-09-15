@@ -38,6 +38,7 @@ enum class TextureFormat
     R_UNSIGNED_BYTE,
     RGB_FLOAT,
     R16G16_FLOAT,
+    R16G16B16A16_FLOAT,
     R16_FLOAT,
     R8_UINT,
 };

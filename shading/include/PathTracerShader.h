@@ -45,6 +45,7 @@ class PathTracerShader : public ShaderBase
     RenderTexture*               _positionPrimaryRays;
     RenderTexture*               _reflectionRays;
     RenderTexture*               _occlusionRays;
+    RenderTexture*               _denoisedOcclusionRays;
     RenderTexture*               _pointLightOcclusion;
     RenderTexture*               _pointLightOcclusionHistory;
     RenderTexture*               _sunLightRays;

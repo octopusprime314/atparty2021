@@ -69,4 +69,5 @@ class SVGFDenoiser
     RenderTexture* getColorHistoryBuffer();
     RenderTexture* getOcclusionHistoryBuffer();
     RenderTexture* getDenoisedResult();
+    RenderTexture* getMotionVectors();
 };

@@ -1,7 +1,8 @@
+#include "../../hlsl/include/NRD.hlsl"
 
 Texture2D reflectionSRV : register(t0, space0);
 Texture2D sunLightSRV   : register(t1, space0);
-Texture2D occlusionSRV  : register(t2, space0);
+Texture2D shadowSRV  : register(t2, space0);
 Texture2D colorHistorySRV : register(t3, space0);
 
 RWTexture2D<float4> pathTracerUAV       : register(u0);
@@ -26,7 +27,8 @@ void main(int3 threadId : SV_DispatchThreadID,
 
     /*if (viewMode == 0)
     {*/
-        pathTracerUAV[threadId.xy] = (reflection + sunLighting);/* * occlusionSRV[threadId.xy].r;*/
+        pathTracerUAV[threadId.xy] = (reflection + sunLighting)/* * 0.000001*/;
+        //pathTracerUAV[threadId.xy] += float4(SIGMA_BackEnd_UnpackShadow(shadowSRV[threadId.xy]).x, 0,0,0);
     //}
     //else
     //{

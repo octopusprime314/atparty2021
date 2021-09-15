@@ -10,7 +10,7 @@ RenderTexture::RenderTexture(uint32_t width, uint32_t height, TextureFormat form
 {
     if (format == TextureFormat::RGBA_UNSIGNED_BYTE || format == TextureFormat::RGBA_FLOAT ||
         format == TextureFormat::R16G16_FLOAT || format == TextureFormat::R16_FLOAT ||
-        format == TextureFormat::R8_UINT)
+        format == TextureFormat::R8_UINT || format == TextureFormat::R16G16B16A16_FLOAT)
     {
         // Color Buffer
 
@@ -32,6 +32,11 @@ RenderTexture::RenderTexture(uint32_t width, uint32_t height, TextureFormat form
             case TextureFormat::R16G16_FLOAT:
             {
                 colorOptimizedClearValue.Format = DXGI_FORMAT_R16G16_FLOAT;
+                break;
+            }
+            case TextureFormat::R16G16B16A16_FLOAT:
+            {
+                colorOptimizedClearValue.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
                 break;
             }
             case TextureFormat::R16_FLOAT:

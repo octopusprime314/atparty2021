@@ -100,8 +100,8 @@ class ResourceManager
     std::vector<Model*>                                               _bottomLevelBuildModels;
     ComPtr<ID3D12Resource>                                            _tlasResultBuffer[CMD_LIST_NUM];
     ComPtr<ID3D12Resource>                                            _tlasScratchBuffer[CMD_LIST_NUM];
+    ComPtr<ID3D12Resource>                                            _instanceDescriptionCPUBuffer[CMD_LIST_NUM];
     ComPtr<ID3D12Resource>                                            _instanceDescriptionGPUBuffer[CMD_LIST_NUM];
-
 
     ComPtr<ID3D12DescriptorHeap>                                      _unboundedTextureSrvDescriptorHeap;
     UINT                                                              _unboundedTextureSrvIndex;

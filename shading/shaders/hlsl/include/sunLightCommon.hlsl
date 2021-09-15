@@ -1,5 +1,6 @@
 #include "math.hlsl"
 #include "randomRays.hlsl"
+#include "NRD.hlsl"
 
 float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float roughness,
                        float metallic, int2 threadId)
@@ -49,15 +50,17 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
         float2 index = threadId.xy;
 
         // random value between [-1, 1]
-        float randomValueX = (2.0f * pseudoRand((index) / screenSize)) - 1.0f;
-        float randomValueY = (2.0f * pseudoRand((index + float2(1, 0)) / screenSize)) - 1.0f;
-        float randomValueZ = (2.0f * pseudoRand((index + float2(-1, 0)) / screenSize)) - 1.0f;
+        //float randomValueX = (2.0f * pseudoRand((index) / screenSize)) - 1.0f;
+        //float randomValueY = (2.0f * pseudoRand((index + float2(1, 0)) / screenSize)) - 1.0f;
+        //float randomValueZ = (2.0f * pseudoRand((index + float2(-1, 0)) / screenSize)) - 1.0f;
+        //
+        //float3 randomOffset = float3(randomValueX, randomValueY, randomValueZ) * sunLightRadius;
 
-        float3 randomOffset = float3(randomValueX, randomValueY, randomValueZ) * sunLightRadius;
         float3 sunLightPos  = sunLightPosition.xyz/* + randomOffset*/;
 
         ray.Origin                 = hitPosition;
         float3 penumbraLightVector = normalize(sunLightPos - ray.Origin);
+        penumbraLightVector        = penumbraLightVector + GetRandomRayDirection(threadId, penumbraLightVector, screenSize, 0) * 0.005;
         ray.Direction              = penumbraLightVector;
 
         float frontOrBack = dot(-normal, penumbraLightVector);
@@ -79,43 +82,44 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
         {
             // Main occlusion test passes so assume completely in shadow
             occlusion                   = 0.7;
-            //occlusionUAV[threadId.xy].x = 1.0;
+            occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, rayQuery.CommittedRayT(), 0.00465133600);
         }
-        /*else
-        {*/
-            //// W component = 1.0 indicates front face so we need to negate the surface normal
-            //if (positionSRV[threadId].w == 0.0)
-            //{
-            //    normal = -normal;
-            //}
-
-            // Cook-Torrance BRDF for specular lighting calculations
-            float  NDF = DistributionGGX(normal, halfVector, roughness);
-            float  G   = GeometrySmith(normal, eyeVector, lightDirection, roughness);
-            float3 F   = FresnelSchlick(max(dot(halfVector, eyeVector), 0.0), F0);
-
-            // Specular component of light that is reflected off the surface
-            float3 kS = F;
-            // Diffuse component of light is left over from what is not reflected and thus refracted
-            float3 kD = float3(1.0f, 1.0f, 1.0f) - kS;
-            // Metallic prevents any sort of diffuse (refracted) light from occuring.
-            // Metallic of 1.0 signals only specular component of light
-            kD *= 1.0 - metallic;
-
-            float3 numerator   = NDF * G * F;
-            float  denominator =  4.0 * max(dot(normal, eyeVector), 0.0f) * max(dot(normal, lightDirection), 0.0f);
-            float3 specular    = numerator / max(denominator, 0.001f);
-            float3 diffuse     = kD * albedo / PI;
-
-            float NdotL = max(dot(normal, lightDirection), 0.0f);
-
-            // 1) Add the diffuse and specular light components and multiply them by the overall incident ray's light energy (radiance)
-            // and then also multiply by the alignment of the surface normal with the incoming light ray's direction and shadowed intensity.
-            // 2) NdotL basically says that more aligned the normal and light direction is, the more the light
-            // will be scattered within the surface (diffuse lighting) rather than get reflected (specular)
-            // which will get color from the diffuse surface the reflected light hits after the bounce.
-            Lo += (diffuse + specular) * radiance * NdotL * (1.0f - occlusion);
+        else
+        {
+            occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, NRD_FP16_MAX, 0.00465133600);
+        }
+        //// W component = 1.0 indicates front face so we need to negate the surface normal
+        //if (positionSRV[threadId].w == 0.0)
+        //{
+        //    normal = -normal;
         //}
+
+        // Cook-Torrance BRDF for specular lighting calculations
+        float  NDF = DistributionGGX(normal, halfVector, roughness);
+        float  G   = GeometrySmith(normal, eyeVector, lightDirection, roughness);
+        float3 F   = FresnelSchlick(max(dot(halfVector, eyeVector), 0.0), F0);
+
+        // Specular component of light that is reflected off the surface
+        float3 kS = F;
+        // Diffuse component of light is left over from what is not reflected and thus refracted
+        float3 kD = float3(1.0f, 1.0f, 1.0f) - kS;
+        // Metallic prevents any sort of diffuse (refracted) light from occuring.
+        // Metallic of 1.0 signals only specular component of light
+        kD *= 1.0 - metallic;
+
+        float3 numerator   = NDF * G * F;
+        float  denominator =  4.0 * max(dot(normal, eyeVector), 0.0f) * max(dot(normal, lightDirection), 0.0f);
+        float3 specular    = numerator / max(denominator, 0.001f);
+        float3 diffuse     = kD * albedo / PI;
+
+        float NdotL = max(dot(normal, lightDirection), 0.0f);
+
+        // 1) Add the diffuse and specular light components and multiply them by the overall incident ray's light energy (radiance)
+        // and then also multiply by the alignment of the surface normal with the incoming light ray's direction and shadowed intensity.
+        // 2) NdotL basically says that more aligned the normal and light direction is, the more the light
+        // will be scattered within the surface (diffuse lighting) rather than get reflected (specular)
+        // which will get color from the diffuse surface the reflected light hits after the bounce.
+        Lo += (diffuse + specular) * radiance * NdotL * (min(1.0, occlusionHistoryUAV[threadId.xy].x + 0.3));
     }
 
 
@@ -163,7 +167,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     //debug1UAV[threadId.xy] = float4(occlusionUAV[threadId.xy].x, 0.0, 0.0, 0.0);
 
     //const float temporalFade = 0.01666666666;
-    ////const float temporalFade = 0.2;
+    //const float temporalFade = 0.2;
     //occlusionHistoryUAV[threadId.xy].x = (temporalFade * occlusionUAV[threadId.xy].x) +
     //                                    ((1.0 - temporalFade) * occlusionHistoryUAV[threadId.xy].x);
 

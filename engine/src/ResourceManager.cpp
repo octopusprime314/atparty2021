@@ -105,13 +105,14 @@ ComPtr<ID3D12DescriptorHeap> ResourceManager::getRTASDescHeap()
 
 D3D12_GPU_VIRTUAL_ADDRESS ResourceManager::getRTASGPUVA()
 {
-    if (_tlasResultBuffer[_topLevelIndex] == nullptr)
+    auto cmdListIndex = DXLayer::instance()->getCmdListIndex();
+    if (_tlasResultBuffer[cmdListIndex] == nullptr)
     {
         return 0;
     }
     else
     {
-        return _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+        return _tlasResultBuffer[cmdListIndex]->GetGPUVirtualAddress();
     }
 }
 
@@ -489,7 +490,7 @@ void ResourceManager::_updateTransformData()
         auto commandList = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
                                                         : DXLayer::instance()->getCmdList();
 
-        CD3DX12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+        CD3DX12_HEAP_PROPERTIES defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC    topLevelBuildDesc = {};
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& topLevelInputs = topLevelBuildDesc.Inputs;
@@ -503,21 +504,24 @@ void ResourceManager::_updateTransformData()
 
         _dxrDevice->GetRaytracingAccelerationStructurePrebuildInfo(&topLevelInputs,
                                                                    &topLevelPrebuildInfo);
+
+        auto cmdListIndex = DXLayer::instance()->getCmdListIndex();
+
         bool newTopLevelAllocation = false;
-        if ((_tlasScratchBuffer[_topLevelIndex] == nullptr) || 
-            (_tlasResultBuffer[_topLevelIndex] == nullptr) ||
-            (_instanceDescriptionGPUBuffer[_topLevelIndex] == nullptr))
+        if ((_tlasScratchBuffer[cmdListIndex] == nullptr) || 
+            (_tlasResultBuffer[cmdListIndex] == nullptr) ||
+            (_instanceDescriptionCPUBuffer[cmdListIndex] == nullptr))
         {
             newTopLevelAllocation = true;
         }
-        else if ((topLevelPrebuildInfo.ScratchDataSizeInBytes >_tlasScratchBuffer[_topLevelIndex]->GetDesc().Width) ||
-                 (topLevelPrebuildInfo.ResultDataMaxSizeInBytes > _tlasResultBuffer[_topLevelIndex]->GetDesc().Width)||
-                 (_instanceDescriptionGPUBuffer[_topLevelIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size())))
+        else if ((topLevelPrebuildInfo.ScratchDataSizeInBytes >_tlasScratchBuffer[cmdListIndex]->GetDesc().Width) ||
+                 (topLevelPrebuildInfo.ResultDataMaxSizeInBytes > _tlasResultBuffer[cmdListIndex]->GetDesc().Width)||
+                 (_instanceDescriptionCPUBuffer[cmdListIndex]->GetDesc().Width < (sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size())))
         {
             newTopLevelAllocation = true;
-            _topLevelIndex++;
+            //_topLevelIndex++;
 
-            _topLevelIndex %= CMD_LIST_NUM;
+            //_topLevelIndex %= CMD_LIST_NUM;
         }
 
         if (newTopLevelAllocation)
@@ -525,47 +529,56 @@ void ResourceManager::_updateTransformData()
             auto tlasScratchBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ScratchDataSizeInBytes * TlasAllocationMultiplier,
                                                                        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-            _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+            _dxrDevice->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
                                                 &tlasScratchBufferDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
-                                                IID_PPV_ARGS(&_tlasScratchBuffer[_topLevelIndex]));
+                                                IID_PPV_ARGS(&_tlasScratchBuffer[cmdListIndex]));
 
             auto tlasBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(topLevelPrebuildInfo.ResultDataMaxSizeInBytes * TlasAllocationMultiplier,
                                                                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-            _dxrDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+            _dxrDevice->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
                                                 &tlasBufferDesc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-                                                nullptr, IID_PPV_ARGS(&_tlasResultBuffer[_topLevelIndex]));
+                                                nullptr, IID_PPV_ARGS(&_tlasResultBuffer[cmdListIndex]));
 
             // Create view of SRV for shader access
             CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(_rtASDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
             ZeroMemory(&_rtASSrvDesc, sizeof(_rtASSrvDesc));
             _rtASSrvDesc.Shader4ComponentMapping                  = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
             _rtASSrvDesc.ViewDimension                            = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-            _rtASSrvDesc.RaytracingAccelerationStructure.Location = _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+            _rtASSrvDesc.RaytracingAccelerationStructure.Location = _tlasResultBuffer[cmdListIndex]->GetGPUVirtualAddress();
             _dxrDevice->CreateShaderResourceView(nullptr, &_rtASSrvDesc, hDescriptor);
 
             allocateUploadBuffer(_dxrDevice.Get(), nullptr,
                                     sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size() *
                                         TlasAllocationMultiplier,
-                                    &_instanceDescriptionGPUBuffer[_topLevelIndex], L"instanceDescriptionGPUBuffer");
+                                    &_instanceDescriptionCPUBuffer[cmdListIndex], L"instanceDescriptionCPUBuffer");
+
+            auto gpuBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size() * TlasAllocationMultiplier,
+                                                                D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+            _dxrDevice->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                                &gpuBufferDesc, D3D12_RESOURCE_STATE_COPY_DEST,
+                                                nullptr, IID_PPV_ARGS(&_instanceDescriptionGPUBuffer[cmdListIndex]));
         }
 
         BYTE*         mappedData = nullptr;
         CD3DX12_RANGE readRange(0, 0);
-        _instanceDescriptionGPUBuffer[_topLevelIndex]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
+        _instanceDescriptionCPUBuffer[cmdListIndex]->Map(0, &readRange, reinterpret_cast<void**>(&mappedData));
 
         memcpy(&mappedData[0], instanceDescriptionCPUBuffer.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entityList->size());
 
+        commandList->CopyResource(_instanceDescriptionGPUBuffer[cmdListIndex].Get(), _instanceDescriptionCPUBuffer[cmdListIndex].Get());
+
         // Top Level Acceleration Structure desc
         topLevelBuildDesc.DestAccelerationStructureData =
-            _tlasResultBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+            _tlasResultBuffer[cmdListIndex]->GetGPUVirtualAddress();
         topLevelBuildDesc.ScratchAccelerationStructureData =
-            _tlasScratchBuffer[_topLevelIndex]->GetGPUVirtualAddress();
-        topLevelBuildDesc.Inputs.InstanceDescs = _instanceDescriptionGPUBuffer[_topLevelIndex]->GetGPUVirtualAddress();
+            _tlasScratchBuffer[cmdListIndex]->GetGPUVirtualAddress();
+        topLevelBuildDesc.Inputs.InstanceDescs = _instanceDescriptionGPUBuffer[cmdListIndex]->GetGPUVirtualAddress();
 
         commandList->BuildRaytracingAccelerationStructure(&topLevelBuildDesc, 0, nullptr);
         commandList->ResourceBarrier(
-            1, &CD3DX12_RESOURCE_BARRIER::UAV(_tlasResultBuffer[_topLevelIndex].Get()));
+            1, &CD3DX12_RESOURCE_BARRIER::UAV(_tlasResultBuffer[cmdListIndex].Get()));
     }
 }
 

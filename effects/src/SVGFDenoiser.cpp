@@ -17,6 +17,8 @@ SVGFDenoiser::SVGFDenoiser()
     formats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
     formats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
 
+    formats->clear();
+    formats->push_back(DXGI_FORMAT_R16G16B16A16_FLOAT);
     _motionVectorsShader =
         new HLSLShader(SHADERS_LOCATION + "hlsl/cs/motionVectorsCS", "", formats);
 
@@ -24,24 +26,25 @@ SVGFDenoiser::SVGFDenoiser()
     formats->push_back(DXGI_FORMAT_R16G16_FLOAT);
     formats->push_back(DXGI_FORMAT_R16G16_FLOAT);
 
+
     _meanVarianceShader =
-        new HLSLShader(SHADERS_LOCATION + "hlsl/cs/calculateMeanVarianceCS", "", formats);
+        new HLSLShader(SHADERS_LOCATION + "hlsl/cs/denoising/calculateMeanVarianceCS", "", formats);
 
     formats->clear();
     formats->push_back(DXGI_FORMAT_R16_FLOAT);
 
     _atrousWaveletFilterShader = new HLSLShader(
-        SHADERS_LOCATION + "hlsl/cs/atrousWaveletTransformCrossBilateralFilterShaderCS", "",
+        SHADERS_LOCATION + "hlsl/cs/denoising/atrousWaveletTransformCrossBilateralFilterShaderCS", "",
         formats);
 
     formats->clear();
     formats->push_back(DXGI_FORMAT_R8_UINT);
     _temporalAccumulationSuperSamplingShader = new HLSLShader(
-        SHADERS_LOCATION + "hlsl/cs/temporalAccumulationSuperSamplingCS", "", formats);
+        SHADERS_LOCATION + "hlsl/cs/denoising/temporalAccumulationSuperSamplingCS", "", formats);
 
     _motionVectorsUVCoords =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
-                          IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_FLOAT, "motionVector");
+                          IOEventDistributor::screenPixelHeight, TextureFormat::R16G16_FLOAT, "motionVector");
 
     _colorHistoryBuffer =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
@@ -117,6 +120,7 @@ void SVGFDenoiser::_updateGameState(EngineStateFlags state) { _gameState = state
 RenderTexture* SVGFDenoiser::getColorHistoryBuffer() { return _colorHistoryBuffer; }
 RenderTexture* SVGFDenoiser::getOcclusionHistoryBuffer() { return _occlusionHistoryBuffer; }
 RenderTexture* SVGFDenoiser::getDenoisedResult() { return _atrousWaveletFilter; }
+RenderTexture* SVGFDenoiser::getMotionVectors() { return _motionVectorsUVCoords; }
 
 void SVGFDenoiser::_updateKeyboard(int key, int x, int y)
 {
@@ -138,6 +142,8 @@ void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistribut
     cmdList->ClearUnorderedAccessViewFloat(
         _motionVectorsUVCoords->getUAVGPUHandle(), _motionVectorsUVCoords->getUAVCPUHandle(),
         _motionVectorsUVCoords->getResource()->getResource().Get(), clearValues, 0, nullptr);
+
+    return;
 
     // Motion Vectors
     cmdList->BeginEvent(0, L"Motion Vectors", sizeof(L"Motion Vectors"));

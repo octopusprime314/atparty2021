@@ -18,8 +18,8 @@ StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : r
 
 // Store lighting values in xyz channels and occlusion value in w channel
 RWTexture2D<float4> sunLightUAV                   : register(u0);
-//RWTexture2D<float4> occlusionUAV                  : register(u1);
-//RWTexture2D<float2> occlusionHistoryUAV           : register(u2);
+RWTexture2D<float2> occlusionUAV                  : register(u1);
+RWTexture2D<float2> occlusionHistoryUAV           : register(u2);
 //RWTexture2D<float4> indirectLightRaysUAV          : register(u3);
 //RWTexture2D<float4> indirectLightRaysHistoryUAV   : register(u4);
 //RWTexture2D<float4> debug0UAV                     : register(u5);
@@ -73,15 +73,17 @@ void main(int3 threadId : SV_DispatchThreadID,
     float  roughness = normalSRV[threadId.xy].w;
     float  metallic  = positionSRV[threadId.xy].w;
 
-    float3 sunLighting =
-        GetBRDFSunLight(albedo, normal, position, roughness, metallic, threadId.xy);
-
+    // Skybox
     if (normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0)
     {
         sunLightUAV[threadId.xy] = float4(albedo.xyz, 1.0);
+        occlusionUAV[threadId.xy] = SIGMA_INF_SHADOW;
     }
     else
     {
+        float3 sunLighting =
+            GetBRDFSunLight(albedo, normal, position, roughness, metallic, threadId.xy);
+
         sunLightUAV[threadId.xy] = float4(sunLighting.xyz, 1.0);
     }
 

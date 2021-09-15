@@ -4,9 +4,9 @@ Texture2D                  positionSRV    : register(t0, space0);
 //Texture2D                normalSRV      : register(t1, space0);
 //StructuredBuffer<Vertex> vertexBuffer[] : register(t1, space1);
 
-RWTexture2D<float4> motionVectorsUAV : register(u0);
-RWTexture2D<float4> prevPosUAV       : register(u1);
-RWTexture2D<float4> currPosUAV       : register(u2);
+RWTexture2D<float2> motionVectorsUAV : register(u0);
+//RWTexture2D<float4> prevPosUAV       : register(u1);
+//RWTexture2D<float4> currPosUAV       : register(u2);
 
 
 cbuffer globalData : register(b0)
@@ -152,6 +152,10 @@ float3 GetWorldHitPositionInPreviousFrame(in float3 hitObjectPosition, in uint i
 
 void main(int3 threadId : SV_DispatchThreadID)
 {
+    if (positionSRV[threadId.xy].w == -1.0)
+    {
+        return;
+    }
     // Calculates motion vectors for non animated vertices aka doesn't support updateable/refit bvh
     uint   instanceIndex     = (uint)positionSRV[threadId.xy].w;
     float3 hitObjectPosition = mul(float4(positionSRV[threadId.xy].xyz, 1.0),
@@ -162,7 +166,8 @@ void main(int3 threadId : SV_DispatchThreadID)
     float  depth;
     float2 motionVector = CalculateMotionVector(prevVirtualHitPosition, depth, threadId.xy);
 
-    motionVectorsUAV[threadId.xy] = float4(motionVector.xy, depth, length(motionVector.xy));
+    motionVectorsUAV[threadId.xy] = float2(motionVector.xy);
+    //motionVectorsUAV[threadId.xy] = float4(motionVector.xy, depth, length(motionVector.xy));
 
     // Get reprojected normal.
     //float3x3 prevInstanceNormalTransform = prevInstanceNormalMatrixTransforms[instanceIndex];

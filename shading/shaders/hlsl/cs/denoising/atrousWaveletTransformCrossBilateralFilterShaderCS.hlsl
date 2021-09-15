@@ -4,7 +4,7 @@
 // Filtering Ref: [SVGF], Spatiotemporal Variance-Guided Filtering Ref: [RTGCH19] Ray Tracing Gems
 // (Ch 19)
 
-#include "../include/math.hlsl"
+#include "../../include/math.hlsl"
 
 Texture2D<float2>  occlusionAndHitDistanceSRV : register(t0);
 Texture2D<float2>  meanVarianceSRV            : register(t1);

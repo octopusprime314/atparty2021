@@ -10,10 +10,27 @@
 #include "Model.h"
 #include <iomanip>
 
+#include "NRD.h"
+#include "NRIDescs.hpp"
+#include "Extensions/NRIHelper.h"
+#include "NRDIntegration.hpp"
+#include "NRIDeviceCreation.h"
+#include "NRIWrapperD3D12.h"
+
+static NrdIntegration _NRD(CMD_LIST_NUM);
+
+struct NriInterface : public nri::CoreInterface,
+                      public nri::HelperInterface,
+                      public nri::WrapperD3D12Interface
+{
+};
+
+NriInterface _NRI;
+static nri::Device* _nriDevice;
+
 PathTracerShader::PathTracerShader(std::string shaderName)
 {
-
-    _denoising = false;
+    _denoising = true;
     if (_denoising)
     {
         _svgfDenoiser = new SVGFDenoiser();
@@ -27,8 +44,8 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     primaryRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
     // Position in R32G32B32 and A32 unused
     primaryRaysFormats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
-    // Normals in R32G32B32 and roughness in A32 channel
-    primaryRaysFormats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
+    // Normals in R8G8B8 and roughness in A8 channel
+    primaryRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
 
     _primaryRaysShader = new HLSLShader(
         DXR1_1_SHADERS_LOCATION + "primaryRaysShaderCS", "", primaryRaysFormats);
@@ -38,13 +55,17 @@ PathTracerShader::PathTracerShader(std::string shaderName)
                           IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_UNSIGNED_BYTE, "_albedoPrimaryRays");
     _normalPrimaryRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
-                          IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_FLOAT, "_normalPrimaryRays");
+                          IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_UNSIGNED_BYTE, "_normalPrimaryRays");
     _positionPrimaryRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
                           IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_FLOAT, "_positionPrimaryRays");
     _occlusionRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
-                          IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_FLOAT, "_occlusionRays");
+                          IOEventDistributor::screenPixelHeight, TextureFormat::R16G16_FLOAT, "_occlusionRays");
+
+    _denoisedOcclusionRays =
+        new RenderTexture(IOEventDistributor::screenPixelWidth,
+                          IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_UNSIGNED_BYTE, "_denoisedOcclusionRays");
 
     _indirectLightRays = new RenderTexture(IOEventDistributor::screenPixelWidth,
                                            IOEventDistributor::screenPixelHeight,
@@ -65,8 +86,8 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
     sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);*/
 
-    _sunLightRaysShader =
-        new HLSLShader(DXR1_1_SHADERS_LOCATION + "sunLightRaysShaderCS", "", sunLightRaysFormats);
+    //_sunLightRaysShader =
+    //    new HLSLShader(DXR1_1_SHADERS_LOCATION + "sunLightRaysShaderCS", "", sunLightRaysFormats);
 
     _sunLightRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
@@ -78,6 +99,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     std::vector<DXGI_FORMAT>* reflectionRaysFormats = new std::vector<DXGI_FORMAT>();
     // Albedo in R8G8B8 and maybe transparency in A8 to indicate water or something...
     reflectionRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
+    reflectionRaysFormats->push_back(DXGI_FORMAT_R16G16_FLOAT);
     reflectionRaysFormats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
 
     _reflectionRaysShader = new HLSLShader(DXR1_1_SHADERS_LOCATION + "reflectionRaysShaderCS", "",
@@ -165,7 +187,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     mappedData = nullptr;
 
     auto computeCmdList = DXLayer::instance()->getComputeCmdList();
-    D3D12_RESOURCE_BARRIER barrierDesc[7];
+    D3D12_RESOURCE_BARRIER barrierDesc[8];
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
 
     barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -173,7 +195,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
     barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-    barrierDesc[6] = barrierDesc[5] = barrierDesc[4] = barrierDesc[3] =
+    barrierDesc[7] = barrierDesc[6] = barrierDesc[5] = barrierDesc[4] = barrierDesc[3] =
         barrierDesc[2] = barrierDesc[1] = barrierDesc[0];
 
     barrierDesc[0].Transition.pResource = _reflectionRays->getResource()->getResource().Get();
@@ -183,11 +205,42 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     barrierDesc[4].Transition.pResource = _positionPrimaryRays->getResource()->getResource().Get();
     barrierDesc[5].Transition.pResource = _normalPrimaryRays->getResource()->getResource().Get();
     barrierDesc[6].Transition.pResource = _compositor->getResource()->getResource().Get();
+    barrierDesc[7].Transition.pResource = _denoisedOcclusionRays->getResource()->getResource().Get();
 
-    computeCmdList->ResourceBarrier(7, barrierDesc);
+    computeCmdList->ResourceBarrier(8, barrierDesc);
 
     //_dxrStateObject = new DXRStateObject(_primaryRaysShader->getRootSignature(),
     //                                     _reflectionRaysShader->getRootSignature());
+
+    nri::DeviceCreationD3D12Desc deviceDesc = {};
+    deviceDesc.d3d12Device                  = DXLayer::instance()->getDevice().Get();
+    deviceDesc.d3d12PhysicalAdapter         = DXLayer::instance()->getAdapter().Get();
+    deviceDesc.d3d12GraphicsQueue           = DXLayer::instance()->getGfxCmdQueue().Get();
+    deviceDesc.enableNRIValidation          = false;
+
+    // Wrap the device
+    nri::Result result = nri::CreateDeviceFromD3D12Device(deviceDesc, _nriDevice);
+
+    // Get needed functionality
+    result = nri::GetInterface(*_nriDevice, NRI_INTERFACE(nri::CoreInterface),
+                                (nri::CoreInterface*)&_NRI);
+    result = nri::GetInterface(*_nriDevice, NRI_INTERFACE(nri::HelperInterface),
+                                (nri::HelperInterface*)&_NRI);
+
+    // Get needed "wrapper" extension, D3D12
+    result = nri::GetInterface(*_nriDevice, NRI_INTERFACE(nri::WrapperD3D12Interface),
+                                (nri::WrapperD3D12Interface*)&_NRI);
+
+    const nrd::MethodDesc methodDescs[] = {
+        {nrd::Method::SIGMA_SHADOW, static_cast<uint16_t>(IOEventDistributor::screenPixelWidth),
+         static_cast<uint16_t>(IOEventDistributor::screenPixelHeight)},
+    };
+
+    nrd::DenoiserCreationDesc denoiserCreationDesc = {};
+    denoiserCreationDesc.requestedMethods          = methodDescs;
+    denoiserCreationDesc.requestedMethodNum        = 1;
+
+    bool initializeNrdResult = _NRD.Initialize(*_nriDevice, _NRI, _NRI, denoiserCreationDesc);
 }
 
 PathTracerShader::~PathTracerShader() {}
@@ -226,7 +279,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     // Clear occlusion, point light, sun light and reflection UAVs
     float zeroValues[] = {0.0, 0.0, 0.0, 0.0};
-    float oneValues[] = {1.0, 0.0, 0.0, 0.0};
+    float oneValues[] = {1.0, 0.0};
     cmdList->ClearUnorderedAccessViewFloat(
         _occlusionRays->getUAVGPUHandle(),
         _occlusionRays->getUAVCPUHandle(),
@@ -327,7 +380,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     // Process directional light
     Vector4 sunLightColor  = Vector4(1.0, 0.85, 0.4);
     float   sunLightRange  = 100000.0;
-    Vector4 sunLightPos    = Vector4(10000.0 / 4.0, 10000.0, 10000.0 / 4.0);
+    Vector4 sunLightPos    = Vector4(50000.0, 50000.0, 50000.0);
     //Vector4 sunLightPos    = Vector4(30.1, 14.9, 46.1)* 1000;
     float   sunLightRadius = 100.0f;
 
@@ -354,93 +407,106 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     if (_denoising)
     {
+        auto motionVectors = _svgfDenoiser->getMotionVectors();
+
         _svgfDenoiser->computeMotionVectors(viewEventDistributor, _positionPrimaryRays);
+
+        D3D12_RESOURCE_BARRIER barrierDesc[1];
+        ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+
+        barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[0].Transition.pResource   = motionVectors->getResource()->getResource().Get();
+        barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+        cmdList->ResourceBarrier(1, barrierDesc);
     }
 
-    cmdList->BeginEvent(0, L"Sun light Rays", sizeof(L"Sun light Rays"));
+    //cmdList->BeginEvent(0, L"Sun light Rays", sizeof(L"Sun light Rays"));
 
-    // Sun light rays
+    //// Sun light rays
 
-    shader = _sunLightRaysShader;
+    //shader = _sunLightRaysShader;
 
-    shader->bind();
+    //shader->bind();
 
-    shader->updateData("albedoSRV", 0, _albedoPrimaryRays, true, false);
-    shader->updateData("positionSRV", 0, _positionPrimaryRays, true, false);
-    shader->updateData("normalSRV", 0, _normalPrimaryRays, true, false);
+    //shader->updateData("albedoSRV", 0, _albedoPrimaryRays, true, false);
+    //shader->updateData("positionSRV", 0, _positionPrimaryRays, true, false);
+    //shader->updateData("normalSRV", 0, _normalPrimaryRays, true, false);
 
-    auto resourceBindings  = shader->_resourceIndexes;
-    /*ID3D12DescriptorHeap* descriptorHeaps[] = {resourceManager->getDescHeap().Get()};
-    cmdList->SetDescriptorHeaps(1, descriptorHeaps);
-    
-    cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],
-                                           _hemisphereSamplesGPUBuffer->gpuDescriptorHandle);
+    //auto resourceBindings  = shader->_resourceIndexes;
+    ///*ID3D12DescriptorHeap* descriptorHeaps[] = {resourceManager->getDescHeap().Get()};
+    //cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+    //
+    //cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],
+    //                                       _hemisphereSamplesGPUBuffer->gpuDescriptorHandle);
 
-    auto              texBroker        = TextureBroker::instance();
-    const std::string noiseTextureName = "../assets/textures/noise/fluidnoise.png";
-    auto noiseTexture = texBroker->getTexture(noiseTextureName);*/
+    //auto              texBroker        = TextureBroker::instance();
+    //const std::string noiseTextureName = "../assets/textures/noise/fluidnoise.png";
+    //auto noiseTexture = texBroker->getTexture(noiseTextureName);*/
 
-    //shader->updateData("noiseSRV", 0, noiseTexture, true, false);
+    ////shader->updateData("noiseSRV", 0, noiseTexture, true, false);
 
-    shader->updateData("sunLightUAV", 0, _sunLightRays, true, true);
-    //shader->updateData("occlusionUAV", 0, _occlusionRays, true, true);
-    //shader->updateData("occlusionHistoryUAV", 0, _svgfDenoiser->getOcclusionHistoryBuffer(), true, true);
-    //shader->updateData("indirectLightRaysUAV", 0, _indirectLightRays, true, true);
-    //shader->updateData("indirectLightRaysHistoryUAV", 0, _indirectLightRaysHistoryBuffer, true, true);
+    //shader->updateData("sunLightUAV", 0, _sunLightRays, true, true);
+    ////shader->updateData("occlusionUAV", 0, _occlusionRays, true, true);
+    ////shader->updateData("occlusionHistoryUAV", 0, _svgfDenoiser->getOcclusionHistoryBuffer(), true, true);
+    ////shader->updateData("indirectLightRaysUAV", 0, _indirectLightRays, true, true);
+    ////shader->updateData("indirectLightRaysHistoryUAV", 0, _indirectLightRaysHistoryBuffer, true, true);
 
-    //shader->updateData("debug0UAV", 0, _debug0, true, true);
-    //shader->updateData("debug1UAV", 0, _debug1, true, true);
-    //shader->updateData("debug2UAV", 0, _debug2, true, true);
+    ////shader->updateData("debug0UAV", 0, _debug0, true, true);
+    ////shader->updateData("debug1UAV", 0, _debug1, true, true);
+    ////shader->updateData("debug2UAV", 0, _debug2, true, true);
 
-    shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
+    //shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
 
-    shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
+    //shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
 
-    //resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
-    //resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
-    //resourceManager->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
+    ////resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
+    ////resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
+    ////resourceManager->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
 
-    //resourceManager->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
-    //resourceManager->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
-    //resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
-    //resourceManager->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
+    ////resourceManager->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
+    ////resourceManager->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
+    ////resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
+    ////resourceManager->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
 
-    shader->updateData("numPointLights", &pointLightList.lightCount, true);
-    shader->updateData("pointLightColors", pointLightList.lightColorsArray, true);
-    shader->updateData("pointLightRanges", pointLightList.lightRangesArray, true);
-    shader->updateData("pointLightPositions", pointLightList.lightPosArray, true);
+    //shader->updateData("numPointLights", &pointLightList.lightCount, true);
+    //shader->updateData("pointLightColors", pointLightList.lightColorsArray, true);
+    //shader->updateData("pointLightRanges", pointLightList.lightRangesArray, true);
+    //shader->updateData("pointLightPositions", pointLightList.lightPosArray, true);
 
-    shader->updateData("sunLightColor", sunLightColor.getFlatBuffer(), true);
-    shader->updateData("sunLightRange", &sunLightRange, true);
-    shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), true);
-    shader->updateData("sunLightRadius", &sunLightRadius, true);
-    shader->updateData("screenSize", screenSize, true);
-    shader->updateData("texturesPerMaterial", &texturesPerMaterial, true);
+    //shader->updateData("sunLightColor", sunLightColor.getFlatBuffer(), true);
+    //shader->updateData("sunLightRange", &sunLightRange, true);
+    //shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), true);
+    //shader->updateData("sunLightRadius", &sunLightRadius, true);
+    //shader->updateData("screenSize", screenSize, true);
+    //shader->updateData("texturesPerMaterial", &texturesPerMaterial, true);
 
-    if (isCameraMoving)
-    {
-        _frameIndex = 0;
-    }
-    shader->updateData("frameIndex", &_frameIndex, true);
+    //if (isCameraMoving)
+    //{
+    //    _frameIndex = 0;
+    //}
+    //shader->updateData("frameIndex", &_frameIndex, true);
 
-    float timeAsFloat = static_cast<float>(MasterClock::instance()->getGameTime()) / 1000.0f;
-    shader->updateData("time", &timeAsFloat, true);
+    //float timeAsFloat = static_cast<float>(MasterClock::instance()->getGameTime()) / 1000.0f;
+    //shader->updateData("time", &timeAsFloat, true);
 
-    //shader->updateData("seed", &seed, true);
-    //shader->updateData("numSamplesPerSet", &numSamplesPerSet, true);
-    //shader->updateData("numSampleSets", &numSampleSets, true);
-    //shader->updateData("numPixelsPerDimPerSet", &numPixelsPerDimPerSet, true);
+    ////shader->updateData("seed", &seed, true);
+    ////shader->updateData("numSamplesPerSet", &numSamplesPerSet, true);
+    ////shader->updateData("numSampleSets", &numSampleSets, true);
+    ////shader->updateData("numPixelsPerDimPerSet", &numPixelsPerDimPerSet, true);
 
 
-    if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
-    {
-        shader->dispatch(ceilf(screenSize[0] / static_cast<float>(threadGroupWidth)),
-                         ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
-    }
+    //if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
+    //{
+    //    //shader->dispatch(ceilf(screenSize[0] / static_cast<float>(threadGroupWidth)),
+    //    //                 ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
+    //}
 
-    shader->unbind();
+    //shader->unbind();
 
-    cmdList->EndEvent();
+    //cmdList->EndEvent();
     cmdList->BeginEvent(0, L"Reflection Rays", sizeof(L"Reflection Rays"));
 
     DXLayer::instance()->setTimeStamp();
@@ -455,6 +521,8 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("normalSRV", 0, _normalPrimaryRays, true, false);
 
     shader->updateData("reflectionUAV", 0, _reflectionRays, true, true);
+    shader->updateData("occlusionUAV", 0, _occlusionRays, true, true);
+    shader->updateData("occlusionHistoryUAV", 0, _denoisedOcclusionRays, true, true);
     //shader->updateData("pointLightOcclusionUAV", 0, _pointLightOcclusion, true, true);
     //shader->updateData("pointLightOcclusionHistoryUAV", 0, _pointLightOcclusionHistory, true, true);
     //shader->updateData("debugUAV", 0, _occlusionRays, true, true);
@@ -489,6 +557,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("numSamplesPerSet", &numSamplesPerSet, true);
     shader->updateData("numSampleSets", &numSampleSets, true);
     shader->updateData("numPixelsPerDimPerSet", &numPixelsPerDimPerSet, true);
+
+    auto resourceBindings  = shader->_resourceIndexes;
+    ID3D12DescriptorHeap* descriptorHeaps[] = {resourceManager->getDescHeap().Get()};
+    cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+    
+    cmdList->SetComputeRootDescriptorTable(resourceBindings["sampleSets"],
+                                           _hemisphereSamplesGPUBuffer->gpuDescriptorHandle);
 
     if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
     {
@@ -532,11 +607,202 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     if (_denoising)
     {
+        // Wrap the command buffer
+        nri::CommandBufferD3D12Desc cmdDesc = {};
+        cmdDesc.d3d12CommandList            = (ID3D12GraphicsCommandList*)cmdList.Get();
+        cmdDesc.d3d12CommandAllocator       = nullptr; // Not needed for NRD Integration layer
+
+        nri::CommandBuffer* cmdBuffer = nullptr;
+        _NRI.CreateCommandBufferD3D12(*_nriDevice, cmdDesc, cmdBuffer);
+
+        // Wrap required textures
+        constexpr uint32_t                N              = 4;
+        nri::TextureTransitionBarrierDesc entryDescs[N]  = {};
+        nri::Format                       entryFormat[N] = {};
+
+        nri::TextureD3D12Desc textureDesc = {};
+        textureDesc.d3d12Resource         = _occlusionRays->getResource()->getResource().Get();
+        nri::Texture* texture             = (nri::Texture*)entryDescs[0].texture;
+        _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
+
+        // You need to specify the current state of the resource here, after denoising NRD can
+        // modify this state. Application must continue state tracking from this point. Useful
+        // information:
+        //    SRV = nri::AccessBits::SHADER_RESOURCE, nri::TextureLayout::SHADER_RESOURCE
+        //    UAV = nri::AccessBits::SHADER_RESOURCE_STORAGE, nri::TextureLayout::GENERAL
+        entryDescs[0].texture = texture;
+        entryDescs[0].nextAccess = nri::AccessBits::SHADER_RESOURCE;
+        entryDescs[0].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
+
+        textureDesc = {};
+        textureDesc.d3d12Resource = _denoisedOcclusionRays->getResource()->getResource().Get();
+        texture             = (nri::Texture*)entryDescs[1].texture;
+        _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
+
+        entryDescs[1].texture    = texture;
+        entryDescs[1].nextAccess = nri::AccessBits::SHADER_RESOURCE_STORAGE;
+        entryDescs[1].nextLayout = nri::TextureLayout::GENERAL;
+
+        textureDesc               = {};
+        textureDesc.d3d12Resource = _normalPrimaryRays->getResource()->getResource().Get();
+        texture                   = (nri::Texture*)entryDescs[2].texture;
+        _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
+        
+        entryDescs[2].texture = texture;
+        entryDescs[2].nextAccess = nri::AccessBits::SHADER_RESOURCE;
+        entryDescs[2].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
+
+        textureDesc               = {};
+        textureDesc.d3d12Resource = _svgfDenoiser->getMotionVectors()->getResource()->getResource().Get();
+        texture                   = (nri::Texture*)entryDescs[3].texture;
+        _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
+
+        entryDescs[3].texture    = texture;
+        entryDescs[3].nextAccess = nri::AccessBits::SHADER_RESOURCE;
+        entryDescs[3].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
+
+        // Populate common settings
+        //  - for the first time use defaults
+        //  - currently NRD supports only the following view space: X - right, Y - top, Z - forward
+        //  or backward
+        nrd::CommonSettings commonSettings = {};
+        commonSettings.frameIndex = _frameIndex;
+        commonSettings.debug      = true;
+
+        uint32_t matrixSize = 16 * sizeof(float);
+        memcpy(commonSettings.worldToViewMatrix, &cameraView, matrixSize);
+        memcpy(commonSettings.worldToViewMatrixPrev, &cameraView, matrixSize);
+        memcpy(commonSettings.viewToClipMatrix, &cameraProj, matrixSize);
+        memcpy(commonSettings.viewToClipMatrixPrev, &cameraProj, matrixSize);
+
+        // Set settings for each denoiser
+        nrd::SigmaShadowSettings settings = {};
+
+        _NRD.SetMethodSettings(nrd::Method::SIGMA_SHADOW, &settings);
+
+        //enum class ResourceType : uint32_t
+        //{
+        //    // INPUTS
+        //    // ===========================================================================================================================
+
+        //    // 3D world space motion (RGBA16f+) or 2D screen space motion (RG16f+), MVs must be
+        //    // non-jittered, MV = previous - current
+        //    IN_MV,
+
+        //    // See "NRD.hlsl/NRD_FrontEnd_UnpackNormalAndRoughness" (RGBA8+ or R10G10B10A2+
+        //    // depending on encoding)
+        //    IN_NORMAL_ROUGHNESS,
+
+        //    // Linear view depth for primary rays (R16f+)
+        //    IN_VIEWZ,
+
+        //    // Data must be packed using "NRD.hlsl/XXX_PackRadiance" (RGBA16f+)
+        //    IN_DIFF_HIT,
+        //    IN_SPEC_HIT,
+
+        //    // (Optional) Data must be packed using "NRD.hlsl/NRD_PackRayDirectionAndPdf" (RGBA8+)
+        //    IN_DIFF_DIRECTION_PDF,
+        //    IN_SPEC_DIRECTION_PDF,
+
+        //    // Data must be packed using "NRD.hlsl/XXX_PackShadow (3 args)" (RG16f+). INF pixels
+        //    // must be cleared with NRD_INF_SHADOW macro
+        //    IN_SHADOWDATA,
+
+        //    // Data must be packed using "NRD.hlsl/XXX_PackShadow (4 args)" (RGBA8+)
+        //    IN_SHADOW_TRANSLUCENCY,
+
+        //    // OUTPUTS
+        //    // ==========================================================================================================================
+
+        //    // IMPORTANT: These textures can potentially be used as history buffers
+
+        //    // SIGMA_SHADOW_TRANSLUCENCY - .x - shadow, .yzw - translucency (RGBA8+)
+        //    // SIGMA_SHADOW - .x - shadow (R8+)
+        //    // Data must be unpacked using "NRD.hlsl/XXX_UnpackShadow"
+        //    OUT_SHADOW_TRANSLUCENCY,
+
+        //    // .xyz - radiance (in case of REBLUR .w is normalized hit distance) (RGBA16f+)
+        //    OUT_DIFF_HIT,
+        //    OUT_SPEC_HIT,
+
+        //    // POOLS
+        //    // ============================================================================================================================
+
+        //    // Can be reused after denoising
+        //    TRANSIENT_POOL,
+
+        //    // Dedicated to NRD, can't be reused
+        //    PERMANENT_POOL,
+
+        //    MAX_NUM,
+        //};
+
+        // Fill up the user pool
+        NrdUserPool userPool = {{
+            // Fill the required inputs and outputs in appropriate slots using entryDescs &
+            // entryFormat, applying remapping if necessary. Unused slots can be {nullptr,
+            // nri::Format::UNKNOWN}
+
+            // IN_MV
+            {&entryDescs[3], nri::Format::RG16_SFLOAT},
+
+            // IN_NORMAL_ROUGHNESS
+            {&entryDescs[2], nri::Format::RGBA8_UNORM},
+
+            // IN_VIEWZ
+            {nullptr, nri::Format::UNKNOWN},
+
+            // IN_DIFF_HIT,
+            {nullptr, nri::Format::UNKNOWN},
+
+            // IN_SPEC_HIT,
+            {nullptr, nri::Format::UNKNOWN},
+
+            // IN_DIFF_DIRECTION_PDF,
+            {nullptr, nri::Format::UNKNOWN},
+
+            // IN_SPEC_DIRECTION_PDF,
+            {nullptr, nri::Format::UNKNOWN},
+
+            // IN_SHADOW
+            {&entryDescs[0], nri::Format::RG16_SFLOAT},
+
+            // IN_TRANSLUCENCY
+            {nullptr, nri::Format::UNKNOWN},
+
+            // OUT_SHADOW | OUT_TRANSMITTANCE
+            {&entryDescs[1], nri::Format::RGBA8_UNORM},
+            // when using Translusent Shadows, OUT_SHADOWS texture is not required. and vice
+            // versa
+
+            // OUT_DIFF_HIT
+            {nullptr, nri::Format::UNKNOWN},
+
+            // OUT_SPEC_HIT
+            {nullptr, nri::Format::UNKNOWN},
+        }};
+
+        _NRD.Denoise(0, *cmdBuffer, commonSettings, userPool);
+
+        for (uint32_t i = 0; i < N; i++)
+        {
+            nri::Texture* texture = (nri::Texture*)entryDescs[i].texture;
+            _NRI.DestroyTexture(*texture);
+        }
+        
+        _NRI.DestroyCommandBuffer(*cmdBuffer);
+
+        //====================================================================================================================
+        // STEP 7 - DESTROY
+        //====================================================================================================================
+
+        //NRD.Destroy();
+
         // Denoise pass for just ambient occlusion rays for now
-        _svgfDenoiser->denoise(viewEventDistributor,
-                                _occlusionRays,
-                                _positionPrimaryRays,
-                                _normalPrimaryRays);
+        //_svgfDenoiser->denoise(viewEventDistributor,
+        //                        _occlusionRays,
+        //                        _positionPrimaryRays,
+        //                        _normalPrimaryRays);
     }
 
     cmdList->BeginEvent(0, L"Compositor", sizeof(L"Compositor"));
@@ -548,7 +814,9 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->bind();
     shader->updateData("reflectionSRV", 0, _reflectionRays, true, false);
     shader->updateData("sunLightSRV", 0, _sunLightRays, true, false);
+    //shader->updateData("shadowSRV", 0, _denoisedOcclusionRays, true, false);
     shader->updateData("pathTracerUAV", 0, _compositor, true, true);
+    //shader->updateData("shadowUAV", 0, _compositor, true, true);
 
     shader->updateData("reflectionMode", &_reflectionMode, true);
     shader->updateData("shadowMode", &_shadowMode, true);
@@ -578,6 +846,17 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     {
         barrierDesc[6].Transition.pResource = _svgfDenoiser->getOcclusionHistoryBuffer()->getResource()->getResource().Get();
         cmdList->ResourceBarrier(7, barrierDesc);
+
+        auto motionVectors = _svgfDenoiser->getMotionVectors();
+        ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+
+        barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[0].Transition.pResource   = motionVectors->getResource()->getResource().Get();
+        barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+        cmdList->ResourceBarrier(1, barrierDesc);
     }
     else
     {

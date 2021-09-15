@@ -9,7 +9,6 @@
 #include "IOEvents.h"
 #include "MasterClock.h"
 #include "ModelBroker.h"
-#include "PathTracerShader.h"
 #include "Randomization.h"
 #include "SSCompute.h"
 #include "SceneBuilder.h"
@@ -21,6 +20,7 @@
 #include "MergeShader.h"
 #include "SSAO.h"
 #include <chrono>
+#include "PathTracerShader.h"
 
 ResourceManager* EngineManager::_rayTracingPipeline = nullptr;
 GraphicsLayer             EngineManager::_graphicsLayer;

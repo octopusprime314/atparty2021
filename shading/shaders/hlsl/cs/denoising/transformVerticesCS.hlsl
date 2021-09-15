@@ -1,4 +1,4 @@
-#include "../include/structs.hlsl"
+#include "../../include/structs.hlsl"
 
 StructuredBuffer<CompressedAttribute> inputVertex : register(t0);
 Buffer<float>                         indexes          : register(t1);

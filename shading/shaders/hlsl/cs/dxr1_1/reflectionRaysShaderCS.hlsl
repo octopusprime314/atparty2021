@@ -15,7 +15,8 @@ StructuredBuffer<UniformMaterial>           uniformMaterials                 : r
 StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : register(t11, space0);
 
 RWTexture2D<float4> reflectionUAV : register(u0);
-//RWTexture2D<float4> pointLightOcclusionUAV : register(u1);
+RWTexture2D<float2> occlusionUAV : register(u1);
+RWTexture2D<float4> occlusionHistoryUAV : register(u2);
 //RWTexture2D<float4> pointLightOcclusionHistoryUAV : register(u2);
 //RWTexture2D<float4> debugUAV : register(u3);
 
@@ -35,7 +36,7 @@ cbuffer globalData : register(b0)
     float  sunLightRadius;
     float  sunLightRange;
     
-    int      numPointLights;
+    int    numPointLights;
 
     uint seed;
     uint numSamplesPerSet;
@@ -56,7 +57,7 @@ static float refractionIndex = 1.0 - reflectionIndex;
 void main(int3 threadId            : SV_DispatchThreadID,
           int3 threadGroupThreadId : SV_GroupThreadID)
 {
-    float3 normal = normalSRV[threadId.xy].xyz;
+    float3 normal = (normalSRV[threadId.xy].xyz * 2.0) - 1.0;
 
     if (normal.x == 0.0 &&
         normal.y == 0.0 &&
@@ -79,6 +80,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
         float3 rayDirection   = normalize(hitPosition - cameraPosition);
 
         uint   bounceIndex = 0;
+
+        //roughness = max(0.0, roughness - 0.75);
+
         float3 reflectionColor = GetBRDFPointLight(albedo,
                                                    normal,
                                                    hitPosition,
@@ -88,7 +92,10 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                    false,
                                                    bounceIndex);
 
-        while (roughness < 0.25 && bounceIndex < RECURSION_LIMIT)
+        float3 jitteredNormal = GetRandomRayDirection(threadId.xy, normal.xyz, (uint2)screenSize, 0);
+        reflectionColor += GetBRDFSunLight(albedo, normal, hitPosition, roughness, metallic, threadId.xy);
+
+        while (roughness > 1.1/*roughness < 0.9 && bounceIndex < 1*/ /*RECURSION_LIMIT*/)
         {
             // Trace the ray.
             // Set the ray's extents.
@@ -162,6 +169,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     rayDirection = normalize(rayQuery.WorldRayOrigin() - hitPosition);
                 }
 
+                roughness = max(0.0, roughness - 0.5);
+
                 reflectionColor += GetBRDFPointLight(albedo,
                                                      normal,
                                                      hitPosition,
@@ -172,12 +181,19 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                      bounceIndex) / 2.0;
 
                 reflectionColor +=
-                    GetBRDFSunLight(albedo, normal, hitPosition, roughness, metallic, threadId.xy) / 10.0f;
+                    GetBRDFSunLight(albedo, normal, hitPosition, roughness, metallic, threadId.xy);
 
                 bounceIndex++;
             }
             else
             {
+                float3 sampleVector = normalize(ray.Direction);
+
+                reflectionColor +=
+                    (float4(137.0 / 256.0, 207.0 / 256.0, 240.0 / 256.0, 0.0) * (sampleVector.y*3.0) +
+                    float4(0.0, 0.0, 0.44, 0.0) * (1.0 - sampleVector.y*3.0)).xyz;
+
+                //reflectionColor += GetBRDFSunLight(albedo, normal, hitPosition, roughness, metallic, threadId.xy) / 10.0f;
                 break;
             }
         }
