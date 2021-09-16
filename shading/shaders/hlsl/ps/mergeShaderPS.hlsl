@@ -20,5 +20,7 @@ float4 main(float4 posH : SV_POSITION, float2 uv : UVOUT) : SV_Target
     texCoords -= velocityVector;
     result += deferredTexture.Sample(bilinearWrap, texCoords) * 0.1;
 
+    result = deferredTexture.Sample(bilinearWrap, uv);
+
     return float4(float3(result.rgb), 1.0);
 }
