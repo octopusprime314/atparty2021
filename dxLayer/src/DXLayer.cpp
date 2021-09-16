@@ -262,7 +262,7 @@ void DXLayer::initCmdLists()
     _previousCpuTime = clock();
 
     // Sleep loop randomly selecting an available command list
-    bool foundCommandList = false;
+    /*bool foundCommandList = false;
     while (foundCommandList == false)
     {
         for (int i = 0; i < CMD_LIST_NUM; i++)
@@ -278,9 +278,9 @@ void DXLayer::initCmdLists()
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(0));
         }
-    }
+    }*/
 
-    /*while (_pendingCmdListIndices.size() > 0)
+    while (_pendingCmdListIndices.size() > 0)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(0));
     }
@@ -299,7 +299,7 @@ void DXLayer::initCmdLists()
         std::this_thread::sleep_for(std::chrono::milliseconds(0));
     }
 
-    _cmdListIndex = nextCommandList;*/
+    _cmdListIndex = nextCommandList;
 
     _cmdListFinishedExecution[_cmdListIndex] = false;
     // Open command list
