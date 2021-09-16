@@ -28,6 +28,7 @@ void StaticShader::startEntity()
     ResourceManager* resourceManager = EngineManager::getResourceManager();
     resourceManager->updateTextureUnbounded(_shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, false);
     resourceManager->updateStructuredAttributeBufferUnbounded(_shader->_resourceIndexes["vertexBuffer"], nullptr, false);
+    resourceManager->updateStructuredIndexBufferUnbounded(_shader->_resourceIndexes["indexBuffer"], nullptr, false);
 
     resourceManager->updateAndBindMaterialBuffer(_shader->_resourceIndexes, false);
     resourceManager->updateAndBindAttributeBuffer(_shader->_resourceIndexes, false);

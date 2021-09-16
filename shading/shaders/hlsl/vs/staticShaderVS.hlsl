@@ -7,6 +7,7 @@ Buffer<uint>                          instanceIndexToAttributesMapping : registe
 StructuredBuffer<UniformMaterial>     uniformMaterials                 : register(t4, space0);
 Texture2D                             diffuseTexture[]                 : register(t5, space1);
 Buffer<float>                         instanceModelMatrixTransforms    : register(t6, space0);
+Buffer<uint>                          indexBuffer[]                    : register(t7, space3);
 
 SamplerState bilinearWrap : register(s0);
 

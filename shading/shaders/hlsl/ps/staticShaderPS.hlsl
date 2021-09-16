@@ -6,6 +6,8 @@ Buffer<uint>                          instanceIndexToMaterialMapping   : registe
 Buffer<uint>                          instanceIndexToAttributesMapping : register(t3, space0);
 StructuredBuffer<UniformMaterial>     uniformMaterials                 : register(t4, space0);
 Texture2D                             diffuseTexture[]                 : register(t5, space1);
+Buffer<float>                         instanceModelMatrixTransforms    : register(t6, space0);
+Buffer<uint>                          indexBuffer[]                    : register(t7, space3);
 
 SamplerState bilinearWrap : register(s0);
 
@@ -60,18 +62,19 @@ MRT main(in float4 position    : SV_POSITION,
     rayData.barycentrics      = float2(0.0, 0.0);
     rayData.uvIsValid         = true;
     rayData.uv                = uv;
-    
+    rayData.normal            = normal;
+
     float3 albedo;
     float  roughness;
     float  metallic;
     float3 hitPosition;
     float  transmittance;
     float3 tbnNormal;
-    
+
     ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, tbnNormal, hitPosition, transmittance);
 
     output.color    = float4(albedo, transmittance);
-    output.normal   = float4(normal, roughness);
+    output.normal   = float4(-tbnNormal, roughness);
     output.position = float4(position.xyz, metallic);
 
     float2 currProjPos = currPos.xy;

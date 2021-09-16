@@ -45,6 +45,7 @@ struct RayTraversalData
 
     float2   uv;
     bool     uvIsValid;
+    float3   normal;
 };
 
 struct Payload

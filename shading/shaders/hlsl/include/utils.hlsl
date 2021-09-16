@@ -455,6 +455,96 @@ float2 GetUV(uint instanceIndex, uint vertexId)
     return uv;
 }
 
+
+float3x3 GetTBN(float3 surfaceNormal, uint instanceIndex, uint primitiveIndex)
+{
+    float3 pos[3];
+
+    uint3 index =
+        uint3(indexBuffer[NonUniformResourceIndex(instanceIndex)].Load((primitiveIndex * 3) + 0),
+              indexBuffer[NonUniformResourceIndex(instanceIndex)].Load((primitiveIndex * 3) + 1),
+              indexBuffer[NonUniformResourceIndex(instanceIndex)].Load((primitiveIndex * 3) + 2));
+
+    pos[0] = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).vertex;
+    pos[1] = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).vertex;
+    pos[2] = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).vertex;
+
+    float2 texCoord[3];
+
+    texCoord[0] = float2(
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).uvYUnused & 0xFFFF)));
+
+    texCoord[1] = float2(
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).uvYUnused & 0xFFFF)));
+
+    texCoord[2] = float2(
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalZuvX >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).uvYUnused & 0xFFFF)));
+
+    float3 normal[3];
+
+    normal[0] = float3(
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).normalZuvX & 0xFFFF)));
+
+    normal[1] = float3(
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).normalZuvX & 0xFFFF)));
+
+    normal[2] = float3(
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalXY & 0xFFFF)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalXY >> 16)),
+        halfFloatToFloat(min16uint(vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).normalZuvX & 0xFFFF)));
+
+    float3 edge[2];
+
+    edge[0] = pos[1] - pos[0];
+    edge[1] = pos[2] - pos[0];
+
+    float2 deltaUV[2];
+    deltaUV[0] = texCoord[1] - texCoord[0];
+    deltaUV[1] = texCoord[2] - texCoord[0];
+
+    float f = 1.0f / (deltaUV[0].x * deltaUV[1].y - deltaUV[1].x * deltaUV[0].y);
+
+    // Return identity matrix if bad uv/normals
+    if (isnan(f))
+    {
+        float3   t      = float3(f, f, f);
+        float3   b      = float3(f, f, f);
+
+        float3 BA = pos[1] - pos[0];
+        float3 CA = pos[2] - pos[0];
+        surfaceNormal = cross(BA, CA);
+
+        float3   n      = normalize(surfaceNormal);
+        float3x3 tbnMat = float3x3(t, b, n);
+
+        return tbnMat;
+    }
+
+    float3 tangent;
+    tangent.x = f * (deltaUV[1].y * edge[0].x - deltaUV[0].y * edge[1].x);
+    tangent.y = f * (deltaUV[1].y * edge[0].y - deltaUV[0].y * edge[1].y);
+    tangent.z = f * (deltaUV[1].y * edge[0].z - deltaUV[0].y * edge[1].z);
+
+    float3 bitangent;
+    bitangent.x = f * (-deltaUV[1].x * edge[0].x + deltaUV[0].x * edge[1].x);
+    bitangent.y = f * (-deltaUV[1].x * edge[0].y + deltaUV[0].x * edge[1].y);
+    bitangent.z = f * (-deltaUV[1].x * edge[0].z + deltaUV[0].x * edge[1].z);
+
+    float3   t      = normalize(tangent);
+    float3   b      = normalize(bitangent);
+    float3   n      = normalize(surfaceNormal);
+    float3x3 tbnMat = float3x3(t, b, n);
+
+    return tbnMat;
+}
+
 void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
                            out float3                  albedo,
                            out float                   roughness,
@@ -539,10 +629,14 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
 
     normal = float3(0.0, 0.0, 0.0);
 
-#ifdef RAYTRACING_ENABLED
+//#ifdef RAYTRACING_ENABLED
     if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
     {
+#ifdef RAYTRACING_ENABLED
         normal = -GetNormalCoord(barycentrics, attributeIndex, primitiveIndex);
+#else
+        normal = rayData.normal;
+#endif
     }
     else
     {
@@ -552,10 +646,13 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
 
         // Converts from [0,1] space to [-1,1] space
         normalMap = normalMap * 2.0f - 1.0f;
-
+#ifdef RAYTRACING_ENABLED
         // Compute the normal from loading the triangle vertices
         float3x3 tbnMat = GetTBN(barycentrics, attributeIndex, primitiveIndex);
-
+#else
+        normal          = rayData.normal;
+        float3x3 tbnMat = GetTBN(normal, attributeIndex, primitiveIndex);
+#endif
         // If there is a failure in getting the TBN matrix then use the computed normal without normal mappings
         if (any(isnan(tbnMat[0])))
         {
@@ -568,11 +665,11 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
             normal = -normalize(mul(normalMap, tbnMatNormalTransform));
         }
     }
-#else
+//#else
 
     // NEED TO BE IMPLEMENTED BY FETCHING UV AND NORMALS USING INDEX BUFFER
 
-#endif
+//#endif
 
     transmittance = uniformMaterials[attributeIndex].transmittance;
 }
