@@ -98,6 +98,7 @@ class ResourceManager
     D3DBuffer*                                                        _instanceNormalMatrixTransformsGPUBuffer;
 
     ComPtr<ID3D12Resource>                                            _instanceModelMatrixTransformsUpload[CMD_LIST_NUM];
+    ComPtr<ID3D12Resource>                                            _instanceModelMatrixTransformsGPU;
     D3DBuffer*                                                        _instanceModelMatrixTransformsGPUBuffer;
 
     std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS> _bottomLevelBuildDescs;

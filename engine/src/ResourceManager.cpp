@@ -223,13 +223,18 @@ void ResourceManager::updateAndBindUniformMaterialBuffer(std::map<std::string, U
 void ResourceManager::updateAndBindModelMatrixBuffer(std::map<std::string, UINT> resourceIndexes,
                                                       bool                       isCompute)
 {
+    auto  cmdListIndex    = DXLayer::instance()->getCmdListIndex();
     BYTE* mappedData = nullptr;
-    _instanceModelMatrixTransformsGPUBuffer->resource->Map(0, nullptr,
-                                                            reinterpret_cast<void**>(&mappedData));
+    _instanceModelMatrixTransformsUpload[cmdListIndex]->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+
     memcpy(&mappedData[0], _instanceModelMatrixTransforms.data(),
            sizeof(float) * _instanceModelMatrixTransforms.size());
 
-    auto                  cmdList           = DXLayer::instance()->getCmdList();
+    auto cmdList = DXLayer::instance()->getCmdList();
+
+    cmdList->CopyResource(_instanceModelMatrixTransformsGPUBuffer->resource.Get(),
+                          _instanceModelMatrixTransformsUpload[cmdListIndex].Get());
+
     auto                  resourceBindings  = resourceIndexes;
     ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
     cmdList->SetDescriptorHeaps(1, descriptorHeaps);
@@ -617,6 +622,7 @@ void ResourceManager::_updateResourceMappingBuffers()
 {
     auto entityList = EngineManager::instance()->getEntityList();
 
+
     bool newInstanceMappingAllocation = false;
     if ((_instanceIndexToMaterialMappingGPUBuffer == nullptr) ||
         (_instanceIndexToAttributeMappingGPUBuffer == nullptr) ||
@@ -642,9 +648,9 @@ void ResourceManager::_updateResourceMappingBuffers()
 
     if (newInstanceMappingAllocation)
     {
-        auto newInstanceSize = (_instanceIndexToMaterialMappingGPUBuffer->count == 0)
-                                   ? entityList->size()
-                                   : _instanceIndexToMaterialMappingGPUBuffer->count * TlasAllocationMultiplier;
+       auto newInstanceSize = (_instanceIndexToMaterialMappingGPUBuffer->count == 0)
+                                    ? entityList->size()
+                                    : _instanceIndexToMaterialMappingGPUBuffer->count * TlasAllocationMultiplier;
 
         constexpr auto transformOffset                    = 12; // 3x4
         UINT           instanceTransformSizeInBytes       = newInstanceSize * transformOffset;
@@ -660,9 +666,9 @@ void ResourceManager::_updateResourceMappingBuffers()
         _prevInstanceTransforms.resize(instanceTransformSizeInBytes);
 
         allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(UINT) * newInstanceSize,
+                                sizeof(UINT) * newInstanceSize,
                              &_instanceIndexToMaterialMappingUpload[_instanceMappingIndex],
-                             L"instanceIndexToMaterial");
+                                L"instanceIndexToMaterial");
 
         _instanceIndexToMaterialMappingGPUBuffer->resource =
             _instanceIndexToMaterialMappingUpload[_instanceMappingIndex];
@@ -671,9 +677,9 @@ void ResourceManager::_updateResourceMappingBuffers()
         createBufferSRV(_instanceIndexToMaterialMappingGPUBuffer, newInstanceSize, 0, DXGI_FORMAT_R32_UINT);
 
         allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(UINT) * newInstanceSize,
+                                sizeof(UINT) * newInstanceSize,
                              &_instanceIndexToAttributeMappingUpload[_instanceMappingIndex],
-                             L"instanceIndexToAttribute");
+                                L"instanceIndexToAttribute");
 
         _instanceIndexToAttributeMappingGPUBuffer->resource =
             _instanceIndexToAttributeMappingUpload[_instanceMappingIndex];
@@ -682,11 +688,12 @@ void ResourceManager::_updateResourceMappingBuffers()
         createBufferSRV(_instanceIndexToAttributeMappingGPUBuffer, newInstanceSize, 0, DXGI_FORMAT_R32_UINT);
 
         allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(UniformMaterial) * newInstanceSize,
+                                sizeof(UniformMaterial) * newInstanceSize,
                              &_instanceUniformMaterialMappingUpload[_instanceMappingIndex],
-                             L"uniformMaterials");
+                                L"uniformMaterials");
 
-        _instanceUniformMaterialMappingGPUBuffer->resource = _instanceUniformMaterialMappingUpload[_instanceMappingIndex];
+        _instanceUniformMaterialMappingGPUBuffer->resource =
+            _instanceUniformMaterialMappingUpload[_instanceMappingIndex];
         _instanceUniformMaterialMappingGPUBuffer->count = newInstanceSize;
 
         createBufferSRV(_instanceUniformMaterialMappingGPUBuffer, newInstanceSize, sizeof(UniformMaterial), DXGI_FORMAT_UNKNOWN);
@@ -701,14 +708,24 @@ void ResourceManager::_updateResourceMappingBuffers()
 
         createBufferSRV(_instanceNormalMatrixTransformsGPUBuffer, 9 * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
 
-        allocateUploadBuffer(
-            DXLayer::instance()->getDevice().Get(), nullptr, sizeof(float) * 16 * newInstanceSize,
-            &_instanceModelMatrixTransformsUpload[_instanceMappingIndex], L"instanceModelMatrix");
+        for (int i = 0; i < CMD_LIST_NUM; i++)
+        {
+            allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
+                                 sizeof(float) * 16 * newInstanceSize,
+                                 &_instanceModelMatrixTransformsUpload[i],
+                                 L"instanceModelMatrix");
+        }
 
-        _instanceModelMatrixTransformsGPUBuffer->resource =
-            _instanceModelMatrixTransformsUpload[_instanceMappingIndex];
+        auto gpuBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(float) * 16 * newInstanceSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+        CD3DX12_HEAP_PROPERTIES defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+
+        DXLayer::instance()->getDevice()->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                            &gpuBufferDesc, D3D12_RESOURCE_STATE_COPY_DEST,
+                                            nullptr, IID_PPV_ARGS(&_instanceModelMatrixTransformsGPU));
+
+        _instanceModelMatrixTransformsGPUBuffer->resource = _instanceModelMatrixTransformsGPU;
         _instanceModelMatrixTransformsGPUBuffer->count = newInstanceSize;
-
+            
         createBufferSRV(_instanceModelMatrixTransformsGPUBuffer, 16 * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
     }
 }
