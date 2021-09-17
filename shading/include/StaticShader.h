@@ -33,5 +33,6 @@ class StaticShader : public ShaderBase
     StaticShader(std::string shaderName);
     virtual ~StaticShader();
     virtual void runShader(Entity* entity);
+    void         runShader(std::vector<Entity*> entities);
     void         startEntity();
 };

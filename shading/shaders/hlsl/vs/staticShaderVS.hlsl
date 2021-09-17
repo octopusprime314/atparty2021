@@ -32,12 +32,13 @@ cbuffer globalData : register(b1)
 
 void main(    uint   id          : SV_VERTEXID,
           out float4 outPosition : SV_POSITION,
+              uint    instanceID : SV_InstanceID,
           out float3 outNormal   : NORMALOUT,
           out float2 outUV       : UVOUT,
           out float4 outPrevPos  : PREVPOSOUT,
           out float4 outCurrPos  : CURRPOSOUT)
 {
-    int modelMatrixOffset = instanceBufferIndex * 16;
+    int modelMatrixOffset = (instanceBufferIndex + instanceID) * 16;
 
     float4x4 model  = {float4(instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset)],
                               instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 4)],
@@ -56,7 +57,7 @@ void main(    uint   id          : SV_VERTEXID,
                               instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 11)],
                               instanceModelMatrixTransforms[NonUniformResourceIndex(modelMatrixOffset + 15)])};
 
-    int offset = instanceBufferIndex * 9;
+    int offset = (instanceBufferIndex + instanceID) * 9;
 
     float3x3 normalMatrix = {
         float3(instanceNormalMatrixTransforms[NonUniformResourceIndex(offset)],
@@ -69,7 +70,7 @@ void main(    uint   id          : SV_VERTEXID,
                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 5)],
                instanceNormalMatrixTransforms[NonUniformResourceIndex(offset + 8)])};
 
-    int attributeIndex = instanceIndexToAttributesMapping[instanceBufferIndex];
+    int attributeIndex = instanceIndexToAttributesMapping[(instanceBufferIndex + instanceID)];
 
     float3 position = GetVertex(attributeIndex, id);
     float3 normal   = -GetNormal(attributeIndex, id);

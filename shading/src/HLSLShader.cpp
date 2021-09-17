@@ -993,5 +993,5 @@ void HLSLShader::dispatchAsyncCompute(int x, int y, int z)
 
 void HLSLShader::draw(int offset, int instances, int numTriangles)
 {
-    DXLayer::instance()->getCmdList()->DrawIndexedInstanced(numTriangles, 1, offset, 0, 0);
+    DXLayer::instance()->getCmdList()->DrawIndexedInstanced(numTriangles, instances, offset, 0, 0);
 }

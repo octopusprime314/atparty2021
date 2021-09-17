@@ -289,10 +289,7 @@ void EngineManager::_postDraw()
 
         _singleDrawRaster->startEntity();
 
-        for (auto entity : _scene->entityList)
-        {
-            _singleDrawRaster->runShader(entity);
-        }
+        _singleDrawRaster->runShader(_scene->entityList);
 
         HLSLShader::releaseOM(_gBuffers->getTextures());
 

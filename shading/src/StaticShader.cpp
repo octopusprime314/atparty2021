@@ -57,16 +57,66 @@ void StaticShader::startEntity()
     _shader->updateData("screenSize", screenSize, false);
     int texturesPerMaterial = Material::TexturesPerMaterial;
     _shader->updateData("texturesPerMaterial", &texturesPerMaterial, false);
+
 }
 
+void StaticShader::runShader(std::vector<Entity*> entities)
+{
+    bool sameModel = false;
+    std::string currModelName = "";
+    int         instanceCount = 0;
+    Entity*     prevEntity    = nullptr;
+
+    for (auto entity : entities)
+    {
+        
+        if (entity->getModel()->getName().compare(currModelName) == 0 || currModelName.empty())
+        {
+            sameModel = true;
+            instanceCount++;
+        }
+        else
+        {
+            sameModel = false;
+        }
+
+        if (sameModel == false)
+        {
+            int instanceBufferStartIndex = _entityDrawIndex - instanceCount;
+            _shader->updateData("instanceBufferIndex", &instanceBufferStartIndex, false);
+
+            // Special vao call that factors in frustum culling for the scene
+            std::vector<VAO*>* vao = prevEntity->getFrustumVAO();
+            for (auto vaoInstance : *vao)
+            {
+                _shader->bindAttributes(vaoInstance, false);
+
+                auto indexAndVertexBufferStrides = vaoInstance->getVertexAndIndexBufferStrides();
+                unsigned int strideLocation      = 0;
+
+                for (auto indexAndVertexBufferStride : indexAndVertexBufferStrides)
+                {
+                    _shader->draw(strideLocation, instanceCount, indexAndVertexBufferStride.second);
+
+                    strideLocation += indexAndVertexBufferStride.second;
+                }
+
+                _shader->unbindAttributes();
+            }
+
+            instanceCount = 1;
+        }
+
+        prevEntity = entity;
+        currModelName = entity->getModel()->getName();
+
+        _entityDrawIndex++;
+    }
+}
 
 void StaticShader::runShader(Entity* entity)
 {
-    // LOAD IN SHADER
-    _shader->bind();
-
     _shader->updateData("instanceBufferIndex", &_entityDrawIndex, false);
-    //_shader->updateData("modelMatrix", entity->getWorldSpaceTransform().getFlatBuffer(), false);
 
     // Special vao call that factors in frustum culling for the scene
     std::vector<VAO*>* vao = entity->getFrustumVAO();
