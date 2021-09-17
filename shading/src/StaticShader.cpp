@@ -66,6 +66,7 @@ void StaticShader::runShader(std::vector<Entity*> entities)
     std::string currModelName = "";
     int         instanceCount = 0;
     Entity*     prevEntity    = nullptr;
+    int         numEntities   = entities.size();
 
     for (auto entity : entities)
     {
@@ -105,6 +106,32 @@ void StaticShader::runShader(std::vector<Entity*> entities)
             }
 
             instanceCount = 1;
+        }
+
+        // Draw the last entity here
+        if(entity == entities[numEntities - 1])
+        {
+            int instanceBufferStartIndex = (_entityDrawIndex + 1) - instanceCount;
+            _shader->updateData("instanceBufferIndex", &instanceBufferStartIndex, false);
+
+            // Special vao call that factors in frustum culling for the scene
+            std::vector<VAO*>* vao = entity->getFrustumVAO();
+            for (auto vaoInstance : *vao)
+            {
+                _shader->bindAttributes(vaoInstance, false);
+
+                auto indexAndVertexBufferStrides = vaoInstance->getVertexAndIndexBufferStrides();
+                unsigned int strideLocation      = 0;
+
+                for (auto indexAndVertexBufferStride : indexAndVertexBufferStrides)
+                {
+                    _shader->draw(strideLocation, instanceCount, indexAndVertexBufferStride.second);
+
+                    strideLocation += indexAndVertexBufferStride.second;
+                }
+
+                _shader->unbindAttributes();
+            }
         }
 
         prevEntity = entity;
