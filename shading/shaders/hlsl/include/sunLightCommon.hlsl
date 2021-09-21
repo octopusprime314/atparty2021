@@ -18,7 +18,8 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     float3 lightDirection = normalize(hitPosition - sunLightPosition.xyz);
     float3 halfVector     = normalize(eyeVector + lightDirection);
     float  distance       = length(hitPosition - sunLightPosition.xyz);
-    float3 radiance       = sunLightColor.xyz * (100 / 8.0);
+    float3 radiance       = sunLightColor.xyz;
+
     // Treat the sun as an infinite power light source so no need to apply attenuation
     // float  attenuation    = 1.0f / (distance * distance);
     // float3 lightIntensity = float3(23.47f, 21.31f, 20.79f) * 500000000.0f;

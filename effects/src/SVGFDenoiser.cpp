@@ -44,7 +44,7 @@ SVGFDenoiser::SVGFDenoiser()
 
     _motionVectorsUVCoords =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
-                          IOEventDistributor::screenPixelHeight, TextureFormat::R16G16_FLOAT, "motionVector");
+                          IOEventDistributor::screenPixelHeight, TextureFormat::R16G16B16A16_FLOAT, "motionVector");
 
     _colorHistoryBuffer =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
@@ -131,7 +131,7 @@ void SVGFDenoiser::_updateKeyboard(int key, int x, int y)
 }
 
 void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistributor,
-                                        RenderTexture*        positionSRV)
+                                        RenderTexture*        currPositionSRV)
 {
     ResourceManager* resourceManager = EngineManager::getResourceManager();
 
@@ -143,8 +143,6 @@ void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistribut
         _motionVectorsUVCoords->getUAVGPUHandle(), _motionVectorsUVCoords->getUAVCPUHandle(),
         _motionVectorsUVCoords->getResource()->getResource().Get(), clearValues, 0, nullptr);
 
-    return;
-
     // Motion Vectors
     cmdList->BeginEvent(0, L"Motion Vectors", sizeof(L"Motion Vectors"));
 
@@ -152,7 +150,7 @@ void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistribut
 
     shader->bind();
     // SRVs
-    shader->updateData("positionSRV",      0, positionSRV,               true, false);
+    shader->updateData("currPositionSRV", 0, currPositionSRV, true, false);
 
     // UAVs
     shader->updateData("motionVectorsUAV", 0, _motionVectorsUVCoords, true, true);

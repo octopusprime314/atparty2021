@@ -59,6 +59,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     _positionPrimaryRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
                           IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_FLOAT, "_positionPrimaryRays");
+
     _occlusionRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
                           IOEventDistributor::screenPixelHeight, TextureFormat::R16G16_FLOAT, "_occlusionRays");
@@ -378,7 +379,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     EngineManager::instance()->processLights(lights, viewEventDistributor, pointLightList, RandomInsertAndRemoveEntities);
 
     // Process directional light
-    Vector4 sunLightColor  = Vector4(1.0, 0.85, 0.4);
+    Vector4 sunLightColor  = Vector4(1.0, 0.85, 0.4) * 10.0f;
     float   sunLightRange  = 100000.0;
     Vector4 sunLightPos    = Vector4(50000.0, 50000.0, 50000.0);
     //Vector4 sunLightPos    = Vector4(30.1, 14.9, 46.1)* 1000;
@@ -409,7 +410,8 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     {
         auto motionVectors = _svgfDenoiser->getMotionVectors();
 
-        _svgfDenoiser->computeMotionVectors(viewEventDistributor, _positionPrimaryRays);
+        _svgfDenoiser->computeMotionVectors(viewEventDistributor,
+                                            _positionPrimaryRays);
 
         D3D12_RESOURCE_BARRIER barrierDesc[1];
         ZeroMemory(&barrierDesc, sizeof(barrierDesc));
@@ -744,7 +746,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
             // nri::Format::UNKNOWN}
 
             // IN_MV
-            {&entryDescs[3], nri::Format::RG16_SFLOAT},
+            {&entryDescs[3], nri::Format::RGBA16_SFLOAT},
 
             // IN_NORMAL_ROUGHNESS
             {&entryDescs[2], nri::Format::RGBA8_UNORM},
@@ -883,26 +885,26 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     // LEFT CORNER OF THE SCREEN...LOOKS LIKE DOWNSAMPLING OR SOME PASS
     // OF THE BLOOM SHADERS ARE BEING WRITTEN TO THE FINAL COMPOSITION???
 
-    //ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-    //barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    //barrierDesc[0].Transition.pResource =
-    //    bloom->getTexture()->getResource()->getResource().Get();
-    //barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    //barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-    //barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    //cmdList->ResourceBarrier(1, barrierDesc);
+    ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+    barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrierDesc[0].Transition.pResource =
+        bloom->getTexture()->getResource()->getResource().Get();
+    barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    cmdList->ResourceBarrier(1, barrierDesc);
 
-    //// Adds bloom data back into the composite render target
-    //add->compute(bloom->getTexture(), _compositor);
+    // Adds bloom data back into the composite render target
+    add->compute(bloom->getTexture(), _compositor);
 
-    //ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-    //barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    //barrierDesc[0].Transition.pResource =
-    //    bloom->getTexture()->getResource()->getResource().Get();
-    //barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    //barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    //barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    //cmdList->ResourceBarrier(1, barrierDesc);
+    ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+    barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrierDesc[0].Transition.pResource =
+        bloom->getTexture()->getResource()->getResource().Get();
+    barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    cmdList->ResourceBarrier(1, barrierDesc);
 
     add->uavBarrier();
 

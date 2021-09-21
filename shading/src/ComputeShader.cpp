@@ -14,20 +14,9 @@ ComputeShader::~ComputeShader() {}
 void ComputeShader::runShader(Texture* writeTexture, Texture* readTexture, TextureFormat format)
 {
     _shader->bind();
-    ImageData imageInfo = {};
-    // Bind read textures
-    imageInfo.readOnly = true;
-    if (format == TextureFormat::RGBA_UNSIGNED_BYTE || format == TextureFormat::RGBA_FLOAT)
-    {
-        imageInfo.format = 0;
-    }
-    else if (format == TextureFormat::R_FLOAT || format == TextureFormat::R_UNSIGNED_BYTE)
-    {
-        imageInfo.format = 1;
-    }
-    _shader->updateData("readTexture", _shader->_resourceIndexes["readTexture"], readTexture, true);
-    imageInfo.readOnly = false;
-    _shader->updateData("writeTexture", _shader->_resourceIndexes["writeTexture"], writeTexture, true);
+   
+    _shader->updateData("readTexture", _shader->_resourceIndexes["readTexture"], readTexture, true, false);
+    _shader->updateData("writeTexture", _shader->_resourceIndexes["writeTexture"], writeTexture, true, true);
 
     Vector4 threadGroupSize =_shader->getThreadGroupSize();
 

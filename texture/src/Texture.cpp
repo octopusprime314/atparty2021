@@ -30,7 +30,7 @@ void Texture::bindToDXShader(ComPtr<ID3D12GraphicsCommandList4>& cmdList, UINT t
                              bool isUAV)
 {
 
-    if (_srvDescriptorHeap != nullptr && _samplerDescriptorHeap != nullptr)
+    if (_srvDescriptorHeap != nullptr && _samplerDescriptorHeap != nullptr && !isUAV)
     {
 
         ID3D12DescriptorHeap* descriptorHeaps[] = {_srvDescriptorHeap.Get(),

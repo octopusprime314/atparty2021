@@ -1,10 +1,9 @@
 #include "../include/structs.hlsl"
 
-Texture2D                  positionSRV    : register(t0, space0);
-//Texture2D                normalSRV      : register(t1, space0);
+Texture2D                  currPositionSRV    : register(t0, space0);
 //StructuredBuffer<Vertex> vertexBuffer[] : register(t1, space1);
 
-RWTexture2D<float2> motionVectorsUAV : register(u0);
+RWTexture2D<float4> motionVectorsUAV : register(u0);
 //RWTexture2D<float4> prevPosUAV       : register(u1);
 //RWTexture2D<float4> currPosUAV       : register(u2);
 
@@ -105,7 +104,7 @@ float2 CalculateMotionVector(in float3 hitPosition, out float depth, in uint2 th
     float3 prevHitViewPosition = hitPosition + prevFrameCameraPosition.xyz;
     float3 prevCameraDirection = GenerateForwardCameraRayDirection(mul(inverseView, inverseProj));
     //depth                      = dot(prevHitViewPosition, prevCameraDirection);
-    depth = length(positionSRV[threadId].xyz + prevFrameCameraPosition.xyz);
+    depth = length(currPositionSRV[threadId].xyz + prevFrameCameraPosition.xyz);
 
     // Calculate screen space position of the hit in the previous frame.
     float4 prevClipSpacePosition = mul(float4(hitPosition, 1.0), prevFrameViewProj);
@@ -152,13 +151,13 @@ float3 GetWorldHitPositionInPreviousFrame(in float3 hitObjectPosition, in uint i
 
 void main(int3 threadId : SV_DispatchThreadID)
 {
-    if (positionSRV[threadId.xy].w == -1.0)
+    if (currPositionSRV[threadId.xy].w == -1.0)
     {
         return;
     }
     // Calculates motion vectors for non animated vertices aka doesn't support updateable/refit bvh
-    uint   instanceIndex     = (uint)positionSRV[threadId.xy].w;
-    float3 hitObjectPosition = mul(float4(positionSRV[threadId.xy].xyz, 1.0),
+    uint   instanceIndex     = (uint)currPositionSRV[threadId.xy].w;
+    float3 hitObjectPosition = mul(float4(currPositionSRV[threadId.xy].xyz, 1.0),
                                    instanceWorldToObjectSpaceMatrixTransforms[instanceIndex]);
 
     float3 prevVirtualHitPosition = GetWorldHitPositionInPreviousFrame(hitObjectPosition, instanceIndex);
@@ -166,8 +165,8 @@ void main(int3 threadId : SV_DispatchThreadID)
     float  depth;
     float2 motionVector = CalculateMotionVector(prevVirtualHitPosition, depth, threadId.xy);
 
-    motionVectorsUAV[threadId.xy] = float2(motionVector.xy);
-    //motionVectorsUAV[threadId.xy] = float4(motionVector.xy, depth, length(motionVector.xy));
+    //motionVectorsUAV[threadId.xy] = float2(motionVector.xy);
+    motionVectorsUAV[threadId.xy].xyz = float3(currPositionSRV[threadId.xy].xyz - prevVirtualHitPosition.xyz);
 
     // Get reprojected normal.
     //float3x3 prevInstanceNormalTransform = prevInstanceNormalMatrixTransforms[instanceIndex];
