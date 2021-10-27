@@ -57,7 +57,7 @@ struct Payload
 
 #define MAX_LIGHTS 1024
 #define MAX_RAY_LENGTH 100000.0
-#define MIN_RAY_LENGTH 0.1
+#define MIN_RAY_LENGTH 0.0
 #define RECURSION_LIMIT 31
 
 #define WATER_IOR   1.3

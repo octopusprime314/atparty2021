@@ -3,10 +3,18 @@
 #include "NRD.hlsl"
 
 float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float roughness,
-                       float metallic, int2 threadId)
+                       float metallic, int2 threadId,
+                       inout float3 diffuseRadiance,
+                       inout float3 specularRadiance,
+                       out   float3 lightRadiance,
+                       bool recordOcclusion = false)
 {
     float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
+    //hitPosition           = mul(inverseView, float4(hitPosition, 1.0)).xyz;
     float3 eyeVector      = normalize(hitPosition - cameraPosition);
+
+    //float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
+    //float3 eyeVector      = normalize(hitPosition - cameraPosition);
 
     float3 F0 = float3(0.04f, 0.04f, 0.04f);
     F0        = lerp(F0, albedo, metallic);
@@ -31,11 +39,13 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     // the cave for pbr testing
     float lightRange = sunLightRange;
 
+    bool occluded = false;
+
     // Main occlusion test passes so assume completely in shadow
     float occlusion = 0.0;
 
-    if (distance < lightRange)
-    {
+    //if (distance < lightRange)
+    //{
         // Occlusion shadow ray from the hit position to the target light
         RayDesc ray;
 
@@ -59,7 +69,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
 
         float3 sunLightPos  = sunLightPosition.xyz/* + randomOffset*/;
 
-        ray.Origin                 = hitPosition;
+        ray.Origin                 = hitPosition + ((-normal) * 0.001);
         float3 penumbraLightVector = normalize(sunLightPos - ray.Origin);
         penumbraLightVector        = penumbraLightVector + GetRandomRayDirection(threadId, penumbraLightVector, screenSize, 0) * 0.005;
         ray.Direction              = penumbraLightVector;
@@ -78,22 +88,19 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
 
         rayQuery.Proceed();
 
-
-        if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+        if (recordOcclusion)
         {
-            // Main occlusion test passes so assume completely in shadow
-            occlusion                   = 0.7;
-            occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, rayQuery.CommittedRayT(), 0.00465133600);
+            if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+            {
+                // Main occlusion test passes so assume completely in shadow
+                occlusion                   = 0.7;
+                occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, rayQuery.CommittedRayT(), 0.00465133600);
+            }
+            else
+            {
+                occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, NRD_FP16_MAX, 0.00465133600);
+            }
         }
-        else
-        {
-            occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, NRD_FP16_MAX, 0.00465133600);
-        }
-        //// W component = 1.0 indicates front face so we need to negate the surface normal
-        //if (positionSRV[threadId].w == 0.0)
-        //{
-        //    normal = -normal;
-        //}
 
         // Cook-Torrance BRDF for specular lighting calculations
         float  NDF = DistributionGGX(normal, halfVector, roughness);
@@ -113,83 +120,62 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
         float3 specular    = numerator / max(denominator, 0.001f);
         float3 diffuse     = kD * albedo / PI;
 
-        float NdotL = max(dot(normal, lightDirection), 0.0f);
+        if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+        {
+            occluded = true;
+            /*float3 prevPosition = hitPosition;
 
-        // 1) Add the diffuse and specular light components and multiply them by the overall incident ray's light energy (radiance)
-        // and then also multiply by the alignment of the surface normal with the incoming light ray's direction and shadowed intensity.
-        // 2) NdotL basically says that more aligned the normal and light direction is, the more the light
-        // will be scattered within the surface (diffuse lighting) rather than get reflected (specular)
-        // which will get color from the diffuse surface the reflected light hits after the bounce.
-        Lo += (diffuse + specular) * radiance * NdotL * (min(1.0, occlusionHistoryUAV[threadId.xy].x + 0.3));
-    }
+            RayTraversalData rayData;
+            rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
+            rayData.closestRayT       = rayQuery.CommittedRayT();
+            rayData.worldRayDirection = rayQuery.WorldRayDirection();
+            rayData.geometryIndex     = rayQuery.CommittedGeometryIndex();
+            rayData.primitiveIndex    = rayQuery.CommittedPrimitiveIndex();
+            rayData.instanceIndex     = rayQuery.CommittedInstanceIndex();
+            rayData.barycentrics      = rayQuery.CommittedTriangleBarycentrics();
+            rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
+            rayData.uvIsValid         = false;
 
+            float transmittance = 0.0;
+            ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, normal, hitPosition,
+                                  transmittance);*/
 
+            lightRadiance = float3(0.0, 0.0, 0.0);
 
+            diffuseRadiance = diffuse/* * radiance*/; // float3(0.0, 0.0, 0.0);
 
-    //// Random ambient occlusion shadow ray from the hit position
-    //RayDesc ray;
+            specularRadiance = specular /** radiance*/ /** occlusionHistoryUAV[threadId.xy].x*/;
 
-    //float aoHemisphereRadius = 100.0f;
-    //ray.TMax      = aoHemisphereRadius;
-    //ray.Origin    = hitPosition;
-    //ray.Direction = GetRandomRayDirection(threadId, -normal.xyz, (uint2)screenSize, 0);
-    //ray.TMin      = MIN_RAY_LENGTH;
+        }
+        else
+        {
+            occluded    = false;
+            float NdotL = max(dot(normal, lightDirection), 0.0f);
 
-    //// Cull non opaque here occludes the light sources holders from casting shadows
-    //RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |
-    //         RAY_FLAG_FORCE_OPAQUE> rayQuery;
+            // 1) Add the diffuse and specular light components and multiply them by the overall incident ray's light energy (radiance)
+            // and then also multiply by the alignment of the surface normal with the incoming light ray's direction and shadowed intensity.
+            // 2) NdotL basically says that more aligned the normal and light direction is, the more the light
+            // will be scattered within the surface (diffuse lighting) rather than get reflected (specular)
+            // which will get color from the diffuse surface the reflected light hits after the bounce.
+            Lo = (diffuse + specular) * radiance * NdotL * (min(1.0, occlusionHistoryUAV[threadId.xy].x + 0.3));
 
-    //rayQuery.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, ray);
+            lightRadiance = radiance * NdotL;
 
-    //rayQuery.Proceed();
+            diffuseRadiance = diffuse;
 
-    //if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
-    //{
-    //    float t = rayQuery.CommittedRayT() / aoHemisphereRadius;
-    //    if (t >= 1.0)
-    //    {
-    //        occlusionUAV[threadId.xy].x = 1.0;
-    //    }
-    //    else
-    //    {
-    //        float lambda                = 10.0f;
-    //        float occlusionCoef         = exp(-lambda * t * t);
-    //        occlusionUAV[threadId.xy].x = 1.0 - occlusionCoef;
-    //        occlusionUAV[threadId.xy].y = rayQuery.CommittedRayT();
-    //    }
-    //}
-    //else
-    //{
-    //    occlusionUAV[threadId.xy].x = 1.0;
-    //    occlusionUAV[threadId.xy].y = aoHemisphereRadius;
+            specularRadiance = specular;
+        }
     //}
 
-    //debug0UAV[threadId.xy] = float4(ray.Direction, 0.0);
-    //debug1UAV[threadId.xy] = float4(occlusionUAV[threadId.xy].x, 0.0, 0.0, 0.0);
+    //float3 ambient = (float3(0.03f, 0.03f, 0.03f) * albedo);
+    //                 
+    //float3 color   = /*ambient + */Lo;
+    //
+    //// Gamma correction
+    //float colorScale = 1.0f / 2.2f;
+    //color            = color / (color + float3(1.0f, 1.0f, 1.0f));
+    //color            = pow(color, colorScale);
 
-    //const float temporalFade = 0.01666666666;
-    //const float temporalFade = 0.2;
-    //occlusionHistoryUAV[threadId.xy].x = (temporalFade * occlusionUAV[threadId.xy].x) +
-    //                                    ((1.0 - temporalFade) * occlusionHistoryUAV[threadId.xy].x);
-
-    //occlusionHistoryUAV[threadId.xy].y = (temporalFade * occlusionUAV[threadId.xy].y) +
-    //                                    ((1.0 - temporalFade) * occlusionHistoryUAV[threadId.xy].y);
-
-    float3 ambient = (float3(0.03f, 0.03f, 0.03f) * albedo);
-
-    /*if (occlusion != 0.0)
-    {
-        ambient *= (float3(137.0 / 256.0, 207.0 / 256.0, 240.0 / 256.0));
-
-        ambient *= 10.0;
-    }*/
-                     
-    float3 color   = ambient + Lo;
-
-    // Gamma correction
-    float colorScale = 1.0f / 2.2f;
-    color            = color / (color + float3(1.0f, 1.0f, 1.0f));
-    color            = pow(color, colorScale);
-
-    return color;
+    return Lo;
+    //return occluded;
 }

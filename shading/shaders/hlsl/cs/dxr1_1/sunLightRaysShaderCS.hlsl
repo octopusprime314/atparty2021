@@ -55,7 +55,7 @@ cbuffer globalData : register(b0)
     uint   texturesPerMaterial;
 }
 
-#include "../../include/sunLightCommon.hlsl"
+//#include "../../include/sunLightCommon.hlsl"
 //#include "../../include/pointLightCommon.hlsl"
 //#include "../../include/utils.hlsl"
 
@@ -77,14 +77,15 @@ void main(int3 threadId : SV_DispatchThreadID,
     if (normal.x == 0.0 && normal.y == 0.0 && normal.z == 0.0)
     {
         sunLightUAV[threadId.xy] = float4(albedo.xyz, 1.0);
-        occlusionUAV[threadId.xy] = SIGMA_INF_SHADOW;
+        //occlusionUAV[threadId.xy] = SIGMA_INF_SHADOW;
     }
     else
     {
-        float3 sunLighting =
-            GetBRDFSunLight(albedo, normal, position, roughness, metallic, threadId.xy);
+        float3 diffuseRadiance = float3(0.0, 0.0, 0.0);
+        //float3 sunLighting =
+        //    GetBRDFSunLight(albedo, normal, position, roughness, metallic, threadId.xy, diffuseRadiance);
 
-        sunLightUAV[threadId.xy] = float4(sunLighting.xyz, 1.0);
+        sunLightUAV[threadId.xy] = float4(diffuseRadiance.xyz, 1.0);
     }
 
 
@@ -92,7 +93,7 @@ void main(int3 threadId : SV_DispatchThreadID,
 
     //RayDesc ray;
     //ray.TMax      = MAX_RAY_LENGTH;
-    //ray.Origin    = position;
+    //ray.Origin    = position + ((-normal) * 0.001);
     //ray.Direction = GetRandomRayDirection(threadId.xy, -normal.xyz, (uint2)screenSize, 0);
     //ray.TMin      = MIN_RAY_LENGTH;
 

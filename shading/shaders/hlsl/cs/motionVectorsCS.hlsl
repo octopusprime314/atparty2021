@@ -1,6 +1,8 @@
 #include "../include/structs.hlsl"
 
-Texture2D                  currPositionSRV    : register(t0, space0);
+Texture2D     currPositionSRV    : register(t0, space0);
+Buffer<float> prevInstanceWorldMatrixTransforms : register(t1, space0);
+Buffer<float> instanceWorldToObjectSpaceMatrixTransforms : register(t2, space0);
 //StructuredBuffer<Vertex> vertexBuffer[] : register(t1, space1);
 
 RWTexture2D<float4> motionVectorsUAV : register(u0);
@@ -14,14 +16,37 @@ cbuffer globalData : register(b0)
     float4x4 inverseProj;
     float4x4 prevFrameViewProj;
 
-    float4x3 prevInstanceWorldMatrixTransforms[256];
-    float4x3 instanceWorldToObjectSpaceMatrixTransforms[256];
+    float4x4 prevFrameView;
+    float4x4 currFrameView;
+
     //float3x3 prevInstanceNormalMatrixTransforms[256];
     float4   prevFrameCameraPosition;
     float2   screenSize;
 }
 
 #define FLT_MAX asfloat(0x7F7FFFFF)
+
+
+float4x3 get4x3Matrix(Buffer<float> buffer, int instanceBufferIndex)
+{
+
+    int matrixOffset = instanceBufferIndex * 12;
+
+    float4x3 model = {float3(buffer[NonUniformResourceIndex(matrixOffset)],
+                             buffer[NonUniformResourceIndex(matrixOffset + 4)],
+                             buffer[NonUniformResourceIndex(matrixOffset + 8)]),
+                      float3(buffer[NonUniformResourceIndex(matrixOffset + 1)],
+                             buffer[NonUniformResourceIndex(matrixOffset + 5)],
+                             buffer[NonUniformResourceIndex(matrixOffset + 9)]),
+                      float3(buffer[NonUniformResourceIndex(matrixOffset + 2)],
+                             buffer[NonUniformResourceIndex(matrixOffset + 6)],
+                             buffer[NonUniformResourceIndex(matrixOffset + 10)]),
+                      float3(buffer[NonUniformResourceIndex(matrixOffset + 3)],
+                             buffer[NonUniformResourceIndex(matrixOffset + 7)],
+                             buffer[NonUniformResourceIndex(matrixOffset + 11)])};
+
+    return model;
+}
 
 // Generate camera's forward direction ray
 inline float3 GenerateForwardCameraRayDirection(in float4x4 projectionToWorldWithCameraAtOrigin)
@@ -141,7 +166,7 @@ float3 GetWorldHitPositionInPreviousFrame(in float3 hitObjectPosition, in uint i
     }
 
     // Transform the hit object position to world space.
-    float4x3 prevInstanceTransform = prevInstanceWorldMatrixTransforms[instanceIndex];
+    float4x3 prevInstanceTransform = get4x3Matrix(prevInstanceWorldMatrixTransforms, instanceIndex);
     float3   prevPosition = mul(float4(prevHitObjectPosition, 1.0), prevInstanceTransform).xyz;
 
     return prevPosition;
@@ -153,23 +178,31 @@ void main(int3 threadId : SV_DispatchThreadID)
 {
     if (currPositionSRV[threadId.xy].w == -1.0)
     {
+        motionVectorsUAV[threadId.xy].xyz = float3(0.0, 0.0, 0.0);
         return;
     }
     // Calculates motion vectors for non animated vertices aka doesn't support updateable/refit bvh
     uint   instanceIndex     = (uint)currPositionSRV[threadId.xy].w;
     float3 hitObjectPosition = mul(float4(currPositionSRV[threadId.xy].xyz, 1.0),
-                                   instanceWorldToObjectSpaceMatrixTransforms[instanceIndex]);
+            get4x3Matrix(instanceWorldToObjectSpaceMatrixTransforms, instanceIndex));
 
     float3 prevVirtualHitPosition = GetWorldHitPositionInPreviousFrame(hitObjectPosition, instanceIndex);
 
     float  depth;
-    float2 motionVector = CalculateMotionVector(prevVirtualHitPosition, depth, threadId.xy);
+    float2 motionVector = -CalculateMotionVector(prevVirtualHitPosition, depth, threadId.xy);
 
-    //motionVectorsUAV[threadId.xy] = float2(motionVector.xy);
-    motionVectorsUAV[threadId.xy].xyz = float3(currPositionSRV[threadId.xy].xyz - prevVirtualHitPosition.xyz);
+    //motionVectorsUAV[threadId.xy].xy = float2(motionVector.xy);
 
-    // Get reprojected normal.
-    //float3x3 prevInstanceNormalTransform = prevInstanceNormalMatrixTransforms[instanceIndex];
-    //float3   prevNormal                  = mul(float3(normalSRV[threadId.xy]), prevInstanceNormalTransform);
-    //prevNormalsUAV[threadId.xy] = float4(prevNormal, 1.0);
+    float4 prevFramePos = mul(float4(prevVirtualHitPosition, 1.0), prevFrameView);
+    float4 currFramePos = mul(float4(currPositionSRV[threadId.xy].xyz, 1.0), currFrameView);
+    float3 delta        = currFramePos.xyz - prevFramePos.xyz;
+
+    if (length(motionVector) > 0.00001)
+    {
+        motionVectorsUAV[threadId.xy].xy = motionVector;
+    }
+    else
+    {
+        motionVectorsUAV[threadId.xy].xy = float2(0.0, 0.0);
+    }
 }

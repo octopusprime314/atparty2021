@@ -43,6 +43,7 @@ class PathTracerShader : public ShaderBase
     RenderTexture*               _albedoPrimaryRays;
     RenderTexture*               _normalPrimaryRays;
     RenderTexture*               _positionPrimaryRays;
+    RenderTexture*               _viewZPrimaryRays;
     RenderTexture*               _reflectionRays;
     RenderTexture*               _occlusionRays;
     RenderTexture*               _denoisedOcclusionRays;
@@ -51,6 +52,8 @@ class PathTracerShader : public ShaderBase
     RenderTexture*               _sunLightRays;
     RenderTexture*               _indirectLightRays;
     RenderTexture*               _indirectLightRaysHistoryBuffer;
+    RenderTexture*               _indirectSpecularLightRays;
+    RenderTexture*               _indirectSpecularLightRaysHistoryBuffer;
     RenderTexture*               _compositor;
     ComPtr<ID3D12Resource>       _hemisphereSamplesUpload;
     D3DBuffer*                   _hemisphereSamplesGPUBuffer;

@@ -15,10 +15,8 @@ TextureCube                           skyboxTexture                    : registe
 RWTexture2D<float4> albedoUAV   : register(u0);
 RWTexture2D<float4> positionUAV : register(u1);
 RWTexture2D<float4> normalUAV   : register(u2);
+RWTexture2D<float4> viewZUAV    : register(u3);
 
-RWTexture2D<float4> debug0UAV : register(u3);
-RWTexture2D<float4> debug1UAV : register(u4);
-RWTexture2D<float4> debug2UAV : register(u5);
 
 SamplerState bilinearWrap : register(s0);
 
@@ -28,6 +26,7 @@ cbuffer globalData : register(b0)
     float4x4 inverseView;
     float2   screenSize;
     uint     texturesPerMaterial;
+    float3   cameraPos;
 }
 
 #include "../../include/utils.hlsl"
@@ -107,8 +106,10 @@ static float refractionIndex = 1.0 - reflectionIndex;
             albedoUAV[threadId.xy].xyz   = albedo.xyz;
 
             normalUAV[threadId.xy].w     = roughness;
-            positionUAV[threadId.xy].w   = metallic;
+            positionUAV[threadId.xy].w   = rayData.instanceIndex;//metallic;
             albedoUAV[threadId.xy].w     = transmittance;
+
+            viewZUAV[threadId.xy].x = rayQuery.CommittedRayT();
 
         }
         else
@@ -120,5 +121,7 @@ static float refractionIndex = 1.0 - reflectionIndex;
                                        float4(0.0, 0.0, 0.44, 0.0) * (1.0 - sampleVector.y*3.0);
             normalUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 0.0);
             positionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, -1.0);
+
+            viewZUAV[threadId.xy].x = 100000.0;
         }
     }

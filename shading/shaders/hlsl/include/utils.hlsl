@@ -428,6 +428,25 @@ void LaunchReflectionRefractionRayPair(inout Payload incidentPayload,
 
 #endif
 
+float3 GetNormalFromVertices(uint instanceIndex, uint primitiveIndex)
+{
+    float3 pos[3];
+
+    uint3 index =
+        uint3(indexBuffer[NonUniformResourceIndex(instanceIndex)].Load((primitiveIndex * 3) + 0),
+              indexBuffer[NonUniformResourceIndex(instanceIndex)].Load((primitiveIndex * 3) + 1),
+              indexBuffer[NonUniformResourceIndex(instanceIndex)].Load((primitiveIndex * 3) + 2));
+
+    pos[0] = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.x).vertex;
+    pos[1] = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.y).vertex;
+    pos[2] = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(index.z).vertex;
+
+    float3 ac = pos[0] - pos[2];
+    float3 bc = pos[1] - pos[2];
+
+    return cross(ac, bc);
+}
+
 float3 GetVertex(uint instanceIndex, uint vertexId)
 {
     float3 vertex = vertexBuffer[NonUniformResourceIndex(instanceIndex)].Load(vertexId).vertex;
@@ -622,18 +641,18 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     }
 
     metallic = 0.0;
-    if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
+    /*if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
     {
         metallic = uniformMaterials[attributeIndex].metallic;
-    }
+    }*/
 
     normal = float3(0.0, 0.0, 0.0);
 
-//#ifdef RAYTRACING_ENABLED
     if (uniformMaterials[attributeIndex].validBits & NormalValidBit)
     {
 #ifdef RAYTRACING_ENABLED
-        normal = -GetNormalCoord(barycentrics, attributeIndex, primitiveIndex);
+        normal = mul(-GetNormalCoord(barycentrics, attributeIndex, primitiveIndex), instanceNormalMatrixTransform);
+        normal = normalize(normal);
 #else
         normal = rayData.normal;
 #endif
@@ -665,11 +684,6 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
             normal = -normalize(mul(normalMap, tbnMatNormalTransform));
         }
     }
-//#else
-
-    // NEED TO BE IMPLEMENTED BY FETCHING UV AND NORMALS USING INDEX BUFFER
-
-//#endif
 
     transmittance = uniformMaterials[attributeIndex].transmittance;
 }

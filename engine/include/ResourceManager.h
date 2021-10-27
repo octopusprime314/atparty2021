@@ -97,6 +97,12 @@ class ResourceManager
     ComPtr<ID3D12Resource>                                            _instanceNormalMatrixTransformsUpload[CMD_LIST_NUM];
     D3DBuffer*                                                        _instanceNormalMatrixTransformsGPUBuffer;
 
+    ComPtr<ID3D12Resource>                                            _prevInstanceTransformsUpload[CMD_LIST_NUM];
+    D3DBuffer*                                                        _prevInstanceTransformsGPUBuffer;
+
+    ComPtr<ID3D12Resource>                                            _worldToObjectInstanceTransformsUpload[CMD_LIST_NUM];
+    D3DBuffer*                                                        _worldToObjectInstanceTransformsGPUBuffer;
+
     ComPtr<ID3D12Resource>                                            _instanceModelMatrixTransformsUpload[CMD_LIST_NUM];
     ComPtr<ID3D12Resource>                                            _instanceModelMatrixTransformsGPU;
     D3DBuffer*                                                        _instanceModelMatrixTransformsGPUBuffer;
@@ -144,6 +150,8 @@ class ResourceManager
     void                                          updateAndBindUniformMaterialBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateAndBindNormalMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateAndBindModelMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
+    void                                          updateAndBindPrevInstanceMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
+    void                                          updateAndBindWorldToObjectMatrixBuffer(std::map<std::string, UINT> resourceIndexes, bool isCompute);
     void                                          updateResources();
     UINT                                          createBufferSRV(D3DBuffer* buffer, UINT numElements, UINT elementSize, DXGI_FORMAT format);
     void                                          buildGeometry(Entity* entity);

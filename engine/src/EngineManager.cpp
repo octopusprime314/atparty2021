@@ -365,9 +365,9 @@ void EngineManager::_postDraw()
     // Pass waypoint idx to the audio manager if we're using a waypoint camera
     if (_viewManager->getCameraType() == ViewEventDistributor::CameraType::WAYPOINT) {
         auto waypointCamera = _viewManager->getWaypointCamera();
-        _audioManager->update(waypointCamera->getCurrentWaypointIdx());
+        //_audioManager->update(waypointCamera->getCurrentWaypointIdx());
     }
     else {
-        _audioManager->update();
+        //_audioManager->update();
     }
 }

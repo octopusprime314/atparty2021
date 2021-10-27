@@ -83,7 +83,7 @@ void ReflectionRaygen()
         if (roughness < 0.25)
         {
             RayDesc ray;
-            ray.Origin    = hitPosition;
+            ray.Origin    = hitPosition + ((-normal)*0.001);
             ray.TMin      = MIN_RAY_LENGTH;
             ray.TMax      = MAX_RAY_LENGTH;
 
@@ -184,7 +184,7 @@ void ReflectionRaygen()
     if (roughness < 0.25 && payload.recursionCount < RECURSION_LIMIT)
     {
         RayDesc ray;
-        ray.Origin = hitPosition;
+        ray.Origin = hitPosition + ((-normal) * 0.001);
         ray.TMin   = MIN_RAY_LENGTH;
         ray.TMax   = MAX_RAY_LENGTH;
 

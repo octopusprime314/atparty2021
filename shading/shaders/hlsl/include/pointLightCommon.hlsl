@@ -60,7 +60,7 @@ float3 GetBRDFPointLight(in    float3 albedo,
 
             float3 pointLightPosition = pointLightPositions[i].xyz;
 
-            ray.Origin                 = hitPosition;
+            ray.Origin                 = hitPosition + ((-normal) * 0.001);
             float3 penumbraLightVector = normalize(pointLightPosition - ray.Origin);
             ray.Direction              = penumbraLightVector;
 

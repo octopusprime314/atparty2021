@@ -63,6 +63,55 @@ namespace RNG
     }
 }
 
+float square(float x) { return x * x; }
+
+float3 ImportanceSampleGGX_VNDF(float2 u, float roughness, float3 V, float3x3 basis)
+{
+    float alpha = square(roughness);
+
+    float3 Ve = -float3(dot(V, basis[0]), dot(V, basis[2]), dot(V, basis[1]));
+
+    float3 Vh = normalize(float3(alpha * Ve.x, alpha * Ve.y, Ve.z));
+    
+    float lensq = square(Vh.x) + square(Vh.y);
+    float3 T1 = lensq > 0.0 ? float3(-Vh.y, Vh.x, 0.0) * rsqrt(lensq) : float3(1.0, 0.0, 0.0);
+    float3 T2 = cross(Vh, T1);
+
+    float r = sqrt(u.x /** global_ubo.pt_ndf_trim*/);
+    float phi = 2.0 * PI * u.y;
+    float t1 = r * cos(phi);
+    float t2 = r * sin(phi);
+    float s = 0.5 * (1.0 + Vh.z);
+    t2 = (1.0 - s) * sqrt(1.0 - square(t1)) + s * t2;
+
+    float3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - square(t1) - square(t2))) * Vh;
+
+    // Tangent space H
+    float3 Ne = float3(alpha * Nh.x, max(0.0, Nh.z), alpha * Nh.y);
+
+    // World space H
+    return normalize(mul(Ne, basis));
+}
+
+float3x3 orthoNormalBasis(float3 normal)
+{
+    float3x3 ret;
+    ret[1] = normal;
+    if (normal.z < -0.999805696f)
+    {
+        ret[0] = float3(0.0f, -1.0f, 0.0f);
+        ret[2] = float3(-1.0f, 0.0f, 0.0f);
+    }
+    else
+    {
+        float a = 1.0f / (1.0f + normal.z);
+        float b = -normal.x * normal.y * a;
+        ret[0]          = float3(1.0f - normal.x * normal.x * a, b, -normal.x);
+        ret[2]          = float3(b, 1.0f - normal.y * normal.y * a, -normal.y);
+    }
+    return ret;
+}
+
 float DistributionGGX(float3 normal, float3 halfVector, float roughness)
 {
     float a            = roughness * roughness;
@@ -193,35 +242,36 @@ int IntersectRayTriangle(float3 rayMin, float3 rayMax, float3 point0, float3 poi
 float halfFloatToFloat(min16uint halfFloat)
 {
 
-    /// A static constant for a half float with a value of zero.
-    const min16uint ZERO = 0x0000;
+   /// A static constant for a half float with a value of zero.
+    static const min16uint ZERO = 0x0000;
 
     /// A static constant for a half float with a value of not-a-number.
-    const min16uint NOT_A_NUMBER = 0xFFFF;
+    static const min16uint NOT_A_NUMBER = 0xFFFF;
 
     /// A static constant for a half float with a value of positive infinity.
-    const min16uint POSITIVE_INFINITY = 0x7C00;
+    static const min16uint POSITIVE_INFINITY = 0x7C00;
 
     /// A static constant for a half float with a value of negative infinity.
-    const min16uint NEGATIVE_INFINITY = 0xFC00;
+    static const min16uint NEGATIVE_INFINITY = 0xFC00;
 
     /// A mask which isolates the sign of a half float number.
-    const min16uint HALF_FLOAT_SIGN_MASK = 0x8000;
+    static const min16uint HALF_FLOAT_SIGN_MASK = 0x8000;
 
     /// A mask which isolates the exponent of a half float number.
-    const min16uint HALF_FLOAT_EXPONENT_MASK = 0x7C00;
+    static const min16uint HALF_FLOAT_EXPONENT_MASK = 0x7C00;
 
     /// A mask which isolates the significand of a half float number.
-    const min16uint HALF_FLOAT_SIGNIFICAND_MASK = 0x03FF;
+    static const min16uint HALF_FLOAT_SIGNIFICAND_MASK = 0x03FF;
 
     /// A mask which isolates the sign of a single precision float number.
-    const uint32_t FLOAT_SIGN_MASK = 0x80000000;
+    static const uint32_t FLOAT_SIGN_MASK = 0x80000000;
 
     /// A mask which isolates the exponent of a single precision float number.
-    const uint32_t FLOAT_EXPONENT_MASK = 0x7F800000;
+    static const uint32_t FLOAT_EXPONENT_MASK = 0x7F800000;
 
     /// A mask which isolates the significand of a single precision float number.
-    const uint32_t FLOAT_SIGNIFICAND_MASK = 0x007FFFFF;
+    static const uint32_t FLOAT_SIGNIFICAND_MASK = 0x007FFFFF;
+
 
 
     //// Catch special case half floating point values.
@@ -251,6 +301,90 @@ float halfFloatToFloat(min16uint halfFloat)
     value |= uint32_t(halfFloat & HALF_FLOAT_SIGN_MASK) << 16;
 
     return asfloat(value);
+}
+
+/// Convert the specified single precision float number to a half precision float number.
+static min16uint floatToHalfFloat(float floatValue)
+{
+
+     /// A static constant for a half float with a value of zero.
+    const min16uint ZERO = 0x0000;
+
+    /// A static constant for a half float with a value of not-a-number.
+    const min16uint NOT_A_NUMBER = 0xFFFF;
+
+    /// A static constant for a half float with a value of positive infinity.
+    const min16uint POSITIVE_INFINITY = 0x7C00;
+
+    /// A static constant for a half float with a value of negative infinity.
+    const min16uint NEGATIVE_INFINITY = 0xFC00;
+
+    /// A mask which isolates the sign of a half float number.
+    const min16uint HALF_FLOAT_SIGN_MASK = 0x8000;
+
+    /// A mask which isolates the exponent of a half float number.
+    const min16uint HALF_FLOAT_EXPONENT_MASK = 0x7C00;
+
+    /// A mask which isolates the significand of a half float number.
+    const min16uint HALF_FLOAT_SIGNIFICAND_MASK = 0x03FF;
+
+    /// A mask which isolates the sign of a single precision float number.
+    const uint32_t FLOAT_SIGN_MASK = 0x80000000;
+
+    /// A mask which isolates the exponent of a single precision float number.
+    const uint32_t FLOAT_EXPONENT_MASK = 0x7F800000;
+
+    /// A mask which isolates the significand of a single precision float number.
+    const uint32_t FLOAT_SIGNIFICAND_MASK = 0x007FFFFF;
+    
+    /// Epsilon to handle very close to 0.0
+    static const float FLOAT_EPSILON = 0.001;
+
+    // Catch special case floating point values.
+    if (isnan(floatValue))
+    {
+        return NOT_A_NUMBER;
+    }
+    else if (isinf(floatValue))
+    {
+        return POSITIVE_INFINITY;
+    }
+
+    uint32_t value = floatValue;
+
+    // Required otherwise normals get bungled
+    if (floatValue <= FLOAT_EPSILON && floatValue >= -FLOAT_EPSILON)
+    {
+        return min16uint(0);
+        //return uint16_t(value >> 16);
+    }
+    else
+    {
+        // Start by computing the significand in half precision format.
+        min16uint output = min16uint((value & FLOAT_SIGNIFICAND_MASK) >> 13);
+
+        uint32_t exponent = ((value & FLOAT_EXPONENT_MASK) >> 23);
+
+        // Check for subnormal numbers.
+        if (exponent != 0)
+        {
+            // Check for overflow when converting large numbers, returning positive or negative
+            // infinity.
+            if (exponent > 142)
+            {
+                return min16uint((value & FLOAT_SIGN_MASK) >> 16) | min16uint(0x7C00);
+            }
+
+            // Add the exponent of the half float, converting the offset binary formats of the
+            // representations.
+            output |= min16uint(((exponent - 112) << 10) & HALF_FLOAT_EXPONENT_MASK);
+        }
+
+        // Add the sign bit.
+        output |= min16uint((value & FLOAT_SIGN_MASK) >> 16);
+
+        return output;
+    }
 }
 
 float3 GetLighting(float3 normal, float3 halfVector, float roughness, float3 eyeVector,

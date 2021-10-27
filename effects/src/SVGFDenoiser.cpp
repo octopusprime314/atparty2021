@@ -157,6 +157,8 @@ void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistribut
 
     auto cameraView       = viewEventDistributor->getView();
     auto prevCameraView   = viewEventDistributor->getPrevCameraView();
+
+    auto    deltaCameraView = cameraView - prevCameraView;
     Vector4 prevCameraPos = viewEventDistributor->getPrevCameraPos();
 
     auto cameraProj            = viewEventDistributor->getProjection();
@@ -167,6 +169,9 @@ void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistribut
     shader->updateData("inverseProj", inverseCameraProj.getFlatBuffer(), true);
     shader->updateData("prevFrameCameraPosition", prevCameraPos.getFlatBuffer(), true);
 
+    shader->updateData("prevFrameView", prevCameraView.getFlatBuffer(), true);
+    shader->updateData("currFrameView", cameraView.getFlatBuffer(), true);
+
     auto prevCameraViewProj = cameraProj * prevCameraView;
     shader->updateData("prevFrameViewProj", prevCameraViewProj.getFlatBuffer(), true);
 
@@ -175,9 +180,9 @@ void SVGFDenoiser::computeMotionVectors(ViewEventDistributor* viewEventDistribut
 
     shader->updateData("screenSize", screenSize, true);
 
-    shader->updateData("prevInstanceWorldMatrixTransforms", resourceManager->getPrevInstanceTransforms(), true);
-    shader->updateData("instanceWorldToObjectSpaceMatrixTransforms", resourceManager->getWorldToObjectTransforms(), true);
-
+    resourceManager->updateAndBindPrevInstanceMatrixBuffer(shader->_resourceIndexes, true);
+    resourceManager->updateAndBindWorldToObjectMatrixBuffer(shader->_resourceIndexes, true);
+   
     auto threadGroupSize = shader->getThreadGroupSize();
 
     shader->dispatch(ceilf(static_cast<float>(_motionVectorsUVCoords->getWidth())  / threadGroupSize.getx()),

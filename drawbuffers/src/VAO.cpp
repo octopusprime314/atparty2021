@@ -115,6 +115,8 @@ void VAO::createVAO(RenderBuffers* renderBuffers, ModelClass classId)
 
         compressedAttributes[i].uv[0] = floatToHalfFloat(flatUV[0]);
         compressedAttributes[i].uv[1] = floatToHalfFloat(flatUV[1]);
+
+        compressedAttributes[i].padding = floatToHalfFloat(0.0);
     }
 
     UINT compressedAttributeByteSize = triBuffSize * sizeof(CompressedAttribute);
