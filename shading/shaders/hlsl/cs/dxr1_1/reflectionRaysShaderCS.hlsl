@@ -299,7 +299,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
         float3 indirectSpecular = float3(0.0, 0.0, 0.0);
         int i = 0;
 
-        for (i = 0; i < 10; i++)
+        for (i = 0; i < 1; i++)
         {
             indirectNormal = normalize(-indirectNormal);
 
@@ -398,11 +398,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                     indirectHitDistanceSpecular += rayQuerySpecular.CommittedRayT();
 
-                    indirectSpecular += (currIndirectSpecularRadiance * currLightRadiance) * indirectSpecularLightEnergy;
+                    indirectSpecular += ((currIndirectSpecularRadiance * indirectSpecularLightEnergy) + 
+                                         (currIndirectRadiance * indirectDiffuseLightEnergy)) *
+                                          currLightRadiance;
 
-                    indirectAlbedo += (currIndirectRadiance * currLightRadiance) * indirectDiffuseLightEnergy;
+                    //indirectAlbedo += (currIndirectRadiance * currLightRadiance) * indirectDiffuseLightEnergy;
 
-                    indirectSpecularLightEnergy += currIndirectSpecularRadiance;
+                    indirectSpecularLightEnergy *= currIndirectSpecularRadiance;
 
                     indirectDiffuseLightEnergy *= currIndirectRadiance;
                 }
@@ -427,7 +429,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
         float normHitDist = REBLUR_FrontEnd_GetNormHitDist(indirectHitDistanceSpecular, viewZSRV[threadId.xy].x, hitDistanceParams);
 
         indirectSpecularLightRaysUAV[threadId.xy] = REBLUR_FrontEnd_PackRadiance(
-            /*indirectSpecular*/ indirectSpecularLightEnergy /*reflectionColor*/
+            indirectSpecular /*indirectSpecularLightEnergy*/ /*reflectionColor*/
             /*reflectionColorSpecular*/ /*debugNormal*/, normHitDist);
 
         i = 0;
@@ -492,7 +494,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             REBLUR_FrontEnd_PackRadiance(indirectAlbedo.rgb + reflectionColor, normHitDist);
 
         float3 color = (((REBLUR_BackEnd_UnpackRadiance(indirectSpecularLightRaysHistoryBufferUAV[threadId.xy])/* * 0.000001*/)) +
-                        (REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy]) /** 0.000001*/)).xyz;
+                        (REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy])/* * 0.000001*/)).xyz;
         float colorScale = 1.0f / 2.2f;
         color            = color / (color + float3(1.0f, 1.0f, 1.0f));
         color            = pow(color, colorScale);

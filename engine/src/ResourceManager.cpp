@@ -481,14 +481,14 @@ void ResourceManager::buildGeometry(Entity* entity)
             int staticGeomIndex = staticGeometryDesc->size();
             staticGeometryDesc->push_back(D3D12_RAYTRACING_GEOMETRY_DESC());
 
-            if (materialTransmittance > 0.0f)
+            /*if (materialTransmittance > 0.0f)
             {
                 (*staticGeometryDesc)[staticGeomIndex].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
             }
             else
-            {
+            {*/
                 (*staticGeometryDesc)[staticGeomIndex].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-            }
+            //}
 
             (*staticGeometryDesc)[staticGeomIndex].Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
             (*staticGeometryDesc)[staticGeomIndex].Triangles.IndexBuffer = indexGPUAddress;
