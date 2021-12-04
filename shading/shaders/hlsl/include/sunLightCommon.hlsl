@@ -88,19 +88,19 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
 
         rayQuery.Proceed();
 
-        if (recordOcclusion)
-        {
-            if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
-            {
-                // Main occlusion test passes so assume completely in shadow
-                occlusion                   = 0.7;
-                occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, rayQuery.CommittedRayT(), 0.00465133600);
-            }
-            else
-            {
-                occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, NRD_FP16_MAX, 0.00465133600);
-            }
-        }
+        //if (recordOcclusion)
+        //{
+        //    if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+        //    {
+        //        // Main occlusion test passes so assume completely in shadow
+        //        occlusion                   = 0.7;
+        //        //occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, rayQuery.CommittedRayT(), 0.00465133600);
+        //    }
+        //    else
+        //    {
+        //        //occlusionUAV[threadId.xy] = SIGMA_FrontEnd_PackShadow(hitPosition.z, NRD_FP16_MAX, 0.00465133600);
+        //    }
+        //}
 
         // Cook-Torrance BRDF for specular lighting calculations
         float  NDF = DistributionGGX(normal, halfVector, roughness);
@@ -118,7 +118,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
         float3 numerator   = NDF * G * F;
         float  denominator =  4.0 * max(dot(normal, eyeVector), 0.0f) * max(dot(normal, lightDirection), 0.0f);
         float3 specular    = numerator / max(denominator, 0.001f);
-        float3 diffuse     = kD * albedo / PI;
+        float3 diffuse     = kD * albedo * /*(1.0f/PI)*/(0.75f);
 
         if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
         {
@@ -142,9 +142,9 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
 
             lightRadiance = float3(0.0, 0.0, 0.0);
 
-            diffuseRadiance = diffuse/* * radiance*/; // float3(0.0, 0.0, 0.0);
+            diffuseRadiance = diffuse;
 
-            specularRadiance = specular /** radiance*/ /** occlusionHistoryUAV[threadId.xy].x*/;
+            specularRadiance = specular;
 
         }
         else
@@ -157,7 +157,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
             // 2) NdotL basically says that more aligned the normal and light direction is, the more the light
             // will be scattered within the surface (diffuse lighting) rather than get reflected (specular)
             // which will get color from the diffuse surface the reflected light hits after the bounce.
-            Lo = (diffuse + specular) * radiance * NdotL * (min(1.0, occlusionHistoryUAV[threadId.xy].x + 0.3));
+            Lo = (diffuse + specular) * radiance * NdotL/* * (min(1.0, occlusionHistoryUAV[threadId.xy].x + 0.3))*/;
 
             lightRadiance = radiance * NdotL;
 

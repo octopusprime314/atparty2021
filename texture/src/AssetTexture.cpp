@@ -109,7 +109,7 @@ void AssetTexture::_build2DTextureDX(std::string                        textureN
                                      ComPtr<ID3D12Device>&              device)
 {
     _textureBuffer = new ResourceBuffer(_bits, _imageBufferSize, _width, _height, _rowPitch,
-                                        _textureFormat, cmdList, device);
+                                        _textureFormat, cmdList, device, textureName);
 }
 
 void AssetTexture::buildMipLevels() { _textureBuffer->buildMipLevels(this); }

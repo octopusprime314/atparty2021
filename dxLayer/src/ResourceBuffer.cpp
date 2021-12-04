@@ -49,7 +49,7 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT byteSize,
 
 ResourceBuffer::ResourceBuffer(const void* initData, UINT byteSize, UINT width, UINT height, UINT rowPitch, DXGI_FORMAT textureFormat,
                                ComPtr<ID3D12GraphicsCommandList4>& cmdList,
-                               ComPtr<ID3D12Device>& device)
+                               ComPtr<ID3D12Device>& device, std::string name)
 {
 
     D3D12_SUBRESOURCE_FOOTPRINT pitchedDesc;
@@ -254,6 +254,17 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT byteSize, UINT width, 
     cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
                                     _defaultBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
                                     D3D12_RESOURCE_STATE_COMMON));
+
+    int len;
+    int slength  = (int)name.length() + 1;
+    len          = MultiByteToWideChar(CP_ACP, 0, name.c_str(), slength, 0, 0);
+    wchar_t* buf = new wchar_t[len];
+    MultiByteToWideChar(CP_ACP, 0, name.c_str(), slength, buf, len);
+    std::wstring r(buf);
+    delete[] buf;
+
+    LPCWSTR sw = r.c_str();
+    _defaultBuffer->SetName(sw);
     dxLayer->unlock();
 }
 

@@ -280,10 +280,10 @@ void DXLayer::initCmdLists()
         }
     }*/
 
-    while (_pendingCmdListIndices.size() > 0)
+    /*while (_pendingCmdListIndices.size() > 0)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(0));
-    }
+    }*/
 
     int prevCommandList = _cmdListIndex;
     _cmdListIndex       = ++_cmdListIndex % CMD_LIST_NUM;

@@ -23,7 +23,7 @@ class ResourceBuffer
 
     // Texture2D
     ResourceBuffer(const void* initData, UINT byteSize, UINT width, UINT height, UINT rowPitch, DXGI_FORMAT textureFormat,
-                   ComPtr<ID3D12GraphicsCommandList4>& cmdList, ComPtr<ID3D12Device>& device);
+                   ComPtr<ID3D12GraphicsCommandList4>& cmdList, ComPtr<ID3D12Device>& device, std::string name = "");
 
     // TextureCube
     ResourceBuffer(const void* initData, UINT count, UINT byteSize, UINT width, UINT height,

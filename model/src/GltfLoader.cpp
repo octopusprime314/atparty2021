@@ -920,6 +920,7 @@ void BuildGltfMeshes(const Document*           document,
     if (loadType == ModelLoadType::Scene)
     {
         ViewEventDistributor::CameraSettings camSettings;
+        bool camSettingsFound = false;
 
         // Use the resource reader to get each mesh primitive's position data
         for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
@@ -989,12 +990,14 @@ void BuildGltfMeshes(const Document*           document,
 
             else if (node.name == "Camera")
             {
-
+                camSettingsFound = true;
                 Vector4 cameraPosition(node.translation.x, node.translation.y, node.translation.z);
                 Vector4 quaternion(node.rotation.x,
                                    node.rotation.y,
                                    node.rotation.z,
                                    node.rotation.w);
+
+                Vector4 baseQuaternion(-0.7071067690849304, 0.0, 0.0, 0.7071067690849304);
 
                 camSettings.bobble           = false;
                 camSettings.lockedEntity     = -1;
@@ -1004,13 +1007,34 @@ void BuildGltfMeshes(const Document*           document,
                 camSettings.position         = cameraPosition;
                 // Default camera orients in the negative Y direction
                 camSettings.rotation =
-                    Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
-                // camSettings.rotation = Vector4(0, -45, 0);
+                    Vector4(GetRoll(baseQuaternion) + GetRoll(quaternion),
+                            GetPitch(baseQuaternion) + GetPitch(quaternion),
+                            GetYaw(baseQuaternion) + GetYaw(quaternion));
 
                 auto viewMan     = ModelBroker::getViewManager();
                 camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
                 viewMan->setCamera(camSettings, &nodeWayPoints[nodeIndex]);
             }
+        }
+
+        if (camSettingsFound == false)
+        {
+            Vector4 cameraPosition(0, 0, 0);
+            Vector4 quaternion(0, 0, 0, 0);
+
+            camSettings.bobble           = false;
+            camSettings.lockedEntity     = -1;
+            camSettings.lockedEntityName = "";
+            camSettings.lockOffset       = Vector4(0.0, 1000.0, 0.0, 0.0);
+            camSettings.path             = "";
+            camSettings.position         = cameraPosition;
+            // Default camera orients in the negative Y direction
+            camSettings.rotation =
+                Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+
+            auto viewMan     = ModelBroker::getViewManager();
+            camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
+            viewMan->setCamera(camSettings, nullptr);
         }
 
         // If camera has no keyframes then just load camera position with no waypoints

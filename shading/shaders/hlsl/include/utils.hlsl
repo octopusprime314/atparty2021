@@ -663,8 +663,7 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
                                 .SampleLevel(bilinearWrap, uvCoord, mipLevel)
                                 .xyz;
 
-        // Converts from [0,1] space to [-1,1] space
-        normalMap = normalMap * 2.0f - 1.0f;
+       
 #ifdef RAYTRACING_ENABLED
         // Compute the normal from loading the triangle vertices
         float3x3 tbnMat = GetTBN(barycentrics, attributeIndex, primitiveIndex);
@@ -681,7 +680,17 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
         {
             float3x3 tbnMatNormalTransform = mul(tbnMat, instanceNormalMatrixTransform);
 
-            normal = -normalize(mul(normalMap, tbnMatNormalTransform));
+            if (length(normalMap) == 0.0)
+            {
+                normal = -normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
+                //normal = -normalize(tbnMat[2]);
+            }
+            else
+            {
+                // Converts from [0,1] space to [-1,1] space
+                normalMap = normalMap * 2.0f - 1.0f;
+                normal = -normalize(mul(normalMap, tbnMatNormalTransform));
+            }
         }
     }
 

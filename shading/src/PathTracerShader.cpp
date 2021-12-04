@@ -420,10 +420,11 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     end                    = end % timing;
 
     // Process directional light
-    Vector4 sunLightColor  = Vector4(1.0, 0.85, 0.4) * 5.0;
+    // more yellow light Vector4(0.97, 0.84, 0.1)
+    Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4) * 100.0;
     float   sunLightRange  = 100000.0;
     //Vector4 sunLightPos    = Vector4(-50000.0 * std::cos(90 * ((end/(timing / 2.0f)) - 1.0)), 1000.0, 50000.0);
-    Vector4 sunLightPos    = Vector4(50000.0, 50000.0, 50000.0);
+    Vector4 sunLightPos = Vector4(50000.0, 16000.0, 0.0);
     //Vector4 sunLightPos = Vector4(0.0, 3.0, 4.0);
     //Vector4 sunLightPos    = Vector4(30.1, 14.9, 46.1)* 1000;
     float   sunLightRadius = 100.0f;
@@ -567,8 +568,8 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("viewZSRV", 0, _viewZPrimaryRays, true, false);
 
     shader->updateData("reflectionUAV", 0, _reflectionRays, true, true);
-    shader->updateData("occlusionUAV", 0, _occlusionRays, true, true);
-    shader->updateData("occlusionHistoryUAV", 0, _denoisedOcclusionRays, true, true);
+    //shader->updateData("occlusionUAV", 0, _occlusionRays, true, true);
+    //shader->updateData("occlusionHistoryUAV", 0, _denoisedOcclusionRays, true, true);
     shader->updateData("indirectLightRaysUAV", 0, _indirectLightRays, true, true);
     shader->updateData("indirectLightRaysHistoryBufferUAV", 0, _indirectLightRaysHistoryBuffer, true, true);
     shader->updateData("indirectSpecularLightRaysUAV", 0, _indirectSpecularLightRays, true, true);
