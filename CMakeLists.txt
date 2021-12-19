@@ -209,13 +209,13 @@ target_link_libraries(atparty2021 optimized ${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/_N
 #pre fetches assets during cmake -G configuration
 FetchContent_Populate(assets
                       URL        https://www.dropbox.com/s/eqms9g5o39c4oxz/assets.zip?dl=0
-                      URL_HASH   MD5=7dbc16016232f6ca8d6f82a27b227a76
+                      URL_HASH   MD5=37ba9124ac064bb3549ff95bcac65498
                       SOURCE_DIR assets)
 
 #pre fetches lib dependencies during cmake -G configuration
 FetchContent_Populate(libs
                       URL        https://www.dropbox.com/s/nkred738hhssal1/libs.zip?dl=0
-                      URL_HASH   MD5=afcee01444bfe5946b83ef80af0b8165
+                      URL_HASH   MD5=669ce8864370dbe96f489fe019f662c1
                       SOURCE_DIR libs)
 
 #Copy over the contents of the unzipped folder
@@ -242,6 +242,8 @@ install(FILES "${CMAKE_SOURCE_DIR}/libs/dx/lib/dxil.dll"
               "${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmod.dll"
               "${CMAKE_SOURCE_DIR}/libs/fmod/lib/fmodstudio.dll"
               "${CMAKE_SOURCE_DIR}/libs/dx/lib/dxcompiler.dll"
+			  "${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/Lib/Release/NRD.dll "
+			  "${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/_NRI_SDK/Lib/Release/NRI.dll"
         DESTINATION bin)
 # FYI: Keep the trailing '/'s here.
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/shading/shaders/"
