@@ -297,6 +297,23 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     DXLayer::instance()->setTimeStamp();
 
+    D3D12_RESOURCE_BARRIER barrierDesc[12];
+    ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+
+    barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrierDesc[0].Transition.pResource   = _indirectLightRays->getResource()->getResource().Get();
+    barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+    barrierDesc[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrierDesc[1].Transition.pResource = _indirectSpecularLightRays->getResource()->getResource().Get();
+    barrierDesc[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrierDesc[1].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    barrierDesc[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+    cmdList->ResourceBarrier(2, barrierDesc);
+
     // Clear occlusion, point light, sun light and reflection UAVs
     float zeroValues[] = {0.0, 0.0, 0.0, 0.0};
     float oneValues[] = {1.0, 0.0};
@@ -362,10 +379,11 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     int texturesPerMaterial = Material::TexturesPerMaterial;
     shader->updateData("texturesPerMaterial", &texturesPerMaterial, true);
 
-    //// Get skybox texture
-    //TextureBroker* textureManager = TextureBroker::instance();
-    //auto           skyBoxTexture  = textureManager->getTexture(TEXTURE_LOCATION + "skybox-day");
-    //shader->updateData("skyboxTexture", 0, skyBoxTexture, true);
+    // Get skybox texture
+    TextureBroker* textureManager = TextureBroker::instance();
+
+    auto skyBoxTexture = textureManager->getTexture(SKYBOX_LOCATION);
+    shader->updateData("skyboxTexture", 0, skyBoxTexture, true);
 
     shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
 
@@ -392,8 +410,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     cmdList->EndEvent();
 
-    // For some reason the barriers need to be performed when a root signature is bound????  Why? Makes no sense but fixes nsight
-    D3D12_RESOURCE_BARRIER barrierDesc[12];
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
 
     barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -421,23 +437,23 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     // Process directional light
     // more yellow light Vector4(0.97, 0.84, 0.1)
-    Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4) * 100.0;
-    float   sunLightRange  = 100000.0;
-    //Vector4 sunLightPos    = Vector4(-50000.0 * std::cos(90 * ((end/(timing / 2.0f)) - 1.0)), 1000.0, 50000.0);
-    Vector4 sunLightPos = Vector4(50000.0, 16000.0, 0.0);
-    //Vector4 sunLightPos = Vector4(0.0, 3.0, 4.0);
-    //Vector4 sunLightPos    = Vector4(30.1, 14.9, 46.1)* 1000;
+    float   sunLightRange  = 1.0;
+    //Default light if there isn't one in the file
+    Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4);
+    Vector4 sunLightPos = Vector4(0.0, 7.6, 0.0);
+    // Vector4 sunLightPos    = Vector4(-50000.0 * std::cos(90 * ((end/(timing / 2.0f)) - 1.0)), 1000.0, 50000.0);
+    // Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4) * 500.0;
+    // Vector4 sunLightPos = Vector4(5000.0, 1600.0, 0.0);
     float   sunLightRadius = 100.0f;
 
     for (auto& light : lights)
     {
-        // If shadowed directional then we know we have the sun :)
-        if (light->getType() == LightType::SHADOWED_DIRECTIONAL)
+        if (light->getType() == LightType::POINT)
         {
             // Point lights need to remain stationary so move lights with camera space changes
             sunLightPos   = light->getPosition();
             sunLightColor = light->getColor();
-            // sunLightRange = light->getRange();
+            sunLightRange = light->getScale().getx();
             break;
         }
     }
@@ -575,6 +591,8 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("indirectSpecularLightRaysUAV", 0, _indirectSpecularLightRays, true, true);
     shader->updateData("indirectSpecularLightRaysHistoryBufferUAV", 0, _indirectSpecularLightRaysHistoryBuffer, true, true);
 
+    shader->updateData("skyboxTexture", 0, skyBoxTexture, true);
+
     //shader->updateData("pointLightOcclusionHistoryUAV", 0, _pointLightOcclusionHistory, true, true);
     //shader->updateData("debugUAV", 0, _occlusionRays, true, true);
 
@@ -664,6 +682,34 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     if (_denoising)
     {
+        ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+
+        barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[0].Transition.pResource   = _indirectLightRays->getResource()->getResource().Get();
+        barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+        barrierDesc[1].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[1].Transition.pResource   = _indirectSpecularLightRays->getResource()->getResource().Get();
+        barrierDesc[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[1].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrierDesc[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+        barrierDesc[2].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[2].Transition.pResource = _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
+        barrierDesc[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[2].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[2].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+        barrierDesc[3].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[3].Transition.pResource = _indirectSpecularLightRaysHistoryBuffer->getResource()->getResource().Get();
+        barrierDesc[3].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[3].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+        cmdList->ResourceBarrier(4, barrierDesc);
+
         // Wrap the command buffer
         nri::CommandBufferD3D12Desc cmdDesc = {};
         cmdDesc.d3d12CommandList            = (ID3D12GraphicsCommandList*)cmdList.Get();
@@ -742,7 +788,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
 
         entryDescs[6].texture    = texture;
-        entryDescs[6].nextAccess = nri::AccessBits::SHADER_RESOURCE;
+        entryDescs[6].nextAccess = nri::AccessBits::SHADER_RESOURCE_STORAGE;
         entryDescs[6].nextLayout = nri::TextureLayout::GENERAL;
 
         textureDesc               = {};
@@ -760,7 +806,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
 
         entryDescs[8].texture    = texture;
-        entryDescs[8].nextAccess = nri::AccessBits::SHADER_RESOURCE;
+        entryDescs[8].nextAccess = nri::AccessBits::SHADER_RESOURCE_STORAGE;
         entryDescs[8].nextLayout = nri::TextureLayout::GENERAL;
 
         // Populate common settings
@@ -977,50 +1023,63 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         cmdList->ResourceBarrier(6, barrierDesc);
     }
 
-
     cmdList->EndEvent();
-
-    EngineManager* engMan = EngineManager::instance();
-    Bloom*         bloom  = engMan->getBloomShader();
-    SSCompute*     add    = engMan->getAddShader();
-
-    add->uavBarrier();
-
-    cmdList->BeginEvent(0, L"Bloom Pass", sizeof(L"Bloom Pass"));
-
-    // Compute bloom from finalized render target
-    bloom->compute(_compositor);
-
-
-    // THE FINAL ADD TO THE COMPOSITION RENDER TARGET CAUSES CORRUPTION
-    // IN THE FORM OF OVERLAYING A RANDOM COLLECTION TEXTURE IN THE TOP
-    // LEFT CORNER OF THE SCREEN...LOOKS LIKE DOWNSAMPLING OR SOME PASS
-    // OF THE BLOOM SHADERS ARE BEING WRITTEN TO THE FINAL COMPOSITION???
 
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
     barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc[0].Transition.pResource =
-        bloom->getTexture()->getResource()->getResource().Get();
+    barrierDesc[0].Transition.pResource = _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
     barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    cmdList->ResourceBarrier(1, barrierDesc);
 
-    // Adds bloom data back into the composite render target
-    add->compute(bloom->getTexture(), _compositor);
+    barrierDesc[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrierDesc[1].Transition.pResource = _indirectSpecularLightRaysHistoryBuffer->getResource()->getResource().Get();
+    barrierDesc[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrierDesc[1].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    barrierDesc[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
-    ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-    barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc[0].Transition.pResource =
-        bloom->getTexture()->getResource()->getResource().Get();
-    barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    cmdList->ResourceBarrier(1, barrierDesc);
+    cmdList->ResourceBarrier(2, barrierDesc);
 
-    add->uavBarrier();
+    //EngineManager* engMan = EngineManager::instance();
+    //Bloom*         bloom  = engMan->getBloomShader();
+    //SSCompute*     add    = engMan->getAddShader();
 
-    cmdList->EndEvent();
+    //add->uavBarrier();
+
+    //cmdList->BeginEvent(0, L"Bloom Pass", sizeof(L"Bloom Pass"));
+
+    //// Compute bloom from finalized render target
+    //bloom->compute(_compositor);
+
+    //// THE FINAL ADD TO THE COMPOSITION RENDER TARGET CAUSES CORRUPTION
+    //// IN THE FORM OF OVERLAYING A RANDOM COLLECTION TEXTURE IN THE TOP
+    //// LEFT CORNER OF THE SCREEN...LOOKS LIKE DOWNSAMPLING OR SOME PASS
+    //// OF THE BLOOM SHADERS ARE BEING WRITTEN TO THE FINAL COMPOSITION???
+
+    //ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+    //barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    //barrierDesc[0].Transition.pResource =
+    //    bloom->getTexture()->getResource()->getResource().Get();
+    //barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    //barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    //barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    //cmdList->ResourceBarrier(1, barrierDesc);
+
+    //// Adds bloom data back into the composite render target
+    //add->compute(bloom->getTexture(), _compositor);
+
+    //ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+    //barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    //barrierDesc[0].Transition.pResource =
+    //    bloom->getTexture()->getResource()->getResource().Get();
+    //barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    //barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    //barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    //cmdList->ResourceBarrier(1, barrierDesc);
+
+    //add->uavBarrier();
+
+    //cmdList->EndEvent();
 
     DXLayer::instance()->setTimeStamp();
 

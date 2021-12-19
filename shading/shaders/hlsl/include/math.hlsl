@@ -114,12 +114,17 @@ float3x3 orthoNormalBasis(float3 normal)
 
 float DistributionGGX(float3 normal, float3 halfVector, float roughness)
 {
-    float a            = roughness * roughness;
+    float a            = roughness;
     float aSquared     = a * a;
     float nDotH        = max(dot(normal, halfVector), 0.0f);
     float nDotHSquared = nDotH * nDotH;
 
-    float num   = aSquared;
+    float num   = max(aSquared, 0.01);
+
+    //if (aSquared <= 0.01)
+    //{
+    //    num = 0.0;
+    //}
     float denom = (nDotHSquared * (aSquared - 1.0f) + 1.0f);
     denom       = PI * denom * denom;
 

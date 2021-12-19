@@ -64,6 +64,7 @@ ReBoot.v11.suo
 *.zip
 *.cso
 *_compiled.h
+*test-assets*
 assets*
 libs
 build

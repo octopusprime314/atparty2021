@@ -50,28 +50,29 @@ static float refractionIndex = 1.0 - reflectionIndex;
         ray.TMin      = MIN_RAY_LENGTH;
         ray.TMax      = MAX_RAY_LENGTH;
 
-        RayQuery<RAY_FLAG_NONE> rayQuery;
-        rayQuery.TraceRayInline(rtAS, RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, ~0, ray);
+        RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> rayQuery;
+        rayQuery.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, ray);
+        rayQuery.Proceed();
 
-        while (rayQuery.Proceed())
-        {
-            RayTraversalData rayData;
-            rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
-            rayData.currentRayT       = rayQuery.CandidateTriangleRayT();
-            rayData.closestRayT       = rayQuery.CommittedRayT();
-            rayData.worldRayDirection = rayQuery.WorldRayDirection();
-            rayData.geometryIndex     = rayQuery.CandidateGeometryIndex();
-            rayData.primitiveIndex    = rayQuery.CandidatePrimitiveIndex();
-            rayData.instanceIndex     = rayQuery.CandidateInstanceIndex();
-            rayData.barycentrics      = rayQuery.CandidateTriangleBarycentrics();
-            rayData.objectToWorld     = rayQuery.CandidateObjectToWorld4x3();
-
-            bool isHit = ProcessTransparentTriangle(rayData);
-            if (isHit)
-            {
-                rayQuery.CommitNonOpaqueTriangleHit();
-            }
-        }
+        //while (rayQuery.Proceed())
+        //{
+        //    RayTraversalData rayData;
+        //    rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
+        //    rayData.currentRayT       = rayQuery.CandidateTriangleRayT();
+        //    rayData.closestRayT       = rayQuery.CommittedRayT();
+        //    rayData.worldRayDirection = rayQuery.WorldRayDirection();
+        //    rayData.geometryIndex     = rayQuery.CandidateGeometryIndex();
+        //    rayData.primitiveIndex    = rayQuery.CandidatePrimitiveIndex();
+        //    rayData.instanceIndex     = rayQuery.CandidateInstanceIndex();
+        //    rayData.barycentrics      = rayQuery.CandidateTriangleBarycentrics();
+        //    rayData.objectToWorld     = rayQuery.CandidateObjectToWorld4x3();
+        //
+        //    bool isHit = ProcessTransparentTriangle(rayData);
+        //    if (isHit)
+        //    {
+        //        rayQuery.CommitNonOpaqueTriangleHit();
+        //    }
+        //}
 
         if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
         {
@@ -101,13 +102,19 @@ static float refractionIndex = 1.0 - reflectionIndex;
                                   hitPosition,
                                   transmittance);
 
+            if (rayQuery.CommittedTriangleFrontFace() == false)
+            {
+                normal = -normal;
+            }
+
             normalUAV[threadId.xy].xyz   = (normal + 1.0) / 2.0;
             positionUAV[threadId.xy].xyz = hitPosition;
             albedoUAV[threadId.xy].xyz   = albedo.xyz;
 
-            normalUAV[threadId.xy].w     = roughness;
-            positionUAV[threadId.xy].w   = rayData.instanceIndex;//metallic;
-            albedoUAV[threadId.xy].w     = transmittance;
+            // Denoiser can't handle roughness value of 0.0
+            normalUAV[threadId.xy].w     = max(roughness, 0.05);
+            positionUAV[threadId.xy].w   = rayData.instanceIndex;
+            albedoUAV[threadId.xy].w     = metallic;
 
             viewZUAV[threadId.xy].x = rayQuery.CommittedRayT();
 
@@ -117,9 +124,8 @@ static float refractionIndex = 1.0 - reflectionIndex;
             float3 sampleVector = normalize(rayDir);
             float4 dayColor     = skyboxTexture.SampleLevel(bilinearWrap, float3(sampleVector.x, sampleVector.y, sampleVector.z), 0);
 
-            albedoUAV[threadId.xy]   = float4(137.0 / 256.0, 207.0 / 256.0, 240.0 / 256.0, 0.0) * (sampleVector.y*3.0) + 
-                                       float4(0.0, 0.0, 0.44, 0.0) * (1.0 - sampleVector.y*3.0);
-            normalUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 0.0);
+            albedoUAV[threadId.xy]   = float4(dayColor.xyz, 0.0);//GetAtmosphericDiffuseLighting(sampleVector.y);
+            normalUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 1.0);
             positionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, -1.0);
 
             viewZUAV[threadId.xy].x = 100000.0;

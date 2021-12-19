@@ -14,6 +14,7 @@ Buffer<float>                               instanceNormalMatrixTransforms   : r
 StructuredBuffer<UniformMaterial>           uniformMaterials                 : register(t10, space0);
 StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : register(t11, space0);
 Texture2D                                   viewZSRV                         : register(t12, space0);
+TextureCube                                 skyboxTexture                    : register(t13, space0);
 
 RWTexture2D<float4> reflectionUAV : register(u0);
 //RWTexture2D<float2> occlusionUAV : register(u1);
@@ -69,20 +70,26 @@ void main(int3 threadId            : SV_DispatchThreadID,
     float3 normal = (normalSRV[threadId.xy].xyz * 2.0) - 1.0;
     float3 debugNormal = normal;
 
-    if (normal.x == 0.0 &&
-        normal.y == 0.0 &&
-        normal.z == 0.0)
+    if (normalSRV[threadId.xy].x == 0.0 &&
+        normalSRV[threadId.xy].y == 0.0 &&
+        normalSRV[threadId.xy].z == 0.0)
     {
-        reflectionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, 0.0);
+        float3 albedo = albedoSRV[threadId.xy].xyz;
+        float4 hitDistanceParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
+        float  normHitDist = REBLUR_FrontEnd_GetNormHitDist(viewZSRV[threadId.xy].x, viewZSRV[threadId.xy].x, hitDistanceParams);
+
+        indirectLightRaysUAV[threadId.xy] += REBLUR_FrontEnd_PackRadiance(albedo, normHitDist);
+        indirectSpecularLightRaysUAV[threadId.xy] += REBLUR_FrontEnd_PackRadiance(albedo, normHitDist);
+        reflectionUAV[threadId.xy] = float4(albedo, 1.0);
     }
     else
     {
         float3 hitPosition   = positionSRV[threadId.xy].xyz;
         float3 albedo        = albedoSRV[threadId.xy].xyz;
 
-        float  transmittance = albedoSRV[threadId.xy].w;
-        float  metallic      = 0.0;//positionSRV[threadId.xy].w;
-        float  roughness     = normalSRV[threadId.xy].w;
+        float transmittance = 0.0;
+        float metallic       = albedoSRV[threadId.xy].w;
+        float roughness     = normalSRV[threadId.xy].w;
 
         // Reconstruct primary ray by taking the camera position and subtracting it from hit
         // position
@@ -119,10 +126,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
         float3 indirectAlbedo   = float3(0.0, 0.0, 0.0);
         float3 indirectSpecular = float3(0.0, 0.0, 0.0);
         float3 lightRadiance;
+
+        //roughness = max(roughness, 0.25);
+
         float3 reflectionColor =
             GetBRDFSunLight(albedo, normal, hitPosition, roughness, metallic, threadId.xy,
                             diffuseRadiance, specularRadiance, lightRadiance, true);
-        reflectionColor = float3(0.0, 0.0, 0.0); 
+
         if (renderVariant == 0)
         {
             reflectionColor = diffuseRadiance * lightRadiance;
@@ -138,21 +148,19 @@ void main(int3 threadId            : SV_DispatchThreadID,
         else if (renderVariant == 2)
         {
             reflectionColor = (diffuseRadiance + specularRadiance) * lightRadiance;
-            indirectAlbedo += reflectionColor;
-            indirectSpecular += reflectionColor;
+            indirectAlbedo += (diffuseRadiance * lightRadiance);
+            indirectSpecular += (specularRadiance * lightRadiance);
         }
-        //reflectionColor = specularRadiance * lightRadiance; 
-        //reflectionColor = (specularRadiance/* + (diffuseRadiance * (1.0f/0.99f) * (1.0f/PI))*/) * lightRadiance;
 
         float3 indirectLighting = float3(0.0, 0.0, 0.0);
         float3 indirectPos      = positionSRV[threadId.xy].xyz;
         float3 indirectNormal   = debugNormal;
         float  indirectHitDistance = 0.0;
-        float3 indirectLightEnergy = diffuseRadiance/* * lightRadiance*/;
+        float3 indirectLightEnergy = diffuseRadiance;
 
-        float3 indirectSpecularLightEnergy = specularRadiance * lightRadiance;
+        float3 indirectSpecularLightEnergy = float3(1.0, 1.0, 1.0);//specularRadiance * lightRadiance;
 
-        float3 indirectDiffuseLightEnergy = diffuseRadiance;
+        float3 indirectDiffuseLightEnergy = float3(1.0, 1.0, 1.0); // diffuseRadiance;
 
         float indirectHitDistanceSpecular = 0.0;
 
@@ -161,11 +169,6 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
         for (i = 0; i < 3; i++)
         {
-
-            if (roughness < 0.1)
-            {
-                roughness = 0.0;
-            }
 
             indirectNormal = normalize(-indirectNormal);
 
@@ -181,6 +184,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
             float3 eyeVector      = normalize(indirectPos - cameraPosition);
 
             float2 rng3 = GetRandomSample(threadId.xy, screenSize).xy;
+
+            //roughness = max(roughness, 0.25);
 
             float3 N = indirectNormal;
             float3 V = eyeVector;
@@ -203,8 +208,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
             float NoH = max(0, dot(N, H));
             float VoH = max(0, -dot(V, H));
 
-            if (NoL > 0 && NoV > 0)
-            {
+            //if (NoL > 0 && NoV > 0)
+            //{
                 // See the Heitz paper referenced above for the estimator explanation.
                 //   (BRDF / PDF) = F * G2(V, L) / G1(V)
                 // The Fresnel term F is already embedded into "primary_specular" by
@@ -233,17 +238,23 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 //}
                 //else
                 //{
-                    raySpecular.Origin = indirectPos + (indirectNormal * 0.001);
-                    //raySpecular.Origin = indirectPos + (specularRayDirection * 0.001);
+                    //raySpecular.Origin = indirectPos + (indirectNormal * 0.001);
+                    raySpecular.Origin = indirectPos + (specularRayDirection * 0.001);
                 //}
                 raySpecular.Direction = specularRayDirection;
 
-                RayQuery<RAY_FLAG_NONE> rayQuerySpecular;
-                rayQuerySpecular.TraceRayInline(rtAS, RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, ~0, raySpecular);
+                RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> rayQuerySpecular;
+                rayQuerySpecular.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, raySpecular);
 
                 rayQuerySpecular.Proceed();
 
+                //indirectSpecular = normalize(indirectPos - sunLightPosition.xyz);
+
+                //indirectSpecular = raySpecular.Direction;
+
                 //indirectSpecular = specularRayDirection;
+
+                //indirectSpecular = float3(rng3, 0.0);
 
                 if (rayQuerySpecular.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
                 {
@@ -266,7 +277,14 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal,
                                             indirectPos, transmittance);
 
-                    float3 currIndirectRadiance = float3(1.0, 0.0, 0.0);
+                    //roughness = max(roughness, 0.25);
+
+                    if (rayQuerySpecular.CommittedTriangleFrontFace() == false)
+                    {
+                        indirectNormal = -indirectNormal;
+                    }
+
+                    float3 currIndirectRadiance = float3(0.0, 0.0, 0.0);
                     float3  currIndirectSpecularRadiance = float3(0.0, 0.0, 0.0);
                     float3 currLightRadiance = float3(0.0, 0.0, 0.0);
                     float3 indirectLighting = GetBRDFSunLight(albedo, indirectNormal, indirectPos, roughness, metallic, threadId.xy, currIndirectRadiance,
@@ -278,48 +296,28 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                          (currIndirectRadiance * indirectDiffuseLightEnergy)) *
                                           currLightRadiance;
 
-                    //indirectSpecular = currIndirectRadiance;
-                    //indirectAlbedo += (currIndirectRadiance * currLightRadiance) * indirectDiffuseLightEnergy;
+                    indirectSpecularLightEnergy *= (currIndirectSpecularRadiance/* + currIndirectRadiance*/);
 
-                    //reflectionColor += currIndirectSpecularRadiance *
-                    //                    indirectSpecularLightEnergy * currLightRadiance;
-
-                    if (renderVariant == 1 || renderVariant == 2)
-                    {
-                    //    reflectionColor += currIndirectSpecularRadiance *
-                    //                        indirectSpecularLightEnergy * currLightRadiance;
-                    //}
-                    
-                        reflectionColor += ((currIndirectSpecularRadiance * indirectSpecularLightEnergy) + 
-                                         (currIndirectRadiance * indirectDiffuseLightEnergy))/* *
-                                          currLightRadiance*/;
-                    }
-                    indirectSpecularLightEnergy *= (currIndirectSpecularRadiance);
-
-                    indirectDiffuseLightEnergy *= currIndirectRadiance;
+                    indirectDiffuseLightEnergy *= (currIndirectRadiance);
 
                     specularHit = true;
                 }
                 else
                 {
+                    float3 sampleVector = normalize(raySpecular.Direction);
+                    float4 dayColor     = skyboxTexture.SampleLevel(bilinearWrap, float3(sampleVector.x, sampleVector.y, sampleVector.z), 0);
+
+                    indirectSpecular += dayColor.xyz * 5.0 * indirectSpecularLightEnergy;
+
+                    //indirectSpecular += GetAtmosphericDiffuseLighting(sampleVector.y).xyz * 5.0 * indirectSpecularLightEnergy;
                     break;
                 }
-            }
+            //}
             //else
             //{
             //    reflectionColor = float3(1.0, 0.0, 0.0);
             //}
         }
-
-        // struct HitDistanceParameters
-        //{
-        //    float A = 3.0f;     // constant value (m)
-        //    float B = 0.1f;     // viewZ based linear scale (m / units) (1 m - 10 cm, 10 m - 1 m,
-        //    100 m - 10 m) float C = 10.0f;    // roughness based scale, "> 1" to get bigger hit
-        //    distance for low roughness float D = -25.0f;   // roughness based exponential scale,
-        //    "< 0", absolute value should be big enough to collapse "exp2( D * roughness ^ 2 )" to
-        //    "~0" for roughness = 1
-        //};
 
         float4 hitDistanceParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
         float  normHitDist;
@@ -330,11 +328,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
         {
             normHitDist = REBLUR_FrontEnd_GetNormHitDist(indirectHitDistanceSpecular, viewZSRV[threadId.xy].x, hitDistanceParams);
 
-            indirectLightRaysUAV[threadId.xy] +=
-                REBLUR_FrontEnd_PackRadiance(indirectSpecular, normHitDist);
+            //indirectLightRaysUAV[threadId.xy] +=
+            //    REBLUR_FrontEnd_PackRadiance(float3(0.0, 0.0, 0.0), normHitDist);
 
             indirectSpecularLightRaysUAV[threadId.xy] =
-                REBLUR_FrontEnd_PackRadiance(float3(0.0, 0.0, 0.0),  normHitDist);
+                REBLUR_FrontEnd_PackRadiance(indirectSpecular, normHitDist);
         }
 
         i = 0;
@@ -353,11 +351,12 @@ void main(int3 threadId            : SV_DispatchThreadID,
             ray.TMin      = MIN_RAY_LENGTH;
             ray.TMax      = MAX_RAY_LENGTH;
 
-            ray.Origin    = indirectPos + (indirectNormal * 0.001);
+            //ray.Origin    = indirectPos + (indirectNormal * 0.001);
             ray.Direction = GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0);
+            ray.Origin    = indirectPos + (ray.Direction * 0.001);
 
-            RayQuery<RAY_FLAG_NONE> rayQuery;
-            rayQuery.TraceRayInline(rtAS, RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, ~0, ray);
+            RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> rayQuery;
+            rayQuery.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, ray);
 
             rayQuery.Proceed();
 
@@ -374,9 +373,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
                 rayData.uvIsValid         = false;
 
-                float transmittance = 0.0;
                 ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal, indirectPos,
                                       transmittance);
+
+                if (rayQuery.CommittedTriangleFrontFace() == false)
+                {
+                    indirectNormal = -indirectNormal;
+                }
 
                 float3 currIndirectRadiance = float3(0.0, 0.0, 0.0);
                 float3  currIndirectSpecularRadiance = float3(0.0, 0.0, 0.0);
@@ -395,17 +398,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 }
 
                 indirectLightEnergy *= (currIndirectRadiance);
-
-                //indirectAlbedo += ((currIndirectSpecularRadiance * indirectSpecularLightEnergy) +
-                //                     (currIndirectRadiance * indirectDiffuseLightEnergy)) *
-                //                    currLightRadiance;
-                //
-                //indirectSpecularLightEnergy *= currIndirectSpecularRadiance;
-                //
-                //indirectDiffuseLightEnergy *= currIndirectRadiance;
             }
             else
             {
+                float3 sampleVector = normalize(ray.Direction);
+                //indirectAlbedo += GetAtmosphericDiffuseLighting(sampleVector.y).xyz * 0.5 * indirectLightEnergy;
                 break;
             }
         }
@@ -417,13 +414,17 @@ void main(int3 threadId            : SV_DispatchThreadID,
             indirectLightRaysUAV[threadId.xy] += REBLUR_FrontEnd_PackRadiance(indirectAlbedo.rgb, normHitDist);
         }
 
-        float3 color = (((REBLUR_BackEnd_UnpackRadiance(indirectSpecularLightRaysHistoryBufferUAV[threadId.xy])/* * 0.000001*/)) +
+        float3 hdrColor = (((REBLUR_BackEnd_UnpackRadiance(indirectSpecularLightRaysHistoryBufferUAV[threadId.xy])/* * 0.000001*/)) +
                         (REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy])/* * 0.000001*/)).xyz;
-        float colorScale = 1.0f / 2.2f;
-        color            = color / (color + float3(1.0f, 1.0f, 1.0f));
-        color            = pow(color, colorScale);
 
-        reflectionUAV[threadId.xy] = float4(color, 1.0);
-        //reflectionUAV[threadId.xy] = (REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy]));
+        const float gamma = 2.2;
+        const float exposure = 0.05;
+        // reinhard tone mapping
+        //float3 mapped = hdrColor / (hdrColor + float3(1.0, 1.0, 1.0));
+        float3 mapped = float3(1.0, 1.0, 1.0) - exp(-hdrColor * exposure);
+        // gamma correction
+        mapped = pow(mapped, float3(1.0, 1.0, 1.0) / float3(gamma, gamma, gamma));
+
+        reflectionUAV[threadId.xy] = float4(mapped, 1.0);
     }
 }

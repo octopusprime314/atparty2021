@@ -7,3 +7,4 @@ const std::string COLLECTIONS_MESH_LOCATION  = ASSET_LOCATION + "meshes/collecti
 const std::string ALPHANUMERIC_MESH_LOCATION = ASSET_LOCATION + "meshes/static/alphanumeric/";
 const std::string SCENE_MESH_LOCATION        = ASSET_LOCATION + "meshes/scene/";
 const std::string TEXTURE_LOCATION           = ASSET_LOCATION + "textures/";
+const std::string SKYBOX_LOCATION            = TEXTURE_LOCATION + "collections/soultaker";

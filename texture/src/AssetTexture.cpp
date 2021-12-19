@@ -15,24 +15,34 @@ AssetTexture::AssetTexture(std::string textureName, ComPtr<ID3D12GraphicsCommand
     : Texture(textureName), _alphaValues(false)
 {
     bool loadedTexture = true;
-    if (texData == nullptr)
+
+    if (cubeMap)
     {
-        loadedTexture = _getTextureData(_name);
+        _buildCubeMapTextureDX(_name, cmdList, device);
     }
     else
     {
-        _bits            = texData->data->data();
-        _width           = texData->width;
-        _height          = texData->height;
-        _name            = texData->name;
-        _sizeInBytes     = texData->data->size();
-        _alphaValues     = texData->alphaValues;
-        _imageBufferSize = _width * _height * 3;
+        if (texData == nullptr)
+        {
+            loadedTexture = _getTextureData(_name);
+        }
+        else
+        {
+            _bits            = texData->data->data();
+            _width           = texData->width;
+            _height          = texData->height;
+            _name            = texData->name;
+            _sizeInBytes     = texData->data->size();
+            _alphaValues     = texData->alphaValues;
+            _imageBufferSize = _width * _height * 3;
+        }
     }
-
     if (loadedTexture)
     {
-        _build2DTextureDX(_name, cmdList, device);
+        if (cubeMap == false)
+        {
+            _build2DTextureDX(_name, cmdList, device);
+        }
     }
 }
 
@@ -110,6 +120,134 @@ void AssetTexture::_build2DTextureDX(std::string                        textureN
 {
     _textureBuffer = new ResourceBuffer(_bits, _imageBufferSize, _width, _height, _rowPitch,
                                         _textureFormat, cmdList, device, textureName);
+}
+
+void AssetTexture::_buildCubeMapTextureDX(std::string                        skyboxName,
+                                          ComPtr<ID3D12GraphicsCommandList4>& cmdList,
+                                          ComPtr<ID3D12Device>&              device)
+{
+    std::vector<unsigned char> cubeMapData;
+    unsigned int               rowPitch = 0;
+
+    if (skyboxName.find("hdr") != std::string::npos)
+    {
+        constexpr UINT cubeFaces = 1;
+
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT layouts;
+        UINT                               rows;
+        UINT64                             rowByteSize;
+        UINT64                             totalBytes = 0;
+
+        std::string textureName = skyboxName + ".dds";
+
+        _getTextureData(textureName);
+           
+        device->GetCopyableFootprints(
+            &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_BC7_UNORM, _width, _height, cubeFaces, 1,
+                                          1, 0, D3D12_RESOURCE_FLAG_NONE),
+            0, cubeFaces, 0, &layouts, &rows, &rowByteSize, &totalBytes);
+
+        cubeMapData.insert(cubeMapData.end(), &_bits[0], &_bits[totalBytes]);
+    }
+    else
+    {
+        constexpr UINT cubeFaces = 7;
+
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT layouts[cubeFaces];
+        UINT                               rows[cubeFaces];
+        UINT64                             rowByteSize[cubeFaces];
+        UINT64                             totalBytes = 0;
+
+        for (unsigned int i = 0; i < 6; ++i)
+        {
+            std::string textureName = "";
+            if (i == 0)
+            {
+                textureName = skyboxName + "-px.dds"; //"/front.jpg";
+                _getTextureData(textureName);
+            }
+            else if (i == 1)
+            {
+                textureName = skyboxName + "-nx.dds"; //"/back.jpg";
+                _getTextureData(textureName);
+            }
+            else if (i == 2)
+            {
+                textureName = skyboxName + "-py.dds"; //"/top.jpg";
+                _getTextureData(textureName);
+            }
+            else if (i == 3)
+            {
+                textureName = skyboxName + "-ny.dds"; //"/bottom.jpg";
+                _getTextureData(textureName);
+            }
+            else if (i == 4)
+            {
+                textureName = skyboxName + "-pz.dds"; //"/right.jpg";
+                _getTextureData(textureName);
+            }
+            else if (i == 5)
+            {
+                textureName = skyboxName + "-nz.dds"; //"/left.jpg";
+                _getTextureData(textureName);
+            }
+
+            device->GetCopyableFootprints(&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_BC7_UNORM, _width,
+                                                                    _height, cubeFaces, 1, 1, 0,
+                                                                    D3D12_RESOURCE_FLAG_NONE),
+                                      0, cubeFaces, 0, layouts, rows, rowByteSize, &totalBytes);
+        
+            cubeMapData.insert(cubeMapData.end(), &_bits[0], &_bits[layouts[i + 1].Offset - layouts[i].Offset]);
+       }
+    }
+
+    _textureBuffer =
+        new ResourceBuffer(cubeMapData.data(), 6, static_cast<UINT>(cubeMapData.size()), _width,
+                           _height, rowPitch, cmdList, device, _name);
+
+    // Create descriptor heap
+    D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc;
+    ZeroMemory(&srvHeapDesc, sizeof(srvHeapDesc));
+    srvHeapDesc.NumDescriptors = 1; // 1 Cubemap texture
+    srvHeapDesc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    srvHeapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(_srvDescriptorHeap.GetAddressOf()));
+
+    // Create view of SRV for shader access
+    CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(
+        _srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc           = {};
+    auto                            textureDescriptor = _textureBuffer->getDescriptor();
+    srvDesc.Shader4ComponentMapping                   = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.Format                                    = textureDescriptor.Format;
+    srvDesc.ViewDimension                             = D3D12_SRV_DIMENSION_TEXTURECUBE;
+    srvDesc.TextureCube.MostDetailedMip               = 0;
+    srvDesc.TextureCube.MipLevels                     = textureDescriptor.MipLevels;
+    srvDesc.TextureCube.ResourceMinLODClamp           = 0;
+    device->CreateShaderResourceView(_textureBuffer->getResource().Get(), &srvDesc, hDescriptor);
+
+    // create sampler descriptor heap
+    D3D12_DESCRIPTOR_HEAP_DESC descHeapSampler = {};
+    descHeapSampler.NumDescriptors             = 1;
+    descHeapSampler.Type                       = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+    descHeapSampler.Flags                      = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    device->CreateDescriptorHeap(&descHeapSampler,
+                                 IID_PPV_ARGS(_samplerDescriptorHeap.GetAddressOf()));
+
+    // create sampler descriptor in the sample descriptor heap
+    D3D12_SAMPLER_DESC samplerDesc;
+    ZeroMemory(&samplerDesc, sizeof(D3D12_SAMPLER_DESC));
+    samplerDesc.Filter         = D3D12_FILTER_ANISOTROPIC; // D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    samplerDesc.AddressU       = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    samplerDesc.AddressV       = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    samplerDesc.AddressW       = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    samplerDesc.MinLOD         = 0;
+    samplerDesc.MaxLOD         = D3D12_FLOAT32_MAX;
+    samplerDesc.MipLODBias     = 0.0f;
+    samplerDesc.MaxAnisotropy  = 1;
+    samplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+    device->CreateSampler(&samplerDesc,
+                          _samplerDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
 void AssetTexture::buildMipLevels() { _textureBuffer->buildMipLevels(this); }
@@ -357,6 +495,7 @@ void AssetTexture::_load(const std::string& path)
         {
             DDS_HEADER_DXT10 dx10Header = reader.get<DDS_HEADER_DXT10>();
             headerOffset += sizeof(DDS_HEADER_DXT10);
+            _textureFormat = dx10Header.dxgiFormat;
         }
 
         size -= headerOffset; 
@@ -380,8 +519,6 @@ void AssetTexture::_load(const std::string& path)
 
         _sizeInBytes     = size;
         _imageBufferSize = size;
-
-        _textureFormat = DXGI_FORMAT_BC7_UNORM;
     }
     else
     {

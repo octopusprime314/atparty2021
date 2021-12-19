@@ -362,6 +362,13 @@ void ModelBroker::_gatherModelNames(const std::string& fbxScene)
 
     // Make sure all the textures have finished loading as well
     auto texBroker = TextureBroker::instance();
+
+    // Load skyboxes here
+    if (texBroker->getTexture(SKYBOX_LOCATION) == nullptr)
+    {
+        texBroker->addCubeTexture(SKYBOX_LOCATION);
+    }
+
     while (texBroker->areTexturesUploaded() == false)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(0));

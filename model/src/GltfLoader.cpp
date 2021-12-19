@@ -733,12 +733,12 @@ void BuildGltfMeshes(const Document*           document,
             {
                 uniformMaterials.back().validBits |= NormalValidBit;
             }
+            // Roughness and metallic are stored in the same second texture
             if (materialsFound[2] == false)
             {
                 uniformMaterials.back().validBits |= RoughnessValidBit;
+                uniformMaterials.back().validBits |= MetallicValidBit;
             }
-            // Metal is always valid and never gathered from a texture
-            uniformMaterials.back().validBits |= MetallicValidBit;
 
             // If material roughness is supplied then just use albedo
             if (materialsFound[1] == false ||
@@ -1067,26 +1067,32 @@ void BuildGltfMeshes(const Document*           document,
                 sceneLight.lightType = LightType::POINT;
                 sceneLight.effectType = EffectType::Fire;
                 sceneLight.name      = light["name"];
-                sceneLight.scale     = Vector4(intensity, intensity, intensity) * 100.0;
+                sceneLight.scale     = Vector4(intensity, intensity, intensity);
                 sceneLight.lockedIdx = -1;
 
                 bool foundLight = false;
                 // Use the resource reader to get each mesh primitive's position data
                 while (nodeIndex < document->nodes.Elements().size())
                 {
-                    const auto& node = document->nodes.Elements()[nodeIndex];
+                    auto node = document->nodes.Elements()[nodeIndex];
                     if (node.children.empty() == false)
                     {
-                        Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
-                        sceneLight.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
-                        //sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
-
                         std::string::size_type sz; // alias of size_t
-                        auto nodeIndex = std::stoi(node.children[0], &sz);
 
-                        auto extensions = document->nodes.Elements()[nodeIndex].extensions;
+                        auto childNodeIndex = std::stoi(node.children[0], &sz);
 
-                        for (const auto& nodeExtension : document->nodes.Elements()[nodeIndex].extensions)
+                        auto childNode = document->nodes.Elements()[childNodeIndex];
+                        
+                        while (childNode.children.empty() == false)
+                        {
+                            childNodeIndex = std::stoi(childNode.children[0], &sz);
+
+                            childNode = document->nodes.Elements()[childNodeIndex];
+                        }
+
+                        auto extensions = document->nodes.Elements()[childNodeIndex].extensions;
+
+                        for (const auto& nodeExtension : document->nodes.Elements()[childNodeIndex].extensions)
                         {
                             std::stringstream data;
                             data << nodeExtension.second;
@@ -1098,23 +1104,25 @@ void BuildGltfMeshes(const Document*           document,
 
                             if (readLightIndex == lightIndex)
                             {
+                                Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
+                                sceneLight.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
+                                //sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
+
                                 foundLight = true;
-                                break;
+                                //break;
                             }
                         }
                     }
-
-                    if (foundLight == true)
-                    {
-                        if (nodeWayPoints.find(nodeIndex) != nodeWayPoints.end())
-                        {
-                            sceneLight.waypointVectors = nodeWayPoints[nodeIndex];
-                        }
-                        EngineManager::instance()->addLight(sceneLight);
-                        break;
-                    }
-
                     nodeIndex++;
+                }
+                if (foundLight == true)
+                {
+                    if (nodeWayPoints.find(nodeIndex) != nodeWayPoints.end())
+                    {
+                        sceneLight.waypointVectors = nodeWayPoints[nodeIndex];
+                    }
+                    EngineManager::instance()->addLight(sceneLight);
+                    break;
                 }
                 lightIndex++;
             }

@@ -660,6 +660,16 @@ void ResourceManager::_updateTransformData()
 
         commandList->CopyResource(_instanceDescriptionGPUBuffer[cmdListIndex].Get(), _instanceDescriptionCPUBuffer[cmdListIndex].Get());
 
+        D3D12_RESOURCE_BARRIER barrierDesc = {};
+
+        barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc.Transition.pResource   = _instanceDescriptionGPUBuffer[cmdListIndex].Get();
+        barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        barrierDesc.Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+        commandList->ResourceBarrier(1, &barrierDesc);
+
         // Top Level Acceleration Structure desc
         topLevelBuildDesc.DestAccelerationStructureData =
             _tlasResultBuffer[cmdListIndex]->GetGPUVirtualAddress();

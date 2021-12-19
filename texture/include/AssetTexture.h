@@ -78,6 +78,9 @@ class AssetTexture : public Texture
                            ComPtr<ID3D12GraphicsCommandList4>& cmdList,
                            ComPtr<ID3D12Device>&              device);
 
+    void _buildCubeMapTextureDX(std::string skyboxName, ComPtr<ID3D12GraphicsCommandList4>& cmdList,
+                                ComPtr<ID3D12Device>& device);
+
 
     bool _getTextureData(std::string textureName);
     void _load(const std::string& path);

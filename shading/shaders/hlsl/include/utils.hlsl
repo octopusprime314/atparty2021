@@ -564,6 +564,16 @@ float3x3 GetTBN(float3 surfaceNormal, uint instanceIndex, uint primitiveIndex)
     return tbnMat;
 }
 
+float4 GetAtmosphericDiffuseLighting(float height)
+{
+    return float4(0.0, 0.0, 0.44, 0.0);
+    //return float4(0.0, 0.3, 0.44, 0.0);
+    //return float4(137.0 / 256.0, 207.0 / 256.0, 240.0 / 256.0, 0.0) / 4.0;
+    //return float4(137.0 / 256.0, 207.0 / 256.0, 240.0 / 256.0, 0.0);
+    //return float4(137.0 / 256.0, 207.0 / 256.0, 240.0 / 256.0, 0.0) * (height * 3.0) + 
+    //    float4(0.0, 0.0, 0.44, 0.0) * (1.0 - height * 3.0);
+}
+
 void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
                            out float3                  albedo,
                            out float                   roughness,
@@ -632,19 +642,28 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     if (uniformMaterials[attributeIndex].validBits & RoughnessValidBit)
     {
         roughness = uniformMaterials[attributeIndex].roughness;
+        roughness = max(roughness, 0.05);
     }
     else
     {
         roughness = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
                         .SampleLevel(bilinearWrap, uvCoord, mipLevel)
                         .y;
+
+        roughness = max(roughness, 0.05);
     }
 
     metallic = 0.0;
-    /*if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
+    if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
     {
         metallic = uniformMaterials[attributeIndex].metallic;
-    }*/
+    }
+    else
+    {
+        metallic = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
+                        .SampleLevel(bilinearWrap, uvCoord, mipLevel)
+                        .z;
+    }
 
     normal = float3(0.0, 0.0, 0.0);
 
@@ -683,7 +702,6 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
             if (length(normalMap) == 0.0)
             {
                 normal = -normalize(mul(tbnMat[2], instanceNormalMatrixTransform));
-                //normal = -normalize(tbnMat[2]);
             }
             else
             {
