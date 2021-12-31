@@ -3,7 +3,7 @@
 #ifndef __RANDOM_RAYS_HLSL__
 #define __RANDOM_RAYS_HLSL__
 
-float3 GetRandomRayDirection(in uint2 srcRayIndex, in float3 surfaceNormal, in uint2 textureDim, in uint raySampleIndexOffset)
+float3 GetRandomRayDirection(in uint2 srcRayIndex, in float3 surfaceNormal, in uint2 textureDim, in uint raySampleIndexOffset, in float3 position)
 {
     // Calculate coordinate system for the hemisphere.
     float3 u, v, w;
@@ -30,7 +30,7 @@ float3 GetRandomRayDirection(in uint2 srcRayIndex, in float3 surfaceNormal, in u
         // This breaks noise correlation on camera movement which otherwise results 
         // in noise pattern swimming across the screen on camera movement.
         uint2 pixelZeroId = sampleSetId * numPixelsPerDimPerSet;
-        float3 pixelZeroHitPosition = positionSRV[pixelZeroId].xyz; 
+        float3 pixelZeroHitPosition = position;
         uint sampleSetSeed = (sampleSetId.y * numSampleSetsInX + sampleSetId.x) * hash(pixelZeroHitPosition) + seed;
         uint RNGState = RNG::SeedThread(sampleSetSeed);
 
@@ -53,7 +53,7 @@ float3 GetRandomRayDirection(in uint2 srcRayIndex, in float3 surfaceNormal, in u
     return rayDirection;
 }
 
-float3 GetRandomSample(in uint2 srcRayIndex, in uint2 textureDim)
+float3 GetRandomSample(in uint2 srcRayIndex, in uint2 textureDim, in float3 position)
 {
     // Calculate offsets to the pregenerated sample set.
     uint sampleSetJump; // Offset to the start of the sample set
@@ -71,7 +71,7 @@ float3 GetRandomSample(in uint2 srcRayIndex, in uint2 textureDim)
         // This breaks noise correlation on camera movement which otherwise results
         // in noise pattern swimming across the screen on camera movement.
         uint2  pixelZeroId          = sampleSetId * numPixelsPerDimPerSet;
-        float3 pixelZeroHitPosition = positionSRV[pixelZeroId].xyz;
+        float3 pixelZeroHitPosition = position;
         uint   sampleSetSeed        = (sampleSetId.y * numSampleSetsInX + sampleSetId.x) * hash(pixelZeroHitPosition) + seed;
         uint   RNGState = RNG::SeedThread(sampleSetSeed);
 

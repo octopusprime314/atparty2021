@@ -3,14 +3,14 @@
 #include "NRD.hlsl"
 
 float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float roughness,
-                       float metallic, int2 threadId,
+                       float metallic, int2 threadId, float3 prevPosition,
                        inout float3 diffuseRadiance,
                        inout float3 specularRadiance,
                        out   float3 lightRadiance,
                        bool recordOcclusion = false)
 {
-    float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
-    float3 eyeVector      = normalize(hitPosition - cameraPosition);
+    //float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
+    float3 eyeVector      = normalize(hitPosition - prevPosition);
 
     float3 F0 = float3(0.04f, 0.04f, 0.04f);
     F0        = lerp(F0, albedo, metallic);
@@ -55,7 +55,7 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
 
     ray.Origin                 = hitPosition + (-lightDirection * 0.001);
     float3 penumbraLightVector = -lightDirection;
-    penumbraLightVector        = penumbraLightVector + GetRandomRayDirection(threadId, penumbraLightVector, screenSize, 0) * 0.005;
+    penumbraLightVector        = penumbraLightVector + GetRandomRayDirection(threadId, penumbraLightVector, screenSize, 0, hitPosition) * 0.005;
     ray.Direction              = penumbraLightVector;
 
     // Always edge out ray min value towards the sun to prevent self occlusion

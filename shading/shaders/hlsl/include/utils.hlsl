@@ -635,23 +635,22 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     }
     else
     {
-        albedo = pow(diffuseTexture[NonUniformResourceIndex(materialIndex)].SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz, 2.2);
+        albedo = diffuseTexture[NonUniformResourceIndex(materialIndex)].SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz;
     }
 
     roughness = 0.0;
     if (uniformMaterials[attributeIndex].validBits & RoughnessValidBit)
     {
         roughness = uniformMaterials[attributeIndex].roughness;
-        roughness = max(roughness, 0.05);
     }
     else
     {
         roughness = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
                         .SampleLevel(bilinearWrap, uvCoord, mipLevel)
                         .y;
-
-        roughness = max(roughness, 0.05);
     }
+
+    roughness = max(roughness, 0.05);
 
     metallic = 0.0;
     if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)
