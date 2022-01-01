@@ -22,6 +22,7 @@ struct UniformMaterial
     float  metallic;
     float  roughness;
     float  transmittance;
+    float3 emissiveColor;
     uint   validBits;
 };
 
@@ -55,7 +56,7 @@ struct Payload
     uint   recursionCount;
 };
 
-#define MAX_LIGHTS 1024
+#define MAX_LIGHTS 24
 #define MAX_RAY_LENGTH 100000.0
 #define MIN_RAY_LENGTH 0.0
 #define RECURSION_LIMIT 31

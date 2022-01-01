@@ -46,6 +46,7 @@ const uint32_t ColorValidBit     = 1;
 const uint32_t NormalValidBit    = 2;
 const uint32_t RoughnessValidBit = 4;
 const uint32_t MetallicValidBit  = 8;
+const uint32_t EmissiveValidBit  = 16;
 
 struct UniformMaterial
 {
@@ -53,6 +54,7 @@ struct UniformMaterial
     float metallic;
     float roughness;
     float transmittance;
+    float emissiveColor[3];
     uint32_t validBits;
 };
 

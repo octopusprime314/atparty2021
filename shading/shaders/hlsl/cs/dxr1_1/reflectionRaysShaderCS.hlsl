@@ -31,17 +31,13 @@ cbuffer globalData : register(b0)
     float4x4 inverseView;
     float4x4 viewTransform;
 
-    float4 pointLightColors[MAX_LIGHTS];
-    float4 pointLightRanges[MAX_LIGHTS / 4];
-    float4 pointLightPositions[MAX_LIGHTS];
+    float4 lightColors[MAX_LIGHTS];
+    float4 lightPositions[MAX_LIGHTS];
+    float4  lightRanges[MAX_LIGHTS/4];
+    uint   isPointLight[MAX_LIGHTS];
+    uint   numLights;
 
-    float4 sunLightColor;
-    float4 sunLightPosition;
     float2 screenSize;
-    float  sunLightRadius;
-    float  sunLightRange;
-    
-    int    numPointLights;
 
     uint seed;
     uint numSamplesPerSet;
@@ -53,7 +49,7 @@ cbuffer globalData : register(b0)
     uint frameNumber;
 }
 
-#include "../../include/pointLightCommon.hlsl"
+//#include "../../include/pointLightCommon.hlsl"
 #include "../../include/sunLightCommon.hlsl"
 #include "../../include/utils.hlsl"
 
@@ -80,15 +76,10 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     int renderVariant = 2;
 
-    float3 diffuseRadiance = float3(0.0, 0.0, 0.0);
-    float3 specularRadiance = float3(0.0, 0.0, 0.0);
-    float3 indirectRadiance = float3(0.0, 0.0, 0.0);
-
     float3 indirectDiffuse   = float3(0.0, 0.0, 0.0);
     float3 indirectSpecular = float3(0.0, 0.0, 0.0);
     float3 lightRadiance;
 
-    float3 indirectLighting = float3(0.0, 0.0, 0.0);
     float3 indirectPos         = float3(0.0, 0.0, 0.0);
     float3 indirectNormal      = float3(0.0, 0.0, 0.0);
     float  indirectHitDistance = 0.0;
@@ -105,22 +96,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     float transmittance = 0.0;
     float metallic      = 0.0;
+    float3 emissiveColor = float3(0.0, 0.0, 0.0);
     float roughness     = 0.0;
 
-    float3 cachedPrimaryHitPosition = float3(0.0, 0.0, 0.0);
-    float3 cachedPrimaryNormal      = float3(0.0, 0.0, 0.0);
-
-    float3 cachedSpecularLightEnergy = float3(1.0, 1.0, 1.0);
-    float3 cachedDiffuseLightEnergy  = float3(1.0, 1.0, 1.0);
-
-    float3 previousSpecularPosition = float3(1.0, 1.0, 1.0);
-    float3 previousSpecularNormal = float3(1.0, 1.0, 1.0);
-    float  previousRoughness        = 0.0;
     float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
-
     float3 previousPosition = float3(0.0, 0.0, 0.0);
 
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < 10; i++)
     {
         indirectNormal = normalize(-indirectNormal);
         bool diffuseRay = true;
@@ -152,7 +134,6 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 // http://jcgt.org/published/0007/04/01/paper.pdf
                 
                 float3 lightVector = normalize(indirectPos - previousPosition);
-                //cameraPosition   = indirectPos;
                 
                 float2 rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
                 
@@ -238,61 +219,82 @@ void main(int3 threadId            : SV_DispatchThreadID,
             rayData.objectToWorld     = rayQuerySpecular.CommittedObjectToWorld4x3();
             rayData.uvIsValid         = false;
 
-            ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal,
-                                    indirectPos, transmittance);
+            ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal, indirectPos,
+                                  transmittance, emissiveColor);
+
+            emissiveColor *= 10.0;
 
             if (rayQuerySpecular.CommittedTriangleFrontFace() == false)
             {
                 indirectNormal = -indirectNormal;
             }
 
-            float3 currIndirectRadiance = float3(0.0, 0.0, 0.0);
-            float3  currIndirectSpecularRadiance = float3(0.0, 0.0, 0.0);
-            float3 currLightRadiance = float3(0.0, 0.0, 0.0);
-            float3 indirectLighting = GetBRDFSunLight(albedo, indirectNormal, indirectPos, roughness, metallic, threadId.xy, previousPosition, currIndirectRadiance, currIndirectSpecularRadiance,
-                                currLightRadiance);
+            float3 accumulatedLightRadiance = float3(0.0, 0.0, 0.0);
+            float3 accumulatedDiffuseRadiance = float3(0.0, 0.0, 0.0);
+            float3 accumulatedSpecularRadiance = float3(0.0, 0.0, 0.0);
+
+            for (int lightIndex = 0; lightIndex < numLights; lightIndex++)
+            {
+                float3 lightRadiance            = float3(0.0, 0.0, 0.0);
+                float3 indirectDiffuseRadiance  = float3(0.0, 0.0, 0.0);
+                float3 indirectSpecularRadiance = float3(0.0, 0.0, 0.0);
+
+                float3 indirectLighting = GetBRDFLight(albedo, indirectNormal, indirectPos, roughness, metallic, threadId.xy, previousPosition,
+                                 lightPositions[lightIndex].xyz, isPointLight[lightIndex], lightRanges[lightIndex/4][lightIndex%4], lightColors[lightIndex].xyz,
+                                 indirectDiffuseRadiance, indirectSpecularRadiance, lightRadiance);
+
+                accumulatedLightRadiance += lightRadiance;
+                accumulatedDiffuseRadiance += indirectDiffuseRadiance;
+                accumulatedSpecularRadiance += indirectSpecularRadiance;
+            }
 
             indirectHitDistanceSpecular += rayQuerySpecular.CommittedRayT();
 
-            /*if (i % 2 == 1)
-            {
-                indirectDiffuse += currIndirectRadiance * currLightRadiance * indirectDiffuseLightEnergy;
-                indirectDiffuseLightEnergy *= currIndirectRadiance;
-            }
-            else
-            {*/
-                //indirectDiffuse += currIndirectRadiance * currLightRadiance * indirectDiffuseLightEnergy;
-                //indirectDiffuseLightEnergy *= currIndirectRadiance;
-                //
             if (i == 0)
             {
-                indirectDiffuse += (currIndirectSpecularRadiance + currIndirectRadiance) *
-                                    currLightRadiance * indirectSpecularLightEnergy;
+                if (length(emissiveColor) > 0.0)
+                {
+                    // Account for emissive surfaces
+                    indirectDiffuse += indirectDiffuseLightEnergy * emissiveColor;
+                }
+
+                indirectDiffuse += (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
+                                   accumulatedLightRadiance * indirectDiffuseLightEnergy;
             }
             else
             {
                 if (diffuseRay == true)
                 {
-                    indirectDiffuse += (currIndirectSpecularRadiance + currIndirectRadiance) *
-                                        currLightRadiance * indirectDiffuseLightEnergy;
+                    if (length(emissiveColor) > 0.0)
+                    {
+                        // Account for emissive surfaces
+                        indirectDiffuse += indirectDiffuseLightEnergy * emissiveColor;
+                    }
+
+                    indirectDiffuse += (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
+                                       accumulatedLightRadiance * indirectDiffuseLightEnergy;
                 }
                 else
                 {
-                    indirectSpecular += (currIndirectSpecularRadiance + currIndirectRadiance) *
-                                        currLightRadiance * indirectSpecularLightEnergy;
+                    if (length(emissiveColor) > 0.0)
+                    {
+                        // Account for emissive surfaces
+                        indirectSpecular += indirectSpecularLightEnergy * emissiveColor;
+                    }
+
+                    indirectSpecular += (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
+                                        accumulatedLightRadiance * indirectSpecularLightEnergy;
                 }
             }
 
             // Specular
-            float2   rng3         = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
+            float2   rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
             float3x3 basis = orthoNormalBasis(indirectNormal);
             float3 N = indirectNormal;
             float3 V = raySpecular.Direction;
             float3 H = ImportanceSampleGGX_VNDF(rng3, roughness, V, basis);
             float3 reflectedRay = reflect(V, H);
 
-            //float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
-            //float3 lightVector = normalize(raySpecular.Direction);
             float3 lightVector = normalize(indirectPos - previousPosition);
 
             float3 F0 = float3(0.04f, 0.04f, 0.04f);
@@ -315,10 +317,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             // Metallic of 1.0 signals only specular component of light
             kD *= 1.0 - metallic;
 
-            float3 numerator   = NDF * G * F;
-            float  denominator = 4.0 * max(dot(indirectNormal, lightVector), 0.0f) *
-                                max(dot(indirectNormal, halfVector), 0.0f);
-            float3 specular = numerator / max(denominator, 0.001f);
+            float3 numerator = NDF * G * F;
 
             float3 specularWeight = G * F;
             indirectSpecularLightEnergy *= specularWeight;

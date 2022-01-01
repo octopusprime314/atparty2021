@@ -82,6 +82,7 @@ static float refractionIndex = 1.0 - reflectionIndex;
             float3 normal;
             float3 hitPosition;
             float  transmittance;
+            float3 emissiveColor;
 
             RayTraversalData rayData;
             rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
@@ -100,7 +101,8 @@ static float refractionIndex = 1.0 - reflectionIndex;
                                   metallic,
                                   normal,
                                   hitPosition,
-                                  transmittance);
+                                  transmittance,
+                                  emissiveColor);
 
             if (rayQuery.CommittedTriangleFrontFace() == false)
             {

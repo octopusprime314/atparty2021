@@ -152,13 +152,13 @@ std::optional<SceneLight> EngineManager::getSceneLight(const std::string& lightN
 
 void EngineManager::processLights(std::vector<Light*>&  lights,
                                   ViewEventDistributor* viewEventDistributor,
-                                  PointLightList&       pointLightList,
+                                  PointLightList&       lightList,
                                   bool                  addLights)
 {
     // Use map to sort the lights based on distance from the viewer
     std::map<float, int> lightsSorted;
-    // Get point light positions
-    unsigned int pointLights = 0;
+    // Get light positions
+    unsigned int lightCount = 0;
 
     Vector4 cameraPos  = viewEventDistributor->getCameraPos();
     //cameraPos.getFlatBuffer()[2] = -cameraPos.getFlatBuffer()[2];
@@ -200,19 +200,17 @@ void EngineManager::processLights(std::vector<Light*>&  lights,
         previousTime = MasterClock::instance()->getGameTime();
     }
 
-    int pointLightOffset = 0;
+    int lightOffset = 0;
     for (auto& light : lights)
     {
-        if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
-        {
-            Vector4 pointLightPos     = light->getPosition();
-            Vector4 pointLightVector  = cameraPos + pointLightPos;
-            float   distanceFromLight = pointLightVector.getMagnitude();
+        Vector4 lightPos     = light->getPosition();
+        Vector4 lightVector  = cameraPos + lightPos;
+        float   distanceFromLight = lightVector.getMagnitude();
 
-            lightsSorted.insert(std::pair<float, int>(distanceFromLight, pointLightOffset));
-            pointLights++;
-        }
-        pointLightOffset++;
+        lightsSorted.insert(std::pair<float, int>(distanceFromLight, lightOffset));
+        lightCount++;
+
+        lightOffset++;
     }
 
     int       lightPosIndex    = 0;
@@ -222,23 +220,22 @@ void EngineManager::processLights(std::vector<Light*>&  lights,
     for (auto& lightIndex : lightsSorted)
     {
         auto light = lights[lightIndex.second];
-        // If point light then add to uniforms
-        if (light->getType() == LightType::POINT || light->getType() == LightType::SHADOWED_POINT)
+        // Point lights need to remain stationary so move lights with camera space changes
+        auto   pos       = light->getPosition();
+        float* posBuff   = pos.getFlatBuffer();
+        float* colorBuff = light->getColor().getFlatBuffer();
+        for (int i = 0; i < 4; i++)
         {
-            // Point lights need to remain stationary so move lights with camera space changes
-            auto   pos       = light->getPosition();
-            float* posBuff   = pos.getFlatBuffer();
-            float* colorBuff = light->getColor().getFlatBuffer();
-            for (int i = 0; i < 4; i++)
-            {
-                pointLightList.lightPosArray[lightPosIndex++] = posBuff[i];
-                pointLightList.lightColorsArray[lightColorIndex++] = colorBuff[i];
-            }
-            pointLightList.lightRangesArray[lightRangeIndex++] = light->getScale().getFlatBuffer()[0];
-            totalLights++;
+            lightList.lightPosArray[lightPosIndex++]      = posBuff[i];
+            lightList.lightColorsArray[lightColorIndex++] = colorBuff[i];
         }
+
+        lightList.isPointLightArray[lightRangeIndex] = light->getType() == LightType::POINT ? true : false;
+        lightList.lightRangesArray[lightRangeIndex++] = light->getScale().getFlatBuffer()[0];
+
+        totalLights++;
     }
-    pointLightList.lightCount = pointLights;
+    lightList.lightCount = lightCount;
 }
 
 

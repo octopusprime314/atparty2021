@@ -740,6 +740,9 @@ void BuildGltfMeshes(const Document*           document,
                 uniformMaterials.back().validBits |= MetallicValidBit;
             }
 
+            // Always use uniform emissive until textures are supported
+            uniformMaterials.back().validBits |= EmissiveValidBit;
+
             // If material roughness is supplied then just use albedo
             if (materialsFound[1] == false ||
                 materialsFound[2] == false)
@@ -783,11 +786,14 @@ void BuildGltfMeshes(const Document*           document,
                 uniformMaterials.back().transmittance = 0.0;
             }
 
-            uniformMaterials.back().baseColor[0] = material.metallicRoughness.baseColorFactor.r;
-            uniformMaterials.back().baseColor[1] = material.metallicRoughness.baseColorFactor.g;
-            uniformMaterials.back().baseColor[2] = material.metallicRoughness.baseColorFactor.b;
-            uniformMaterials.back().metallic     = material.metallicRoughness.metallicFactor;
-            uniformMaterials.back().roughness    = material.metallicRoughness.roughnessFactor;
+            uniformMaterials.back().baseColor[0]  = material.metallicRoughness.baseColorFactor.r;
+            uniformMaterials.back().baseColor[1]  = material.metallicRoughness.baseColorFactor.g;
+            uniformMaterials.back().baseColor[2]  = material.metallicRoughness.baseColorFactor.b;
+            uniformMaterials.back().metallic      = material.metallicRoughness.metallicFactor;
+            uniformMaterials.back().roughness     = material.metallicRoughness.roughnessFactor;
+            uniformMaterials.back().emissiveColor[0] = material.emissiveFactor.r;
+            uniformMaterials.back().emissiveColor[1] = material.emissiveFactor.g;
+            uniformMaterials.back().emissiveColor[2] = material.emissiveFactor.b;
 
             texturesPerMaterial.push_back(textureIndexing.size() - texturesPrevSize);
         }
@@ -1061,16 +1067,18 @@ void BuildGltfMeshes(const Document*           document,
                 SceneLight sceneLight;
                 
                 auto color           = light["color"];
+                auto lightType       = light["type"];
                 auto intensity       = light["intensity"];
 
                 sceneLight.color     = Vector4(color[0], color[1], color[2]);
-                sceneLight.lightType = LightType::POINT;
+                sceneLight.lightType  = lightType == "point" ? LightType::POINT : LightType::DIRECTIONAL;
                 sceneLight.effectType = EffectType::Fire;
                 sceneLight.name      = light["name"];
                 sceneLight.scale     = Vector4(intensity, intensity, intensity);
                 sceneLight.lockedIdx = -1;
 
                 bool foundLight = false;
+                nodeIndex       = 0;
                 // Use the resource reader to get each mesh primitive's position data
                 while (nodeIndex < document->nodes.Elements().size())
                 {
@@ -1109,7 +1117,6 @@ void BuildGltfMeshes(const Document*           document,
                                 //sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
 
                                 foundLight = true;
-                                //break;
                             }
                         }
                     }
@@ -1122,7 +1129,6 @@ void BuildGltfMeshes(const Document*           document,
                         sceneLight.waypointVectors = nodeWayPoints[nodeIndex];
                     }
                     EngineManager::instance()->addLight(sceneLight);
-                    break;
                 }
                 lightIndex++;
             }

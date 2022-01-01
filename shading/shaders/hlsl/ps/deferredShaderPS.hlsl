@@ -15,7 +15,7 @@ cbuffer globalData : register(b0)
     float4x4 inverseView;
 
     float4 pointLightColors[MAX_LIGHTS];
-    float4 pointLightRanges[MAX_LIGHTS / 4];
+    float pointLightRanges[MAX_LIGHTS];
     float4 pointLightPositions[MAX_LIGHTS];
 
     float4 sunLightColor;

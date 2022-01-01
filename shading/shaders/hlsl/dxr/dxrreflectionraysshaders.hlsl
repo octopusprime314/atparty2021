@@ -26,7 +26,7 @@ cbuffer globalData : register(b0)
     float4x4 inverseView;
 
     float4 pointLightColors[MAX_LIGHTS];
-    float4 pointLightRanges[MAX_LIGHTS / 4];
+    float pointLightRanges[MAX_LIGHTS];
     float4 pointLightPositions[MAX_LIGHTS];
 
     float2 screenSize;
@@ -161,6 +161,7 @@ void ReflectionRaygen()
     float3 normal;
     float3 hitPosition;
     float  transmittance;
+    float3 emissiveColor;
 
     ProcessOpaqueTriangle(rayData,
                           albedo,
@@ -168,7 +169,8 @@ void ReflectionRaygen()
                           metallic,
                           normal,
                           hitPosition,
-                          transmittance);
+                          transmittance,
+                          emissiveColor);
 
     debugUAV[DispatchRaysIndex().xy].xyz = hitPosition;
 

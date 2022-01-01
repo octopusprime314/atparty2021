@@ -580,7 +580,8 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
                            out float                   metallic,
                            out float3                  normal,
                            out float3                  hitPosition,
-                           out float                   transmittance)
+                           out float                   transmittance,
+                           out float3                  emissiveColor)
 {
     hitPosition = rayData.worldRayOrigin + (rayData.closestRayT * rayData.worldRayDirection);
 
@@ -712,5 +713,6 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     }
 
     transmittance = uniformMaterials[attributeIndex].transmittance;
+    emissiveColor = uniformMaterials[attributeIndex].emissiveColor;
 }
 #endif

@@ -40,7 +40,7 @@ float3 GetBRDFPointLight(in    float3 albedo,
     {
         // calculate per-light radiance
         float3 lightDirection = normalize(hitPosition - pointLightPositions[i].xyz);
-        float  lightRange     = pointLightRanges[i / 4][i % 4];
+        float  lightRange     = pointLightRanges[i];
         float3 halfVector     = normalize(eyeVector + lightDirection);
         // Offset distance is a way to compute diffuse indirect lighting
         float  distance       = length(pointLightPositions[i].xyz - hitPosition);

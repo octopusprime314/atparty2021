@@ -70,8 +70,9 @@ MRT main(in float4 position    : SV_POSITION,
     float3 hitPosition;
     float  transmittance;
     float3 tbnNormal;
+    float3 emissiveColor;
 
-    ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, tbnNormal, hitPosition, transmittance);
+    ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, tbnNormal, hitPosition, transmittance, emissiveColor);
 
     output.color    = float4(albedo, transmittance);
     output.normal   = float4(-tbnNormal, roughness);

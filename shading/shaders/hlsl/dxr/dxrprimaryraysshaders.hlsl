@@ -25,7 +25,7 @@ cbuffer globalData : register(b0)
     uint     texturesPerMaterial;
 
     float4 pointLightColors[MAX_LIGHTS];
-    float4 pointLightRanges[MAX_LIGHTS / 4];
+    float pointLightRanges[MAX_LIGHTS];
     float4 pointLightPositions[MAX_LIGHTS];
     int    numPointLights;
 
@@ -90,6 +90,7 @@ void PrimaryRaygen()
     float3 normal;
     float3 hitPosition;
     float  transmittance;
+    float3 emissiveColor;
 
     RayTraversalData rayData;
     rayData.worldRayOrigin    = WorldRayOrigin();
@@ -108,7 +109,8 @@ void PrimaryRaygen()
                           metallic,
                           normal,
                           hitPosition,
-                          transmittance);
+                          transmittance,
+                          emissiveColor);
 
     normalUAV  [DispatchRaysIndex().xy].xyz = normal;
     positionUAV[DispatchRaysIndex().xy].xyz = hitPosition;

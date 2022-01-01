@@ -2,14 +2,13 @@
 #include "randomRays.hlsl"
 #include "NRD.hlsl"
 
-float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float roughness,
+float3 GetBRDFLight(float3 albedo, float3 normal, float3 hitPosition, float roughness,
                        float metallic, int2 threadId, float3 prevPosition,
+                       float3 lightPos, uint pointLight, float lightIntensity, float3 lightColor,
                        inout float3 diffuseRadiance,
                        inout float3 specularRadiance,
-                       out   float3 lightRadiance,
-                       bool recordOcclusion = false)
+                       out   float3 lightRadiance)
 {
-    //float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
     float3 eyeVector      = normalize(hitPosition - prevPosition);
 
     float3 F0 = float3(0.04f, 0.04f, 0.04f);
@@ -18,21 +17,18 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     // reflectance equation
     float3 Lo = float3(0.0f, 0.0f, 0.0f);
 
-    float3 sunLightPos = sunLightPosition.xyz;
-
     // calculate per-light radiance
-    float3 lightDirection = normalize(hitPosition - sunLightPos);
+    float3 lightDirection = normalize(hitPosition - lightPos);
     float3 halfVector     = normalize(eyeVector + lightDirection);
-    float  distance       = length(hitPosition - sunLightPos);
-    float3 radiance       = sunLightColor.xyz * sunLightRange;
+    float  distance       = length(hitPosition - lightPos);
+    float3 radiance       = lightColor * lightIntensity;
 
-    // Treat the sun as an infinite power light source so no need to apply attenuation
-    float  attenuation    = 1.0f / (distance * distance);
-    //radiance *= attenuation;
-
-    // Weird sun light leaking is occuring and for now just basically disable the sun light within
-    // the cave for pbr testing
-    float lightRange = sunLightRange;
+    if (pointLight == 1)
+    {
+        // Attenuate point lights and not directional lights like the sun
+        float attenuation = 1.0f / (distance * distance);
+        radiance *= attenuation;
+    }
 
     bool occluded = false;
 
@@ -46,11 +42,6 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     // but also shorten the ray to make sure it doesn't hit the primary ray target
     ray.TMax = distance;
 
-    // For directional shoot from hit position toward the light position
-    // Adding noise to ray
-
-    float sunLightRadius = sunLightRange / 400.0f;
-
     float2 index = threadId.xy;
 
     ray.Origin                 = hitPosition + (-lightDirection * 0.001);
@@ -58,7 +49,6 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     penumbraLightVector        = penumbraLightVector + GetRandomRayDirection(threadId, penumbraLightVector, screenSize, 0, hitPosition) * 0.005;
     ray.Direction              = penumbraLightVector;
 
-    // Always edge out ray min value towards the sun to prevent self occlusion
     ray.TMin = MIN_RAY_LENGTH;
 
     // Cull non opaque here occludes the light sources holders from casting shadows
@@ -91,22 +81,6 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
     if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
     {
         occluded = true;
-        /*float3 prevPosition = hitPosition;
-
-        RayTraversalData rayData;
-        rayData.worldRayOrigin    = rayQuery.WorldRayOrigin();
-        rayData.closestRayT       = rayQuery.CommittedRayT();
-        rayData.worldRayDirection = rayQuery.WorldRayDirection();
-        rayData.geometryIndex     = rayQuery.CommittedGeometryIndex();
-        rayData.primitiveIndex    = rayQuery.CommittedPrimitiveIndex();
-        rayData.instanceIndex     = rayQuery.CommittedInstanceIndex();
-        rayData.barycentrics      = rayQuery.CommittedTriangleBarycentrics();
-        rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
-        rayData.uvIsValid         = false;
-
-        float transmittance = 0.0;
-        ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, normal, hitPosition,
-                                transmittance);*/
 
         lightRadiance = float3(0.0, 0.0, 0.0);
 
@@ -114,21 +88,11 @@ float3 GetBRDFSunLight(float3 albedo, float3 normal, float3 hitPosition, float r
 
         specularRadiance = specular;
 
-        //Lo = float3(0.0, 1.0, 0.0);
-
     }
     else
     {
         occluded    = false;
         float NdotL = max(dot(normal, lightDirection), 0.0f);
-
-        // 1) Add the diffuse and specular light components and multiply them by the overall incident ray's light energy (radiance)
-        // and then also multiply by the alignment of the surface normal with the incoming light ray's direction and shadowed intensity.
-        // 2) NdotL basically says that more aligned the normal and light direction is, the more the light
-        // will be scattered within the surface (diffuse lighting) rather than get reflected (specular)
-        // which will get color from the diffuse surface the reflected light hits after the bounce.
-        Lo = (diffuse + specular) * radiance * NdotL/* * (min(1.0, occlusionHistoryUAV[threadId.xy].x + 0.3))*/;
-        //Lo = float3(1.0, 0.0, 0.0);
 
         lightRadiance = radiance * NdotL;
 

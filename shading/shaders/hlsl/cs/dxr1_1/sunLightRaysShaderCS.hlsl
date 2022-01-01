@@ -34,8 +34,8 @@ cbuffer globalData : register(b0)
 {
     float4x4 inverseView;
     float4   pointLightColors[MAX_LIGHTS];
-    float4   pointLightRanges[MAX_LIGHTS / 4];
     float4   pointLightPositions[MAX_LIGHTS];
+    float  pointLightRanges[MAX_LIGHTS];
 
     float4 sunLightColor;
     float4 sunLightPosition;
@@ -83,7 +83,7 @@ void main(int3 threadId : SV_DispatchThreadID,
     {
         float3 diffuseRadiance = float3(0.0, 0.0, 0.0);
         //float3 sunLighting =
-        //    GetBRDFSunLight(albedo, normal, position, roughness, metallic, threadId.xy, diffuseRadiance);
+        //    GetBRDFLight(albedo, normal, position, roughness, metallic, threadId.xy, diffuseRadiance);
 
         sunLightUAV[threadId.xy] = float4(diffuseRadiance.xyz, 1.0);
     }

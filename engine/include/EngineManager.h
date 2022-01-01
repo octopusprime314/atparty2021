@@ -51,11 +51,12 @@ enum class GraphicsLayer
 
 struct PointLightList
 {
-    // Constant max of 1024 lights in shader
-    static const int MAX_LIGHTS = 1024;
+    // Constant max of 24 lights in shader
+    static const int MAX_LIGHTS = 24;
     float            lightPosArray[4 * MAX_LIGHTS];
     float            lightColorsArray[4 * MAX_LIGHTS];
     float            lightRangesArray[MAX_LIGHTS];
+    uint32_t         isPointLightArray[MAX_LIGHTS];
     uint32_t         lightCount;
 };
 

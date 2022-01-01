@@ -427,8 +427,8 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     cmdList->ResourceBarrier(4, barrierDesc);
 
     // Process point lights
-    PointLightList pointLightList;
-    EngineManager::instance()->processLights(lights, viewEventDistributor, pointLightList, RandomInsertAndRemoveEntities);
+    PointLightList lightList;
+    EngineManager::instance()->processLights(lights, viewEventDistributor, lightList, RandomInsertAndRemoveEntities);
 
     auto end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     //auto milliSecondsPassed = end - begin;
@@ -436,28 +436,28 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     const long long timing = 500000;
     end                    = end % timing;
 
-    // Process directional light
-    // more yellow light Vector4(0.97, 0.84, 0.1)
-    float   sunLightRange  = 1000.0;
-    //Default light if there isn't one in the file
-    Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4);
-    //Vector4 sunLightPos = Vector4(0.0, 7.6, 0.0);
-    // Vector4 sunLightPos    = Vector4(-50000.0 * std::cos(90 * ((end/(timing / 2.0f)) - 1.0)), 1000.0, 50000.0);
-    // Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4) * 500.0;
-    Vector4 sunLightPos = Vector4(5000.0, 1600.0, 0.0);
-    float   sunLightRadius = 100.0f;
+    //// Process directional light
+    //// more yellow light Vector4(0.97, 0.84, 0.1)
+    //float   sunLightRange  = 1000.0;
+    ////Default light if there isn't one in the file
+    //Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4);
+    ////Vector4 sunLightPos = Vector4(0.0, 7.6, 0.0);
+    //// Vector4 sunLightPos    = Vector4(-50000.0 * std::cos(90 * ((end/(timing / 2.0f)) - 1.0)), 1000.0, 50000.0);
+    //// Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4) * 500.0;
+    //Vector4 sunLightPos = Vector4(5000.0, 1600.0, 0.0);
+    //float   sunLightRadius = 100.0f;
 
-    for (auto& light : lights)
-    {
-        if (light->getType() == LightType::POINT)
-        {
-            // Point lights need to remain stationary so move lights with camera space changes
-            sunLightPos   = light->getPosition();
-            sunLightColor = light->getColor();
-            sunLightRange = light->getScale().getx();
-            break;
-        }
-    }
+    //for (auto& light : lights)
+    //{
+    //    if (light->getType() == LightType::POINT)
+    //    {
+    //        // Point lights need to remain stationary so move lights with camera space changes
+    //        sunLightPos   = light->getPosition();
+    //        sunLightColor = light->getColor();
+    //        sunLightRange = light->getScale().getx();
+    //        break;
+    //    }
+    //}
 
     std::uniform_int_distribution<UINT> seedDistribution(0, UINT_MAX);
     UINT seed                  = seedDistribution(_generatorURNG);
@@ -519,18 +519,15 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
     resourceManager->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
 
-    shader->updateData("numPointLights", &pointLightList.lightCount, true);
-    shader->updateData("pointLightColors", pointLightList.lightColorsArray, true);
-    shader->updateData("pointLightRanges", pointLightList.lightRangesArray, true);
-    shader->updateData("pointLightPositions", pointLightList.lightPosArray, true);
+    shader->updateData("numLights", &lightList.lightCount, true);
+    shader->updateData("lightColors", lightList.lightColorsArray, true);
+    shader->updateData("lightRanges", lightList.lightRangesArray, true);
+    shader->updateData("lightPositions", lightList.lightPosArray, true);
+    shader->updateData("isPointLight", lightList.isPointLightArray, true);
 
     shader->updateData("texturesPerMaterial", &texturesPerMaterial, true);
 
     shader->updateData("screenSize", screenSize, true);
-    shader->updateData("sunLightColor", sunLightColor.getFlatBuffer(), true);
-    shader->updateData("sunLightRange", &sunLightRange, true);
-    shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), true);
-    shader->updateData("sunLightRadius", &sunLightRadius, true);
 
     shader->updateData("seed", &seed, true);
     shader->updateData("numSamplesPerSet", &numSamplesPerSet, true);
