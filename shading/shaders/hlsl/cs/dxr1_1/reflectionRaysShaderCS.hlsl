@@ -101,10 +101,12 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
     float3 previousPosition = float3(0.0, 0.0, 0.0);
-
-    for (i = 0; i < 10; i++)
+    float3 prevNormal       = float3(0.0, 0.0, 0.0);
+    float  emissiveColorHits = 0;
+    for (i = 0; i < 2; i++)
     {
         indirectNormal = normalize(-indirectNormal);
+        prevNormal      = indirectNormal;
         bool diffuseRay = true;
 
         float3 rayDir = float3(0.0, 0.0, 0.0);
@@ -115,11 +117,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
         else
         {
             float2 rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
-
+            
             if (rng3.x < 0.0 || rng3.y < 0.0)
             {
                 diffuseRay = true;
-                rayDir = GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos);
+                rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
             }
             else
             {
@@ -243,23 +245,29 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                  lightPositions[lightIndex].xyz, isPointLight[lightIndex], lightRanges[lightIndex/4][lightIndex%4], lightColors[lightIndex].xyz,
                                  indirectDiffuseRadiance, indirectSpecularRadiance, lightRadiance);
 
-                accumulatedLightRadiance += lightRadiance;
-                accumulatedDiffuseRadiance += indirectDiffuseRadiance;
-                accumulatedSpecularRadiance += indirectSpecularRadiance;
+                // bug fix for light leaking
+                if (length(lightRadiance) > 0.0)
+                {
+                    accumulatedLightRadiance += lightRadiance;
+                    accumulatedDiffuseRadiance += indirectDiffuseRadiance;
+                    accumulatedSpecularRadiance += indirectSpecularRadiance;
+                }
             }
 
             indirectHitDistanceSpecular += rayQuerySpecular.CommittedRayT();
+
 
             if (i == 0)
             {
                 if (length(emissiveColor) > 0.0)
                 {
+                    emissiveColorHits += 1.0f;
                     // Account for emissive surfaces
                     indirectDiffuse += indirectDiffuseLightEnergy * emissiveColor;
                 }
 
                 indirectDiffuse += (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
-                                   accumulatedLightRadiance * indirectDiffuseLightEnergy;
+                                    accumulatedLightRadiance * indirectDiffuseLightEnergy;
             }
             else
             {
@@ -267,17 +275,19 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 {
                     if (length(emissiveColor) > 0.0)
                     {
+                        emissiveColorHits += 1.0f;
                         // Account for emissive surfaces
                         indirectDiffuse += indirectDiffuseLightEnergy * emissiveColor;
                     }
 
                     indirectDiffuse += (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
-                                       accumulatedLightRadiance * indirectDiffuseLightEnergy;
+                                        accumulatedLightRadiance * indirectDiffuseLightEnergy;
                 }
                 else
                 {
                     if (length(emissiveColor) > 0.0)
                     {
+                        emissiveColorHits += 1.0f;
                         // Account for emissive surfaces
                         indirectSpecular += indirectSpecularLightEnergy * emissiveColor;
                     }
@@ -308,21 +318,12 @@ void main(int3 threadId            : SV_DispatchThreadID,
             float  G   = GeometrySmith(indirectNormal, lightVector, halfVector, roughness);
             float3 F   = FresnelSchlick(max(dot(halfVector, lightVector), 0.0), F0);
 
-            // Specular component of light that is reflected off the surface
-            float3 kS = F;
-            // Diffuse component of light is left over from what is not reflected and thus
-            // refracted
-            float3 kD = float3(1.0f, 1.0f, 1.0f) - kS;
-            // Metallic prevents any sort of diffuse (refracted) light from occuring.
-            // Metallic of 1.0 signals only specular component of light
-            kD *= 1.0 - metallic;
-
             float3 numerator = NDF * G * F;
 
             float3 specularWeight = G * F;
             indirectSpecularLightEnergy *= specularWeight;
 
-            float3 diffuseWeight = kD * albedo;
+            float3 diffuseWeight = albedo * (1.0 - metallic);
             indirectDiffuseLightEnergy *= diffuseWeight;
         }
         else
@@ -347,6 +348,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
             }
             break;
         }
+
+        //indirectDiffuse  = emissiveColorHits;
+        //indirectSpecular = prevNormal;
     }
 
     float4 hitDistanceParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
@@ -368,6 +372,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     float3 hdrColor = (((REBLUR_BackEnd_UnpackRadiance(indirectSpecularLightRaysHistoryBufferUAV[threadId.xy]))) +
                     (REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy]))).xyz;
+
+    //float3 hdrColor = indirectSpecularLightRaysHistoryBufferUAV[threadId.xy].xyz + indirectLightRaysHistoryBufferUAV[threadId.xy].xyz;
 
     const float gamma = 2.2;
     //const float exposure = 0.01;
