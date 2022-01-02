@@ -103,7 +103,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
     float3 previousPosition = float3(0.0, 0.0, 0.0);
     float3 prevNormal       = float3(0.0, 0.0, 0.0);
     float  emissiveColorHits = 0;
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < 5; i++)
     {
         indirectNormal = normalize(-indirectNormal);
         prevNormal      = indirectNormal;
