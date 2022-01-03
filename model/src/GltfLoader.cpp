@@ -1079,6 +1079,7 @@ void BuildGltfMeshes(const Document*           document,
 
                 bool foundLight = false;
                 nodeIndex       = 0;
+                int lightNodeIndex = 0;
                 // Use the resource reader to get each mesh primitive's position data
                 while (nodeIndex < document->nodes.Elements().size())
                 {
@@ -1115,7 +1116,7 @@ void BuildGltfMeshes(const Document*           document,
                                 Vector4 quaternion(node.rotation.x, node.rotation.y, node.rotation.z, node.rotation.w);
                                 sceneLight.position = Vector4(node.translation.x, node.translation.y, node.translation.z);
                                 //sceneLight.rotation = Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
-
+                                lightNodeIndex = nodeIndex;
                                 foundLight = true;
                             }
                         }
@@ -1124,9 +1125,9 @@ void BuildGltfMeshes(const Document*           document,
                 }
                 if (foundLight == true)
                 {
-                    if (nodeWayPoints.find(nodeIndex) != nodeWayPoints.end())
+                    if (nodeWayPoints.find(lightNodeIndex) != nodeWayPoints.end())
                     {
-                        sceneLight.waypointVectors = nodeWayPoints[nodeIndex];
+                        sceneLight.waypointVectors = nodeWayPoints[lightNodeIndex];
                     }
                     EngineManager::instance()->addLight(sceneLight);
                 }
