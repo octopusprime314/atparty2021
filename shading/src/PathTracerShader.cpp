@@ -248,8 +248,8 @@ PathTracerShader::PathTracerShader(std::string shaderName)
                                 (nri::WrapperD3D12Interface*)&_NRI);
 
     const nrd::MethodDesc methodDescs[] = {
-        {nrd::Method::SIGMA_SHADOW, static_cast<uint16_t>(IOEventDistributor::screenPixelWidth),
-         static_cast<uint16_t>(IOEventDistributor::screenPixelHeight)},
+        /*{nrd::Method::SIGMA_SHADOW, static_cast<uint16_t>(IOEventDistributor::screenPixelWidth),
+         static_cast<uint16_t>(IOEventDistributor::screenPixelHeight)},*/
         {nrd::Method::REBLUR_DIFFUSE, static_cast<uint16_t>(IOEventDistributor::screenPixelWidth),
          static_cast<uint16_t>(IOEventDistributor::screenPixelHeight)},
         {nrd::Method::REBLUR_SPECULAR, static_cast<uint16_t>(IOEventDistributor::screenPixelWidth),

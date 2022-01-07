@@ -76,7 +76,7 @@ float3 GetBRDFLight(float3 albedo, float3 normal, float3 hitPosition, float roug
     float3 numerator   = NDF * G * F;
     float  denominator =  4.0 * max(dot(normal, eyeVector), 0.0f) * max(dot(normal, lightDirection), 0.0f);
     float3 specular    = numerator / max(denominator, 0.001f);
-    float3 diffuse     = kD * albedo * (1.0f/PI)/*(0.75f)*/;
+    float3 diffuse     = kD * albedo /** (1.0f/PI)*//*(0.75f)*/;
 
     if (rayQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
     {

@@ -118,8 +118,7 @@ static float refractionIndex = 1.0 - reflectionIndex;
             positionUAV[threadId.xy].w   = rayData.instanceIndex;
             albedoUAV[threadId.xy].w     = metallic;
 
-            viewZUAV[threadId.xy].x = rayQuery.CommittedRayT();
-
+            viewZUAV[threadId.xy].x =  mul(float4(hitPosition, 1.0), viewTransform).z;
         }
         else
         {
@@ -130,6 +129,6 @@ static float refractionIndex = 1.0 - reflectionIndex;
             normalUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 1.0);
             positionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, -1.0);
 
-            viewZUAV[threadId.xy].x = 100000.0;
+            viewZUAV[threadId.xy].x = 1e5;
         }
     }
