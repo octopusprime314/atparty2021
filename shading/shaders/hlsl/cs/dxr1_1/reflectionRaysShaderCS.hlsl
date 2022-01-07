@@ -80,7 +80,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
     float4 diffHitDistParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
     float4 specHitDistParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
 
-    int renderVariant = 0;
+    int renderVariant = 2;
 
     float4 nrdDiffuse  = float4(0.0, 0.0, 0.0, 0.0);
     float4 nrdSpecular = float4(0.0, 0.0, 0.0, 0.0);
