@@ -61,6 +61,33 @@ static float refractionIndex = 1.0 - reflectionIndex;
 #define RNG_BRDF_X(bounce) (4 + 4 + 9 * bounce)
 #define RNG_BRDF_Y(bounce) (4 + 5 + 9 * bounce)
 
+float3 LinearToYCoCg(float3 color)
+{
+    float Co = color.x - color.z;
+    float t  = color.z + Co * 0.5;
+    float Cg = color.y - t;
+    float Y  = t + Cg * 0.5;
+
+    // TODO: useful, but not needed in many cases
+    Y = max(Y, 0.0);
+
+    return float3(Y, Co, Cg);
+}
+
+float3 YCoCgToLinear(float3 color)
+{
+    // TODO: useful, but not needed in many cases
+    color.x = max(color.x, 0.0);
+
+    float  t   = color.x - color.z * 0.5;
+    float  g   = color.z + t;
+    float  b   = t - color.y * 0.5;
+    float  r   = b + color.y;
+    float3 res = float3(r, g, b);
+
+    return res;
+}
+
 [numthreads(8, 8, 1)]
 
 void main(int3 threadId            : SV_DispatchThreadID,
@@ -362,7 +389,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                                     diffHitDistParams, 1.0);
                     float3 light    = dayColor.xyz * /*sunLightRange **/ indirectDiffuseLightEnergy;
                     indirectDiffuse += light;
-                    nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                    nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist,
+                                                               USE_SANITIZATION);
                 }
                 else
                 {
@@ -370,7 +398,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                                     specHitDistParams, 1.0);
                     float3 light = dayColor.xyz * /*sunLightRange **/ indirectSpecularLightEnergy;
                     indirectSpecular += light;
-                    nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                    nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist,
+                                                                USE_SANITIZATION);
                 }
             }
             break;
@@ -394,8 +423,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
         indirectLightRaysUAV[threadId.xy] = nrdDiffuse;//REBLUR_FrontEnd_PackRadiance(indirectDiffuse.rgb, normHitDist);
     }
 
-    float3 hdrColor = (((REBLUR_BackEnd_UnpackRadiance(indirectSpecularLightRaysHistoryBufferUAV[threadId.xy]))) +
-                    (REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy]))).xyz;
+    float4 specularUnpacked =
+        REBLUR_BackEnd_UnpackRadiance(indirectSpecularLightRaysHistoryBufferUAV[threadId.xy]);
+    float3 diffuseUnpacked =
+        REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy].xyz);
+
+    float3 hdrColor = specularUnpacked.xyz +
+                      diffuseUnpacked.xyz;
 
     //float3 hdrColor = indirectSpecularLightRaysHistoryBufferUAV[threadId.xy].xyz + indirectLightRaysHistoryBufferUAV[threadId.xy].xyz;
 
