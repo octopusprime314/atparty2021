@@ -22,7 +22,7 @@ SSAO::SSAO()
 
     _upSample = new SSCompute("upsample", IOEventDistributor::screenPixelWidth,
                               IOEventDistributor::screenPixelHeight, TextureFormat::R_FLOAT);
-    _generateKernelNoise();
+    //_generateKernelNoise();
 }
 
 SSAO::~SSAO() {}

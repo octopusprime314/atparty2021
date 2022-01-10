@@ -133,16 +133,20 @@ void main(int3 threadId            : SV_DispatchThreadID,
     float3 emissiveColor = float3(0.0, 0.0, 0.0);
     float roughness     = 0.0;
 
-    float3 cameraPosition = float3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
     float3 previousPosition = float3(0.0, 0.0, 0.0);
-    float3 prevNormal       = float3(0.0, 0.0, 0.0);
+
+    float3 diffuseAlbedoDemodulation = float3(0.0, 0.0, 0.0);
+    float3 specularAlbedoDemodulation = float3(0.0, 0.0, 0.0);
 
     float3 rayDir = float3(0.0, 0.0, 0.0);
+
+    float3 skyboxContribution = float3(0.0, 0.0, 0.0);
+
+    float roughnessAccumulation = 0.0;
 
     for (i = 0; i < 10; i++)
     {
         indirectNormal = normalize(-indirectNormal);
-        prevNormal      = indirectNormal;
 
         // First ray is directional and perfect mirror from camera eye so specular it is
         bool diffuseRay = false;
@@ -222,33 +226,33 @@ void main(int3 threadId            : SV_DispatchThreadID,
         // bounce_throughput *= 1 / specular_pdf;
         // is_specular_ray  = true;
 
-        float3 specularRayDirection = float3(0.0, 0.0, 0.0);
+        float3 rayDirection = float3(0.0, 0.0, 0.0);
         //if (i == 0)
         //{
-            specularRayDirection = normalize(rayDir);
+            rayDirection = normalize(rayDir);
         //}
         /*else
         {
-            specularRayDirection = normalize(rayDir - (2.0f * dot(rayDir, indirectNormal) * indirectNormal));
+            rayDirection = normalize(rayDir - (2.0f * dot(rayDir, indirectNormal) * indirectNormal));
         }*/
 
-        RayDesc raySpecular;
-        raySpecular.TMin = MIN_RAY_LENGTH;
-        raySpecular.TMax = MAX_RAY_LENGTH;
+        RayDesc ray;
+        ray.TMin = MIN_RAY_LENGTH;
+        ray.TMax = MAX_RAY_LENGTH;
 
         //if (transmittance > 0.0)
         //{
-        //    raySpecular.Origin = indirectPos + (specularRayDirection * -0.001);
+        //    ray.Origin = indirectPos + (specularRayDirection * -0.001);
         //}
         //else
         //{
-            //raySpecular.Origin = indirectPos + (indirectNormal * 0.001);
-            raySpecular.Origin = indirectPos + (specularRayDirection * 0.001);
+            //ray.Origin = indirectPos + (indirectNormal * 0.001);
+            ray.Origin = indirectPos + (rayDirection * 0.001);
         //}
-        raySpecular.Direction = specularRayDirection;
+        ray.Direction = rayDirection;
 
         RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> rayQuery;
-        rayQuery.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, raySpecular);
+        rayQuery.TraceRayInline(rtAS, RAY_FLAG_NONE, ~0, ray);
 
         rayQuery.Proceed();
 
@@ -296,9 +300,24 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     accumulatedDiffuseRadiance += indirectDiffuseRadiance;
                     accumulatedSpecularRadiance += indirectSpecularRadiance;
                 }
+
+                if (/*roughnessAccumulation < 0.25*/i == 0)
+                {
+                    diffuseAlbedoDemodulation += indirectDiffuseRadiance;
+                }
+
+                //if (/*i == 0 &&*/ diffuseRay)
+                //{
+                //    diffuseAlbedoDemodulation += indirectDiffuseRadiance * lightRadiance;
+                //}
+                /*else if (i == 0 && diffuseRay == false)
+                {
+                    specularAlbedoDemodulation += indirectDiffuseRadiance;
+                }*/
             }
 
-            
+            roughnessAccumulation += roughness;
+
             if (diffuseRay == true)
             {
                 if (length(emissiveColor) > 0.0)
@@ -308,14 +327,15 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 }
                 indirecDiffusetHitDistance += rayQuery.CommittedRayT();
 
-                float3 light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
-                               accumulatedLightRadiance * indirectDiffuseLightEnergy;
+                float3 light =
+                    accumulatedLightRadiance * indirectDiffuseLightEnergy;
                 indirectDiffuse += light;
 
                 float normDist = REBLUR_FrontEnd_GetNormHitDist(rayQuery.CommittedRayT(), viewZSRV[threadId.xy].x, diffHitDistParams,
                                                                 roughness);
 
                 nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+
             }
             else
             {
@@ -342,7 +362,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             float2   rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
             float3x3 basis = orthoNormalBasis(indirectNormal);
             float3 N = indirectNormal;
-            float3 V = raySpecular.Direction;
+            float3 V = ray.Direction;
             float3 H = ImportanceSampleGGX_VNDF(rng3, roughness, V, basis);
             float3 reflectedRay = reflect(V, H);
 
@@ -354,7 +374,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             // calculate per-light radiance
             float3 halfVector = normalize(lightVector + reflectedRay);
 
-                // Cook-Torrance BRDF for specular lighting calculations
+            // Cook-Torrance BRDF for specular lighting calculations
             float  NDF = DistributionGGX(indirectNormal, halfVector, roughness);
             float  G   = GeometrySmith(indirectNormal, lightVector, halfVector, roughness);
             float3 F   = FresnelSchlick(max(dot(halfVector, lightVector), 0.0), F0);
@@ -369,17 +389,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
         }
         else
         {
-            float3 sampleVector = normalize(raySpecular.Direction);
+            float3 sampleVector = normalize(ray.Direction);
             float4 dayColor     = skyboxTexture.SampleLevel(bilinearWrap, float3(sampleVector.x, sampleVector.y, sampleVector.z), 0);
 
             if (i == 0)
             {
-                float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5,
-                                                                viewZSRV[threadId.xy].x,
-                                                                diffHitDistParams, 1.0);
-                float3 light    = dayColor.xyz * /*sunLightRange **/ indirectDiffuseLightEnergy;
-                indirectDiffuse += light;
-                nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                float3 light = dayColor.xyz * indirectDiffuseLightEnergy;
+                skyboxContribution = light;
             }
             else
             {
@@ -387,7 +403,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 {
                     float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZSRV[threadId.xy].x,
                                                                     diffHitDistParams, 1.0);
-                    float3 light    = dayColor.xyz * /*sunLightRange **/ indirectDiffuseLightEnergy;
+
+                    float3 light    = dayColor.xyz * indirectDiffuseLightEnergy;
                     indirectDiffuse += light;
                     nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist,
                                                                USE_SANITIZATION);
@@ -396,7 +413,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 {
                     float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZSRV[threadId.xy].x,
                                                                     specHitDistParams, 1.0);
-                    float3 light = dayColor.xyz * /*sunLightRange **/ indirectSpecularLightEnergy;
+                    float3 light = dayColor.xyz * indirectSpecularLightEnergy;
                     indirectSpecular += light;
                     nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist,
                                                                 USE_SANITIZATION);
@@ -406,21 +423,14 @@ void main(int3 threadId            : SV_DispatchThreadID,
         }
     }
 
-    float  normHitDist;
-
     if (renderVariant == 1 || renderVariant == 2)
     {
-        //normHitDist = REBLUR_FrontEnd_GetNormHitDist(indirectHitDistanceSpecular, viewZSRV[threadId.xy].x, hitDistanceParams);
-
-        indirectSpecularLightRaysUAV[threadId.xy] = nrdSpecular;//REBLUR_FrontEnd_PackRadiance(indirectSpecular, normHitDist);
+        indirectSpecularLightRaysUAV[threadId.xy] = nrdSpecular;
     }
-
 
     if (renderVariant == 0 || renderVariant == 2)
     {
-        //normHitDist = REBLUR_FrontEnd_GetNormHitDist(indirecDiffusetHitDistance, viewZSRV[threadId.xy].x, hitDistanceParams);
-
-        indirectLightRaysUAV[threadId.xy] = nrdDiffuse;//REBLUR_FrontEnd_PackRadiance(indirectDiffuse.rgb, normHitDist);
+        indirectLightRaysUAV[threadId.xy] = nrdDiffuse;
     }
 
     float4 specularUnpacked =
@@ -428,16 +438,24 @@ void main(int3 threadId            : SV_DispatchThreadID,
     float3 diffuseUnpacked =
         REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy].xyz);
 
-    float3 hdrColor = specularUnpacked.xyz +
-                      diffuseUnpacked.xyz;
+    float3 hdrColor = float3(0.0, 0.0, 0.0);
 
-    //float3 hdrColor = indirectSpecularLightRaysHistoryBufferUAV[threadId.xy].xyz + indirectLightRaysHistoryBufferUAV[threadId.xy].xyz;
+    if (renderVariant == 1 || renderVariant == 2)
+    {
+        hdrColor += (specularUnpacked.xyz);
+    }
+
+    if (renderVariant == 0 || renderVariant == 2)
+    {
+        hdrColor += (diffuseUnpacked.xyz * diffuseAlbedoDemodulation);
+    }
+
+    hdrColor += skyboxContribution;
 
     const float gamma = 2.2;
     //const float exposure = 0.01;
     const float exposure = 1.0;
     // reinhard tone mapping
-    //float3 mapped = hdrColor / (hdrColor + float3(1.0, 1.0, 1.0));
     float3 mapped = float3(1.0, 1.0, 1.0) - exp(-hdrColor * exposure);
     // gamma correction
     mapped = pow(mapped, float3(1.0, 1.0, 1.0) / float3(gamma, gamma, gamma));

@@ -165,8 +165,16 @@ void buildModel(std::vector<float>& vertices, std::vector<float>& normals,
 
         // Scale then rotate normal
         renderBuffers->addNormal(AN);
-        Tex2 TexA(textures[indexTexA], textures[indexTexA + 1]);
-        renderBuffers->addTexture(TexA);
+        if (textures.size() != 0)
+        {
+            Tex2 TexA(textures[indexTexA], textures[indexTexA + 1]);
+            renderBuffers->addTexture(TexA);
+        }
+        else
+        {
+            Tex2 TexA(0.0, 0.0);
+            renderBuffers->addTexture(TexA);
+        }
 
         vertexAndNormalIndex += 3;
         textureIndex += 2;
@@ -1031,12 +1039,16 @@ void BuildGltfMeshes(const Document*           document,
             camSettings.bobble           = false;
             camSettings.lockedEntity     = -1;
             camSettings.lockedEntityName = "";
-            camSettings.lockOffset       = Vector4(0.0, 1000.0, 0.0, 0.0);
+            camSettings.lockOffset       = Vector4(0.0, 0.0, 0.0, 0.0);
             camSettings.path             = "";
             camSettings.position         = cameraPosition;
+
+            Vector4 baseQuaternion(-0.7071067690849304, 0.0, 0.0, 0.7071067690849304);
+
             // Default camera orients in the negative Y direction
-            camSettings.rotation =
-                Vector4(90.0 - GetRoll(quaternion), GetPitch(quaternion), GetYaw(quaternion));
+            camSettings.rotation = Vector4(GetRoll(baseQuaternion),
+                                           GetPitch(baseQuaternion),
+                                           GetYaw(baseQuaternion));
 
             auto viewMan     = ModelBroker::getViewManager();
             camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;

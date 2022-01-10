@@ -34,9 +34,9 @@ struct GpuToCpuBuffers
 
 #define SizeOfInUint32(obj) ((sizeof(obj) - 1) / sizeof(UINT32) + 1)
 #define InitInstancesForRayTracing 256
-#define MaxInstancesForRayTracing  10000
+#define MaxInstancesForRayTracing  50000
 // 4000 BLAS count using 3 textures each
-#define MaxBLASSRVsForRayTracing   4000 * 3
+#define MaxBLASSRVsForRayTracing   12000 * 3
 #define TlasAllocationMultiplier   10
 
 #define RandomInsertAndRemoveEntities 0

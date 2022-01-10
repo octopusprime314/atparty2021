@@ -42,8 +42,10 @@ namespace RTCompaction
     extern std::queue<ASBuffers*> _asBufferCompleteQueue;
     extern std::queue<ASBuffers*> _asBufferReleaseQueue;
 
+    extern uint64_t _totalTriangles;
+
     constexpr uint32_t SizeOfCompactionDescriptor           = sizeof(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE_DESC);
-    constexpr uint32_t CompactionSizeSuballocationBlockSize = 65536;
+    constexpr uint32_t CompactionSizeSuballocationBlockSize = 2097152;
 
     BufferSuballocator*    _scratchPool                  = nullptr;
     BufferSuballocator*    _resultPool                   = nullptr;
@@ -58,6 +60,7 @@ namespace RTCompaction
     uint32_t               _currentCompactionMemorySize  = 0;
     uint32_t               _totalUncompactedMemory       = 0;
     uint32_t               _totalCompactedMemory         = 0;
+    uint64_t               _totalTriangles               = 0;
     std::queue<ASBuffers*> _asBufferCompactionQueue;
     std::queue<ASBuffers*> _asBufferCompleteQueue;
     std::queue<ASBuffers*> _asBufferReleaseQueue;
@@ -106,11 +109,18 @@ namespace RTCompaction
                 // Tag as compaction complete
                 buffers[compactionIndex]->isCompacted = true;
 
-#if _DEBUG
-                OutputDebugString((
-                    "Uncompacted memory: " + std::to_string(buffers[compactionIndex]->resultGpuMemory.alignedBufferSizeInBytes) + "\n"
-                    "Compacted memory: "   + std::to_string(compactionSize)                                                     + "\n").c_str());
-#endif
+                //OutputDebugString((
+                //    "Triangle count: " + std::to_string(buffers[compactionIndex]->numTriangles) + "\n"
+                //    "Compacted memory: "   + std::to_string(compactionSize) + "\n").c_str());
+
+                //OutputDebugString((std::to_string(buffers[compactionIndex]->numTriangles) + "\t" +
+                //   std::to_string(compactionSize) + "\n").c_str());
+
+//#if _DEBUG
+//                OutputDebugString((
+//                    "Uncompacted memory: " + std::to_string(buffers[compactionIndex]->resultGpuMemory.alignedBufferSizeInBytes) + "\n"
+//                    "Compacted memory: "   + std::to_string(compactionSize)                                                     + "\n").c_str());
+//#endif
             }
         }
         return true;
@@ -178,6 +188,8 @@ namespace RTCompaction
             "Unused      compacted    memory: "                  + std::to_string(_compactionPool->GetFreeSuballocationsSize() / 1000000.0f) + " MB\n"
             "Unused      scratch      memory: "                  + std::to_string(_scratchPool->GetFreeSuballocationsSize()    / 1000000.0f) + " MB\n"
             "Suballocation alignment   saved: "                  + std::to_string(_compactionPool->GetAlignmentSavingSize()    / 1000000.0f) + " MB\n"
+            "Bytes per triangle       memory: "                  + std::to_string(_totalCompactedMemory / (_totalTriangles + 1))             + " Bytes\n"
+            "Total triangles in BLASes      : "                  + std::to_string(_totalTriangles)                                           + "\n"
         );
 
         // Release queue indicates acceleration structure is completely removed
@@ -300,6 +312,9 @@ namespace RTCompaction
                                                                                     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
 
             _totalUncompactedMemory += buffers[buildIndex].resultGpuMemory.alignedBufferSizeInBytes;
+
+            _totalTriangles += bottomLevelInputs[buildIndex].pGeometryDescs[0].Triangles.IndexCount / 3;
+            buffers[buildIndex].numTriangles = bottomLevelInputs[buildIndex].pGeometryDescs[0].Triangles.IndexCount / 3;
 
             // Keeps track of which frame index the build was requested
             buffers[buildIndex].frameIndexRequest = _commandListIndex;

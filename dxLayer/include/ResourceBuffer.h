@@ -27,7 +27,7 @@ class ResourceBuffer
 
     // TextureCube
     ResourceBuffer(const void* initData, UINT count, UINT byteSize, UINT width, UINT height,
-                   UINT rowPitch, ComPtr<ID3D12GraphicsCommandList4>& cmdList,
+                   UINT rowPitch, DXGI_FORMAT textureFormat, ComPtr<ID3D12GraphicsCommandList4>& cmdList,
                    ComPtr<ID3D12Device>& device, std::string name);
 
     // Render Target and Depth/Stencil Texture2D

@@ -64,7 +64,7 @@ void ResourceManager::init(ComPtr<ID3D12Device> device)
 
         // Initialize command list round trip execution to CMD_LIST_NUM
         // Initialize suballocator blocks to 64 KB and limit compaction transient allocation to 16 MB
-        RTCompaction::Initialize(_dxrDevice.Get(), CMD_LIST_NUM, 65536, 16777216);
+        RTCompaction::Initialize(_dxrDevice.Get(), CMD_LIST_NUM, 65536, (uint32_t)(-1));
 
         // Create descriptor heap
         ZeroMemory(&_rtASSrvHeapDesc, sizeof(_rtASSrvHeapDesc));

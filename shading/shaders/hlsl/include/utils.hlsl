@@ -648,7 +648,7 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     {
         roughness = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
                         .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                        .y;
+                        .y * uniformMaterials[attributeIndex].roughness;
     }
 
     roughness = max(roughness, 0.05);
@@ -662,7 +662,7 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     {
         metallic = diffuseTexture[NonUniformResourceIndex(materialIndex + 2)]
                         .SampleLevel(bilinearWrap, uvCoord, mipLevel)
-                        .z;
+                        .z *  uniformMaterials[attributeIndex].metallic; 
     }
 
     normal = float3(0.0, 0.0, 0.0);

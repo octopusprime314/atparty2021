@@ -192,7 +192,7 @@ void AssetTexture::_buildCubeMapTextureDX(std::string                        sky
                 _getTextureData(textureName);
             }
 
-            device->GetCopyableFootprints(&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_BC7_UNORM, _width,
+            device->GetCopyableFootprints(&CD3DX12_RESOURCE_DESC::Tex2D(_textureFormat, _width,
                                                                     _height, cubeFaces, 1, 1, 0,
                                                                     D3D12_RESOURCE_FLAG_NONE),
                                       0, cubeFaces, 0, layouts, rows, rowByteSize, &totalBytes);
@@ -203,7 +203,7 @@ void AssetTexture::_buildCubeMapTextureDX(std::string                        sky
 
     _textureBuffer =
         new ResourceBuffer(cubeMapData.data(), 6, static_cast<UINT>(cubeMapData.size()), _width,
-                           _height, rowPitch, cmdList, device, _name);
+                           _height, rowPitch, _textureFormat, cmdList, device, _name);
 
     // Create descriptor heap
     D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc;

@@ -55,16 +55,23 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT byteSize, UINT width, 
     D3D12_SUBRESOURCE_FOOTPRINT pitchedDesc;
     UINT                        alignedWidthInBytes = 0;
 
-    if (width * height == 16)
+    // BC7 only allows resolutions divisible by 4 and use only one mip
+    // Until this is ubiquitously supported on all HW vendors do one mip
+    // D3D12_FEATURE_DATA_D3D12_OPTIONS8::UnalignedBlockTexturesSupported
+    bool onlyOneMip    = false;
+
+    // Preserve initial height to do the single mip copy correctly
+    int initialMipWidth  = width;
+    int initialMipHeight = height;
+
+    if ((width % 4 != 0 || height % 4 != 0))
     {
-        alignedWidthInBytes = width * 4 * sizeof(float);
-        byteSize *= 4;
-        rowPitch *= 4;
+        width += (4 - width % 4);
+        height += (4 - height % 4);
+        onlyOneMip = true;
     }
-    else
-    {
-        alignedWidthInBytes = width * sizeof(DWORD);
-    }
+
+    alignedWidthInBytes = width * sizeof(DWORD);
     pitchedDesc.Width    = width;
     pitchedDesc.Height   = height;
     pitchedDesc.Depth    = 1;
@@ -73,81 +80,16 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT byteSize, UINT width, 
     pitchedDesc.RowPitch = alignment256;
     pitchedDesc.Format   = textureFormat;
 
-    if (pitchedDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM)
-    {
-        if (width * height * 4 != pitchedDesc.RowPitch * height || width * height * 4 > byteSize)
-        {
-
-            unsigned char* stream       = nullptr;
-            int            channelCount = 3;
-            if (byteSize == width * height * 4)
-            {
-                channelCount = 4;
-            }
-
-            auto                 byteOffsetPitch = rowPitch - width * channelCount;
-            const unsigned char* data            = reinterpret_cast<const unsigned char*>(initData);
-            stream                               = new unsigned char[pitchedDesc.RowPitch * height];
-
-            for (UINT i = 0; i < height; i++)
-            {
-
-                for (UINT j = 0; j < width; j++)
-                {
-
-                    for (int k = 0; k < channelCount; k++)
-                    {
-
-                        stream[i * pitchedDesc.RowPitch + (j * 4) + k] =
-                            data[(i * width * channelCount) + (j * channelCount) + k +
-                                 (i * byteOffsetPitch)];
-                    }
-                    if (channelCount == 3)
-                    {
-                        // fill in transparency opaque value
-                        stream[i * pitchedDesc.RowPitch + ((j + 1) * 4) - 1] = '\xff';
-                    }
-                }
-            }
-            initData = stream;
-            byteSize = pitchedDesc.RowPitch * height;
-        }
-    }
-    else if (pitchedDesc.Format != DXGI_FORMAT_BC7_UNORM)
-    {
-        if (byteSize != pitchedDesc.RowPitch * height)
-        {
-
-            int channelCount = 4;
-
-            float*       stream = nullptr;
-            const float* data   = reinterpret_cast<const float*>(initData);
-            stream              = new float[(pitchedDesc.RowPitch * height) / sizeof(float)];
-            for (UINT i = 0; i < height; i++)
-            {
-
-                for (UINT j = 0; j < width; j++)
-                {
-
-                    for (int k = 0; k < channelCount; k++)
-                    {
-
-                        stream[(i * pitchedDesc.RowPitch / sizeof(float)) + (j * channelCount) +
-                               k] = data[(i * width * channelCount) + (j * channelCount) + k];
-                    }
-                }
-            }
-            initData = reinterpret_cast<void*>(stream);
-            byteSize = pitchedDesc.RowPitch * height;
-        }
-    }
-
-    
     UINT mipLevels = MIP_LEVELS;
-    if (width * height == 16)
+    if (log2(width) < 8 || log2(height) < 8)
+    {
+        mipLevels = min(log2(width), log2(height));
+    }
+    if (onlyOneMip)
     {
         mipLevels = 1;
     }
+    
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT layouts[MIP_LEVELS];
     UINT                               rows[MIP_LEVELS];
     UINT64                             rowByteSize[MIP_LEVELS];
@@ -269,7 +211,7 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT byteSize, UINT width, 
 }
 
 ResourceBuffer::ResourceBuffer(const void* initData, UINT count, UINT byteSize, UINT width,
-                               UINT height, UINT rowPitch,
+                               UINT height, UINT rowPitch, DXGI_FORMAT textureFormat,
                                ComPtr<ID3D12GraphicsCommandList4>& cmdList,
                                ComPtr<ID3D12Device>& device, std::string name)
 {
@@ -279,7 +221,7 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT count, UINT byteSize, 
     UINT                               rows[MIP_LEVELS];
     UINT64                             rowByteSize[MIP_LEVELS];
     UINT64                             totalBytes = 0;
-    device->GetCopyableFootprints(&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_BC7_UNORM, width,
+    device->GetCopyableFootprints(&CD3DX12_RESOURCE_DESC::Tex2D(textureFormat, width,
                                                                 height, cubeFaces, 1, 1, 0,
                                                                 D3D12_RESOURCE_FLAG_NONE),
                                   0, cubeFaces, 0, layouts, rows, rowByteSize, &totalBytes);
@@ -293,12 +235,13 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT count, UINT byteSize, 
     auto resourceFlags = D3D12_RESOURCE_FLAG_NONE;
     device->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
-        &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_BC7_UNORM, width, height, cubeFaces, 1, 1, 0,
+        &CD3DX12_RESOURCE_DESC::Tex2D(textureFormat, width, height, cubeFaces, 1, 1, 0,
                                         D3D12_RESOURCE_FLAG_NONE),
         D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&_defaultBuffer));
 
     _textureMemoryInBytes += device->GetResourceAllocationInfo(0, 1,
-                                                             &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_BC7_UNORM, width,
+                                                             &CD3DX12_RESOURCE_DESC::Tex2D(
+                                                                 textureFormat, width,
                                                                       height, cubeFaces, 1, 1, 0,
                                                                       resourceFlags)).SizeInBytes;
 
@@ -353,80 +296,6 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT count, UINT byteSize, 
     LPCWSTR sw = r.c_str();
     _defaultBuffer->SetName(sw);
     dxLayer->unlock();
-
-    //D3D12_SUBRESOURCE_DATA data[8];
-    //void*                  voidPointer   = const_cast<void*>(initData);
-    //UINT                   runningOffset = 0;
-    //if (pitchedDesc.Format == DXGI_FORMAT_BC7_UNORM)
-    //{
-    //    for (int i = 0; i < 1; i++)
-    //    {
-    //        int currentOffset = max(1, ((layouts[i].Footprint.Width + 3) / 4)) *
-    //                            max(1, ((layouts[i].Footprint.Height + 3) / 4)) * 16;
-
-    //        unsigned char* offsetPointer =
-    //            reinterpret_cast<unsigned char*>(voidPointer) + runningOffset;
-
-    //        data[i].pData = offsetPointer;
-    //        // BC7 has 4x4 block texel compression (16 bytes) therefore
-    //        // each row on cpu memory size is the width * 4 bytes.
-    //        data[i].RowPitch   = layouts[i].Footprint.Width * 4;
-    //        data[i].SlicePitch = 0;
-
-    //        runningOffset += currentOffset;
-    //    }
-
-    //    UpdateSubresources(cmdList.Get(), _defaultBuffer.Get(), _uploadBuffer.Get(), 0, mipLevels,
-    //                       totalBytes, &layouts[0], &rows[0], &rowByteSize[0], &data[0]);
-    //}
-
-    //// Upload texture data to uploadbuffer
-    //device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-    //                                D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(byteSize),
-    //                                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-    //                                IID_PPV_ARGS(_uploadBuffer.GetAddressOf()));
-
-    //UINT8* mappedData = nullptr;
-    //_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
-    //memcpy(mappedData, initData, byteSize);
-    //_uploadBuffer->Unmap(0, nullptr);
-
-    //D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedTexture2D;
-    //placedTexture2D.Footprint = pitchedDesc;
-    //auto alignment512 =
-    //    ((reinterpret_cast<UINT64>(mappedData) + D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1) &
-    //     ~(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1));
-    //placedTexture2D.Offset = alignment512 - reinterpret_cast<UINT64>(mappedData);
-
-    //device->CreateCommittedResource(
-    //    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE,
-    //    &CD3DX12_RESOURCE_DESC::Tex2D(pitchedDesc.Format, width, height, count, 1),
-    //    D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&_defaultBuffer));
-
-    //auto dxLayer = DXLayer::instance();
-    //dxLayer->lock();
-
-    //cmdList->ResourceBarrier(
-    //    1, &CD3DX12_RESOURCE_BARRIER::Transition(_defaultBuffer.Get(), D3D12_RESOURCE_STATE_COMMON,
-    //                                             D3D12_RESOURCE_STATE_COPY_DEST));
-
-    //for (UINT cubeMapIndex = 0; cubeMapIndex < count; cubeMapIndex++)
-    //{
-
-    //    alignment512 = ((reinterpret_cast<UINT64>(mappedData + (cubeMapIndex * byteSize / count)) +
-    //                     D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1) &
-    //                    ~(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT - 1));
-    //    placedTexture2D.Offset = alignment512 - reinterpret_cast<UINT64>(mappedData);
-
-    //    cmdList->CopyTextureRegion(
-    //        &CD3DX12_TEXTURE_COPY_LOCATION(_defaultBuffer.Get(), cubeMapIndex), 0, 0, 0,
-    //        &CD3DX12_TEXTURE_COPY_LOCATION(_uploadBuffer.Get(), placedTexture2D), nullptr);
-    //}
-
-    //cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
-    //                                _defaultBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
-    //                                D3D12_RESOURCE_STATE_COMMON));
-    //dxLayer->unlock();
 }
 
 ResourceBuffer::ResourceBuffer(D3D12_CLEAR_VALUE clearValue, UINT width, UINT height,

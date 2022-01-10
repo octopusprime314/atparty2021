@@ -26,6 +26,7 @@ namespace RTCompaction
         bool          isCompacted;
         bool          requestedCompaction;
         uint64_t      frameIndexRequest;
+        uint32_t      numTriangles;
 
         D3D12_GPU_VIRTUAL_ADDRESS GetASBuffer()
         {

@@ -43,7 +43,10 @@ void TextureBroker::releaseUploadBuffers()
 {
     for (auto texture : _textures)
     {
-        texture.second->getResource()->getUploadResource()->Release();
+        if (texture.second->getResource()->getUploadResource() != nullptr)
+        {
+            texture.second->getResource()->getUploadResource()->Release();
+        }
     }
 }
 
