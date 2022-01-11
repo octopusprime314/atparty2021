@@ -1,9 +1,8 @@
 #include "../../hlsl/include/NRD.hlsl"
 
-Texture2D reflectionSRV : register(t0, space0);
-Texture2D sunLightSRV   : register(t1, space0);
-Texture2D shadowSRV  : register(t2, space0);
-Texture2D colorHistorySRV : register(t3, space0);
+Texture2D indirectLightRaysHistoryBufferSRV : register(t0, space0);
+Texture2D indirectSpecularLightRaysHistoryBufferSRV : register(t1, space0);
+Texture2D diffusePrimarySurfaceModulation : register(t2, space0);
 
 RWTexture2D<float4> pathTracerUAV       : register(u0);
 
@@ -22,18 +21,20 @@ cbuffer globalData : register(b0)
 void main(int3 threadId : SV_DispatchThreadID,
         int3 threadGroupThreadId : SV_GroupThreadID)
 {
-    float4 reflection    = reflectionSRV[threadId.xy];
-    float4 sunLighting   = sunLightSRV[threadId.xy];
+    float4 specularUnpacked =
+        REBLUR_BackEnd_UnpackRadiance(indirectSpecularLightRaysHistoryBufferSRV[threadId.xy]);
+    float4 diffuseUnpacked =
+        REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferSRV[threadId.xy]);
 
-    /*if (viewMode == 0)
-    {*/
-        pathTracerUAV[threadId.xy] = (reflection + sunLighting)/* * 0.000001*/;
-        //pathTracerUAV[threadId.xy] += float4(SIGMA_BackEnd_UnpackShadow(shadowSRV[threadId.xy]).x, 0,0,0);
-    //}
-    //else
-    //{
-    //    //pathTracerUAV[threadId.xy] = (reflection + sunLighting) * occlusionSRV[threadId.xy].r;
-    //    //pathTracerUAV[threadId.xy] = occlusionSRV[threadId.xy].r;
-    //    pathTracerUAV[threadId.xy] = colorHistorySRV[threadId.xy];
-    //}
+    diffuseUnpacked *= diffusePrimarySurfaceModulation[threadId.xy];
+
+    const float gamma = 2.2;
+    // const float exposure = 0.01;
+    const float exposure = 1.0;
+    // reinhard tone mapping
+    float3 mapped = float3(1.0, 1.0, 1.0) - exp(-((specularUnpacked + diffuseUnpacked).xyz) * exposure);
+    // gamma correction
+    mapped = pow(mapped, float3(1.0, 1.0, 1.0) / float3(gamma, gamma, gamma));
+
+    pathTracerUAV[threadId.xy] = float4(mapped, 1.0);
 }

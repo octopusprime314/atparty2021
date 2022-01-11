@@ -46,6 +46,7 @@ class Camera
   private:
     ViewState    _viewState;
     MVP          _mvp;
+    MVP          _prevMvp;
     StateVector  _state;
     VAO          _frustumVAO;
 
@@ -57,6 +58,7 @@ class Camera
     void         setViewMatrix(Matrix transform);
     Matrix       getProjection();
     Matrix       getView();
+    Matrix       getPrevView();
     ViewState    getViewState();
     void         displayViewFrustum(Matrix view);
     void         setViewState(int key);

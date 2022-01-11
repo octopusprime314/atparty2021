@@ -139,7 +139,13 @@ Vector4 ViewEventDistributor::getPrevCameraPos()
 
 Matrix ViewEventDistributor::getPrevCameraView()
 {
-    return _prevCameraView;
+    auto cameraView = _currCamera->getPrevView();
+    
+    cameraView.getFlatBuffer()[8]  = -cameraView.getFlatBuffer()[8];
+    cameraView.getFlatBuffer()[9]  = -cameraView.getFlatBuffer()[9];
+    cameraView.getFlatBuffer()[10] = -cameraView.getFlatBuffer()[10];
+    cameraView.getFlatBuffer()[11] = -cameraView.getFlatBuffer()[11];
+    return cameraView;
 }
 
 Vector4 ViewEventDistributor::getCameraRot()

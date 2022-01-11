@@ -16,13 +16,9 @@ StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : r
 Texture2D                                   viewZSRV                         : register(t9, space0);
 TextureCube                                 skyboxTexture                    : register(t10, space0);
 
-RWTexture2D<float4> reflectionUAV : register(u0);
-//RWTexture2D<float2> occlusionUAV : register(u1);
-//RWTexture2D<float4> occlusionHistoryUAV : register(u2);
-RWTexture2D<float4> indirectLightRaysUAV : register(u1);
-RWTexture2D<float4> indirectLightRaysHistoryBufferUAV : register(u2);
-RWTexture2D<float4> indirectSpecularLightRaysUAV : register(u3);
-RWTexture2D<float4> indirectSpecularLightRaysHistoryBufferUAV : register(u4);
+RWTexture2D<float4> indirectLightRaysUAV : register(u0);
+RWTexture2D<float4> indirectSpecularLightRaysUAV : register(u1);
+RWTexture2D<float4> diffusePrimarySurfaceModulation : register(u2);
 
 SamplerState bilinearWrap : register(s0);
 
@@ -51,7 +47,6 @@ cbuffer globalData : register(b0)
     uint frameNumber;
 }
 
-//#include "../../include/pointLightCommon.hlsl"
 #include "../../include/sunLightCommon.hlsl"
 #include "../../include/utils.hlsl"
 
@@ -185,12 +180,12 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 // Journal of Computer Graphics Techniques Vol. 7, No. 4, 2018.
                 // http://jcgt.org/published/0007/04/01/paper.pdf
                 
-                float3 lightVector = normalize(indirectPos - previousPosition);
+                float3 viewVector = normalize(indirectPos - previousPosition);
 
                 float2 rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
 
                 float3 N = indirectNormal;
-                float3 V = lightVector;
+                float3 V = viewVector;
                 float3 H = ImportanceSampleGGX_VNDF(rng3, roughness, V, basis);
 
                 // Punch through ray with zero reflection
@@ -204,15 +199,12 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     rayDir = reflect(V, H);
                 }
 
-                float NoV = max(0, -dot(indirectNormal, lightVector));
+                float NoV = max(0, -dot(indirectNormal, viewVector));
                 float NoL = max(0, dot(N, rayDir));
                 float NoH = max(0, dot(N, H));
                 float VoH = max(0, -dot(V, H));
             }
         }
-
-        previousPosition = indirectPos;
-
         // See the Heitz paper referenced above for the estimator explanation.
         //   (BRDF / PDF) = F * G2(V, L) / G1(V)
         // The Fresnel term F is already embedded into "primary_specular" by
@@ -231,10 +223,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
         //{
             rayDirection = normalize(rayDir);
         //}
-        /*else
-        {
-            rayDirection = normalize(rayDir - (2.0f * dot(rayDir, indirectNormal) * indirectNormal));
-        }*/
+        //else
+        //{
+        //    float3 viewVector = normalize(indirectPos - previousPosition);
+        //    rayDirection = normalize(viewVector - (2.0f * dot(viewVector, indirectNormal) * indirectNormal));
+        //}
+
+        previousPosition = indirectPos;
 
         RayDesc ray;
         ray.TMin = MIN_RAY_LENGTH;
@@ -301,19 +296,15 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     accumulatedSpecularRadiance += indirectSpecularRadiance;
                 }
 
-                if (/*roughnessAccumulation < 0.25*/i == 0)
+                if (/*length(lightRadiance) > 0.0 &&*/ /*roughnessAccumulation < 0.25*/ i == 0)
                 {
                     diffuseAlbedoDemodulation += indirectDiffuseRadiance;
                 }
 
-                //if (/*i == 0 &&*/ diffuseRay)
+                //if (i == 1 )
                 //{
-                //    diffuseAlbedoDemodulation += indirectDiffuseRadiance * lightRadiance;
+                //    specularAlbedoDemodulation += indirectDiffuseRadiance/* + indirectSpecularRadiance*/;
                 //}
-                /*else if (i == 0 && diffuseRay == false)
-                {
-                    specularAlbedoDemodulation += indirectDiffuseRadiance;
-                }*/
             }
 
             roughnessAccumulation += roughness;
@@ -433,32 +424,6 @@ void main(int3 threadId            : SV_DispatchThreadID,
         indirectLightRaysUAV[threadId.xy] = nrdDiffuse;
     }
 
-    float4 specularUnpacked =
-        REBLUR_BackEnd_UnpackRadiance(indirectSpecularLightRaysHistoryBufferUAV[threadId.xy]);
-    float3 diffuseUnpacked =
-        REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferUAV[threadId.xy].xyz);
-
-    float3 hdrColor = float3(0.0, 0.0, 0.0);
-
-    if (renderVariant == 1 || renderVariant == 2)
-    {
-        hdrColor += (specularUnpacked.xyz);
-    }
-
-    if (renderVariant == 0 || renderVariant == 2)
-    {
-        hdrColor += (diffuseUnpacked.xyz * diffuseAlbedoDemodulation);
-    }
-
-    hdrColor += skyboxContribution;
-
-    const float gamma = 2.2;
-    //const float exposure = 0.01;
-    const float exposure = 1.0;
-    // reinhard tone mapping
-    float3 mapped = float3(1.0, 1.0, 1.0) - exp(-hdrColor * exposure);
-    // gamma correction
-    mapped = pow(mapped, float3(1.0, 1.0, 1.0) / float3(gamma, gamma, gamma));
-
-    reflectionUAV[threadId.xy] = float4(mapped, 1.0);
+    diffusePrimarySurfaceModulation[threadId.xy] = float4(diffuseAlbedoDemodulation.xyz, 1.0);
+    //diffusePrimarySurfaceModulation[threadId.xy] = float4(1.0, 1.0, 1.0, 1.0);
 }

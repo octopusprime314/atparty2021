@@ -90,6 +90,10 @@ PathTracerShader::PathTracerShader(std::string shaderName)
                                            IOEventDistributor::screenPixelHeight,
                                            TextureFormat::R16G16B16A16_FLOAT, "_indirectSpecularLightRaysHistoryBuffer");
 
+    _diffusePrimarySurfaceModulation = new RenderTexture(IOEventDistributor::screenPixelWidth,
+                                           IOEventDistributor::screenPixelHeight,
+                                           TextureFormat::R16G16B16A16_FLOAT, "_diffusePrimarySurfaceModulation");
+
     // Sun lighting rays and occlusion
 
      // Segments the path tracer into separate passes that help improve coherency
@@ -497,11 +501,10 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     shader->bind();
     shader->updateData("viewZSRV", 0, _viewZPrimaryRays, true, false);
-    shader->updateData("reflectionUAV", 0, _reflectionRays, true, true);
+    
     shader->updateData("indirectLightRaysUAV", 0, _indirectLightRays, true, true);
-    shader->updateData("indirectLightRaysHistoryBufferUAV", 0, _indirectLightRaysHistoryBuffer, true, true);
     shader->updateData("indirectSpecularLightRaysUAV", 0, _indirectSpecularLightRays, true, true);
-    shader->updateData("indirectSpecularLightRaysHistoryBufferUAV", 0, _indirectSpecularLightRaysHistoryBuffer, true, true);
+    shader->updateData("diffusePrimarySurfaceModulation", 0, _diffusePrimarySurfaceModulation, true, true);
 
     shader->updateData("skyboxTexture", 0, skyBoxTexture, true);
 
@@ -614,7 +617,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         barrierDesc[3].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
         barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-        cmdList->ResourceBarrier(4, barrierDesc);
+        barrierDesc[4].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[4].Transition.pResource = _diffusePrimarySurfaceModulation->getResource()->getResource().Get();
+        barrierDesc[4].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[4].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[4].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+        cmdList->ResourceBarrier(5, barrierDesc);
 
         // Wrap the command buffer
         nri::CommandBufferD3D12Desc cmdDesc = {};
@@ -726,10 +735,14 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         //commonSettings.motionVectorScale[1]       = 1.0;
 
         uint32_t matrixSize = 16 * sizeof(float);
-        memcpy(commonSettings.worldToViewMatrix, &cameraView, matrixSize);
-        memcpy(commonSettings.worldToViewMatrixPrev, &prevCameraView, matrixSize);
-        memcpy(commonSettings.viewToClipMatrix, &cameraProj, matrixSize);
-        memcpy(commonSettings.viewToClipMatrixPrev, &cameraProj, matrixSize);
+        auto     mat        = cameraView.transpose();
+        memcpy(commonSettings.worldToViewMatrix, &mat, matrixSize);
+        auto prevMat = prevCameraView.transpose();
+        memcpy(commonSettings.worldToViewMatrixPrev, &prevMat, matrixSize);
+
+        auto projMat = cameraProj.transpose();
+        memcpy(commonSettings.viewToClipMatrix, &projMat, matrixSize);
+        memcpy(commonSettings.viewToClipMatrixPrev, &projMat, matrixSize);
 
         //commonSettings.cameraJitter[0] = 0.0;
         //commonSettings.cameraJitter[1] = 0.0;
@@ -862,12 +875,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         //====================================================================================================================
 
         //NRD.Destroy();
-
-        // Denoise pass for just ambient occlusion rays for now
-        //_svgfDenoiser->denoise(viewEventDistributor,
-        //                        _occlusionRays,
-        //                        _positionPrimaryRays,
-        //                        _normalPrimaryRays);
     }
 
     cmdList->BeginEvent(0, L"Compositor", sizeof(L"Compositor"));
@@ -877,11 +884,11 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader = _compositorShader;
 
     shader->bind();
-    shader->updateData("reflectionSRV", 0, _reflectionRays, true, false);
-    shader->updateData("sunLightSRV", 0, _sunLightRays, true, false);
-    //shader->updateData("shadowSRV", 0, _denoisedOcclusionRays, true, false);
+    shader->updateData("indirectLightRaysHistoryBufferSRV", 0, _indirectLightRaysHistoryBuffer, true, false);
+    shader->updateData("indirectSpecularLightRaysHistoryBufferSRV", 0, _indirectSpecularLightRaysHistoryBuffer, true, false);
+    shader->updateData("diffusePrimarySurfaceModulation", 0, _diffusePrimarySurfaceModulation, true, false);
+
     shader->updateData("pathTracerUAV", 0, _compositor, true, true);
-    //shader->updateData("shadowUAV", 0, _compositor, true, true);
 
     shader->updateData("reflectionMode", &_reflectionMode, true);
     shader->updateData("shadowMode", &_shadowMode, true);
@@ -944,7 +951,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     barrierDesc[1].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     barrierDesc[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
-    cmdList->ResourceBarrier(2, barrierDesc);
+    barrierDesc[2].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrierDesc[2].Transition.pResource = _diffusePrimarySurfaceModulation->getResource()->getResource().Get();
+    barrierDesc[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrierDesc[2].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    barrierDesc[2].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+    cmdList->ResourceBarrier(3, barrierDesc);
 
     //EngineManager* engMan = EngineManager::instance();
     //Bloom*         bloom  = engMan->getBloomShader();
