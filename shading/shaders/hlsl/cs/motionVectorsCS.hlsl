@@ -139,7 +139,7 @@ float2 CalculateMotionVector(in float3 hitPosition, out float depth, in uint2 th
     float2 xy                  = float2(threadId.xy) + 0.5f;
     float2 currTexturePosition = xy / screenSize;
 
-    return currTexturePosition - prevTexturePosition;
+    return prevTexturePosition - currTexturePosition;
 }
 
 float3 GetWorldHitPositionInPreviousFrame(in float3 hitObjectPosition, in uint instanceIndex/*,
@@ -189,20 +189,11 @@ void main(int3 threadId : SV_DispatchThreadID)
     float3 prevVirtualHitPosition = GetWorldHitPositionInPreviousFrame(hitObjectPosition, instanceIndex);
 
     float  depth;
-    float2 motionVector = -CalculateMotionVector(prevVirtualHitPosition, depth, threadId.xy);
+    float2 motionVector2D = CalculateMotionVector(prevVirtualHitPosition, depth, threadId.xy);
 
-    //motionVectorsUAV[threadId.xy].xy = float2(motionVector.xy);
+    float4 prevFramePos = float4(prevVirtualHitPosition.xyz, 1.0);
+    float4 currFramePos = float4(currPositionSRV[threadId.xy].xyz, 1.0);
+    float3 worldSpaceMotionVector3D = prevFramePos.xyz - currFramePos.xyz;
 
-    float4 prevFramePos = mul(float4(prevVirtualHitPosition, 1.0), prevFrameView);
-    float4 currFramePos = mul(float4(currPositionSRV[threadId.xy].xyz, 1.0), currFrameView);
-    float3 delta        = currFramePos.xyz - prevFramePos.xyz;
-
-    if (length(motionVector) > 0.00001)
-    {
-        motionVectorsUAV[threadId.xy].xy = motionVector;
-    }
-    else
-    {
-        motionVectorsUAV[threadId.xy].xy = float2(0.0, 0.0);
-    }
+    motionVectorsUAV[threadId.xy].xyz = worldSpaceMotionVector3D;
 }

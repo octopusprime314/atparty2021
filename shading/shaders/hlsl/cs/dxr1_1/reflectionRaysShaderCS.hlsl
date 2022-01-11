@@ -387,6 +387,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
             {
                 float3 light = dayColor.xyz * indirectDiffuseLightEnergy;
                 skyboxContribution = light;
+
+                diffuseAlbedoDemodulation += skyboxContribution;
+                nrdDiffuse = float4(1.0, 1.0, 1.0, 1.0);
             }
             else
             {
@@ -425,5 +428,4 @@ void main(int3 threadId            : SV_DispatchThreadID,
     }
 
     diffusePrimarySurfaceModulation[threadId.xy] = float4(diffuseAlbedoDemodulation.xyz, 1.0);
-    //diffusePrimarySurfaceModulation[threadId.xy] = float4(1.0, 1.0, 1.0, 1.0);
 }

@@ -730,7 +730,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         //  or backward
         nrd::CommonSettings commonSettings = {};
         commonSettings.frameIndex = _frameIndex;
-        commonSettings.isMotionVectorInWorldSpace = false;
+        commonSettings.isMotionVectorInWorldSpace = true;
         //commonSettings.motionVectorScale[0]       = 1.0;
         //commonSettings.motionVectorScale[1]       = 1.0;
 
