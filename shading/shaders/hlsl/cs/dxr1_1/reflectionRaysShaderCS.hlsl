@@ -311,15 +311,14 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             if (diffuseRay == true)
             {
+                float3 light = accumulatedLightRadiance * indirectDiffuseLightEnergy;
                 if (length(emissiveColor) > 0.0)
                 {
                     // Account for emissive surfaces
-                    indirectDiffuse += indirectDiffuseLightEnergy * emissiveColor;
+                    light += indirectDiffuseLightEnergy * emissiveColor;
                 }
                 indirecDiffusetHitDistance += rayQuery.CommittedRayT();
 
-                float3 light =
-                    accumulatedLightRadiance * indirectDiffuseLightEnergy;
                 indirectDiffuse += light;
 
                 float normDist = REBLUR_FrontEnd_GetNormHitDist(rayQuery.CommittedRayT(), viewZSRV[threadId.xy].x, diffHitDistParams,
@@ -330,16 +329,15 @@ void main(int3 threadId            : SV_DispatchThreadID,
             }
             else
             {
+                float3 light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
+                               accumulatedLightRadiance * indirectSpecularLightEnergy;
                 if (length(emissiveColor) > 0.0)
                 {
                     // Account for emissive surfaces
-                    indirectSpecular += indirectSpecularLightEnergy * emissiveColor;
+                    light += indirectSpecularLightEnergy * emissiveColor;
                 }
 
                 indirectHitDistanceSpecular += rayQuery.CommittedRayT();
-
-                float3 light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
-                                    accumulatedLightRadiance * indirectSpecularLightEnergy;
 
                 indirectSpecular += light;
 
