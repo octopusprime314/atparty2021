@@ -3,6 +3,7 @@
 Texture2D indirectLightRaysHistoryBufferSRV : register(t0, space0);
 Texture2D indirectSpecularLightRaysHistoryBufferSRV : register(t1, space0);
 Texture2D diffusePrimarySurfaceModulation : register(t2, space0);
+Texture2D specularPrimarySurfaceModulation : register(t3, space0);
 
 RWTexture2D<float4> pathTracerUAV       : register(u0);
 
@@ -27,6 +28,7 @@ void main(int3 threadId : SV_DispatchThreadID,
         REBLUR_BackEnd_UnpackRadiance(indirectLightRaysHistoryBufferSRV[threadId.xy]);
 
     diffuseUnpacked *= diffusePrimarySurfaceModulation[threadId.xy];
+    //specularUnpacked *= specularPrimarySurfaceModulation[threadId.xy];
 
     const float gamma = 2.2;
     // const float exposure = 0.01;

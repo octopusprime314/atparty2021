@@ -19,6 +19,7 @@ TextureCube                                 skyboxTexture                    : r
 RWTexture2D<float4> indirectLightRaysUAV : register(u0);
 RWTexture2D<float4> indirectSpecularLightRaysUAV : register(u1);
 RWTexture2D<float4> diffusePrimarySurfaceModulation : register(u2);
+RWTexture2D<float4> specularPrimarySurfaceModulation : register(u3);
 
 SamplerState bilinearWrap : register(s0);
 
@@ -115,6 +116,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     float3 indirectSpecularLightEnergy = float3(1.0, 1.0, 1.0);
     float3 indirectDiffuseLightEnergy = float3(1.0, 1.0, 1.0);
+    float3 throughput                  = float3(1.0, 1.0, 1.0);
 
     float  indirecDiffusetHitDistance = 0.0;
     float indirectHitDistanceSpecular = 0.0;
@@ -131,13 +133,17 @@ void main(int3 threadId            : SV_DispatchThreadID,
     float3 previousPosition = float3(0.0, 0.0, 0.0);
 
     float3 diffuseAlbedoDemodulation = float3(0.0, 0.0, 0.0);
-    float3 specularAlbedoDemodulation = float3(0.0, 0.0, 0.0);
+    float3 specularFresnelDemodulation = float3(0.0, 0.0, 0.0);
 
     float3 rayDir = float3(0.0, 0.0, 0.0);
 
     float3 skyboxContribution = float3(0.0, 0.0, 0.0);
 
     float roughnessAccumulation = 0.0;
+
+    int specularRayCount = 0;
+
+    bool grabbedPrimarySurfaceDemodulator = false;
 
     for (i = 0; i < 10; i++)
     {
@@ -167,6 +173,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 {
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
                 }
+
+                float3 diffuseWeight = albedo * (1.0 - metallic);
+                throughput *= diffuseWeight;
             }
             else
             {
@@ -179,7 +188,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 // See the paper "Sampling the GGX Distribution of Visible Normals" by E. Heitz,
                 // Journal of Computer Graphics Techniques Vol. 7, No. 4, 2018.
                 // http://jcgt.org/published/0007/04/01/paper.pdf
-                
+
                 float3 viewVector = normalize(indirectPos - previousPosition);
 
                 float2 rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
@@ -196,13 +205,25 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 // Opaque materials make a reflected ray
                 else
                 {
+                    // VNDF reflection sampling
                     rayDir = reflect(V, H);
+
+                    // For mirror reflection testing
+                    //rayDir = normalize(viewVector - (2.0f * dot(viewVector, indirectNormal) * indirectNormal));
+                    //H = normalize(viewVector + rayDir);
                 }
 
-                float NoV = max(0, -dot(indirectNormal, viewVector));
-                float NoL = max(0, dot(N, rayDir));
-                float NoH = max(0, dot(N, H));
+                float NdotV = max(0, -dot(indirectNormal, viewVector));
+                float NdotL = max(0, dot(N, rayDir));
+                //float NoH = max(0, dot(N, H));
                 float VoH = max(0, -dot(V, H));
+
+                float3 F0  = float3(0.04f, 0.04f, 0.04f);
+                F0       = lerp(F0, albedo, metallic);
+
+                float3 F              = FresnelSchlick(VoH, F0);
+                float3 specularWeight = F * Smith_G2_Over_G1_Height_Correlated(roughness, roughness * roughness, NdotL, NdotV);
+                throughput *= specularWeight;
             }
         }
         // See the Heitz paper referenced above for the estimator explanation.
@@ -296,26 +317,34 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     accumulatedSpecularRadiance += indirectSpecularRadiance;
                 }
 
-                if (/*length(lightRadiance) > 0.0 &&*/ /*roughnessAccumulation < 0.25*/ i == 0)
+                // Only reconstruct primary surface hits in composite if the metallic is less than or equal to 0.5
+                // otherwise let denoiser take care of it
+                if (i == 0 && metallic <= 0.5)
                 {
                     diffuseAlbedoDemodulation += indirectDiffuseRadiance;
+                    specularFresnelDemodulation += indirectSpecularRadiance;
+                    grabbedPrimarySurfaceDemodulator = true;
                 }
-
-                //if (i == 1 )
-                //{
-                //    specularAlbedoDemodulation += indirectDiffuseRadiance/* + indirectSpecularRadiance*/;
-                //}
             }
 
             roughnessAccumulation += roughness;
 
             if (diffuseRay == true)
             {
-                float3 light = accumulatedLightRadiance * indirectDiffuseLightEnergy;
+                float3 light = float3(0.0, 0.0, 0.0);
+                if (i == 0)
+                {
+                    light = accumulatedLightRadiance * throughput;
+                }
+                else
+                {
+                    light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
+                            accumulatedLightRadiance * throughput;
+                }
                 if (length(emissiveColor) > 0.0)
                 {
                     // Account for emissive surfaces
-                    light += indirectDiffuseLightEnergy * emissiveColor;
+                    light += throughput * emissiveColor;
                 }
                 indirecDiffusetHitDistance += rayQuery.CommittedRayT();
 
@@ -329,12 +358,20 @@ void main(int3 threadId            : SV_DispatchThreadID,
             }
             else
             {
-                float3 light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
-                               accumulatedLightRadiance * indirectSpecularLightEnergy;
+                float3 light = float3(0.0, 0.0, 0.0);
+                /*if (i == 0)
+                {
+                    light = accumulatedLightRadiance * throughput;
+                }
+                else
+                {*/
+                    light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
+                            accumulatedLightRadiance * throughput;
+                //}
                 if (length(emissiveColor) > 0.0)
                 {
                     // Account for emissive surfaces
-                    light += indirectSpecularLightEnergy * emissiveColor;
+                    light += throughput * emissiveColor;
                 }
 
                 indirectHitDistanceSpecular += rayQuery.CommittedRayT();
@@ -345,36 +382,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                                 roughness);
 
                 nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+
+                specularRayCount++;
             }
-
-            // Specular
-            float2   rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
-            float3x3 basis = orthoNormalBasis(indirectNormal);
-            float3 N = indirectNormal;
-            float3 V = ray.Direction;
-            float3 H = ImportanceSampleGGX_VNDF(rng3, roughness, V, basis);
-            float3 reflectedRay = reflect(V, H);
-
-            float3 lightVector = normalize(indirectPos - previousPosition);
-
-            float3 F0 = float3(0.04f, 0.04f, 0.04f);
-            F0        = lerp(F0, albedo, metallic);
-
-            // calculate per-light radiance
-            float3 halfVector = normalize(lightVector + reflectedRay);
-
-            // Cook-Torrance BRDF for specular lighting calculations
-            float  NDF = DistributionGGX(indirectNormal, halfVector, roughness);
-            float  G   = GeometrySmith(indirectNormal, lightVector, halfVector, roughness);
-            float3 F   = FresnelSchlick(max(dot(halfVector, lightVector), 0.0), F0);
-
-            float3 numerator = NDF * G * F;
-
-            float3 specularWeight = G * F;
-            indirectSpecularLightEnergy *= specularWeight;
-
-            float3 diffuseWeight = albedo * (1.0 - metallic);
-            indirectDiffuseLightEnergy *= diffuseWeight;
         }
         else
         {
@@ -383,11 +393,12 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             if (i == 0)
             {
-                float3 light = dayColor.xyz * indirectDiffuseLightEnergy;
+                float3 light       = dayColor.xyz * throughput;
                 skyboxContribution = light;
 
                 diffuseAlbedoDemodulation += skyboxContribution;
                 nrdDiffuse = float4(1.0, 1.0, 1.0, 1.0);
+                grabbedPrimarySurfaceDemodulator = true;
             }
             else
             {
@@ -396,7 +407,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZSRV[threadId.xy].x,
                                                                     diffHitDistParams, 1.0);
 
-                    float3 light    = dayColor.xyz * indirectDiffuseLightEnergy;
+                    float3 light = dayColor.xyz * throughput;
                     indirectDiffuse += light;
                     nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist,
                                                                USE_SANITIZATION);
@@ -405,7 +416,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 {
                     float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZSRV[threadId.xy].x,
                                                                     specHitDistParams, 1.0);
-                    float3 light = dayColor.xyz * indirectSpecularLightEnergy;
+                    float3 light    = dayColor.xyz * throughput;
                     indirectSpecular += light;
                     nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist,
                                                                 USE_SANITIZATION);
@@ -425,5 +436,14 @@ void main(int3 threadId            : SV_DispatchThreadID,
         indirectLightRaysUAV[threadId.xy] = nrdDiffuse;
     }
 
-    diffusePrimarySurfaceModulation[threadId.xy] = float4(diffuseAlbedoDemodulation.xyz, 1.0);
+    if (grabbedPrimarySurfaceDemodulator == false)
+    {
+        diffusePrimarySurfaceModulation[threadId.xy] = float4(1.0, 1.0, 1.0, 1.0);
+    }
+    else
+    {
+        diffusePrimarySurfaceModulation[threadId.xy] = float4(diffuseAlbedoDemodulation.xyz, 1.0);
+    }
+
+    specularPrimarySurfaceModulation[threadId.xy] = float4(throughput, i);
 }

@@ -12,6 +12,7 @@ float3 GetBRDFLight(float3 albedo, float3 normal, float3 hitPosition, float roug
     float3 eyeVector      = normalize(hitPosition - prevPosition);
 
     float3 F0 = float3(0.04f, 0.04f, 0.04f);
+    //F0 = (F0 * (1.0 - metallic)) + (albedo * metallic)
     F0        = lerp(F0, albedo, metallic);
 
     // reflectance equation

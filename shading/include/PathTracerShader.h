@@ -55,6 +55,7 @@ class PathTracerShader : public ShaderBase
     RenderTexture*               _indirectSpecularLightRays;
     RenderTexture*               _indirectSpecularLightRaysHistoryBuffer;
     RenderTexture*               _diffusePrimarySurfaceModulation;
+    RenderTexture*               _specularPrimarySurfaceModulation;
     RenderTexture*               _compositor;
     ComPtr<ID3D12Resource>       _hemisphereSamplesUpload;
     D3DBuffer*                   _hemisphereSamplesGPUBuffer;

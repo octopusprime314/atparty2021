@@ -141,6 +141,7 @@ float GeometrySchlickGGX(float nDotV, float roughness)
 
     return num / denom;
 }
+
 float GeometrySmith(float3 normal, float3 eyeVector, float3 lightDirection, float roughness)
 {
     float NdotV = max(dot(normal, eyeVector), 0.0);
@@ -148,14 +149,31 @@ float GeometrySmith(float3 normal, float3 eyeVector, float3 lightDirection, floa
     float ggx2  = GeometrySchlickGGX(NdotV, roughness);
     float ggx1  = GeometrySchlickGGX(NdotL, roughness);
 
-    return ggx1 * ggx2;
+    return ggx2 * ggx1;
+}
+
+// Smith G1 term (masking function) further optimized for GGX distribution (by substituting G_a into
+// G1_GGX)
+float Smith_G1_GGX(float alpha, float NdotS, float alphaSquared, float NdotSSquared)
+{
+    return 2.0f /
+           (sqrt(((alphaSquared * (1.0f - NdotSSquared)) + NdotSSquared) / NdotSSquared) + 1.0f);
+}
+
+// A fraction G2/G1 where G2 is height correlated can be expressed using only G1 terms
+// Source: "Implementing a Simple Anisotropic Rough Diffuse Material with Stochastic Evaluation",
+// Appendix A by Heitz & Dupuy
+float Smith_G2_Over_G1_Height_Correlated(float alpha, float alphaSquared, float NdotL, float NdotV)
+{
+    float G1V = Smith_G1_GGX(alpha, NdotV, alphaSquared, NdotV * NdotV);
+    float G1L = Smith_G1_GGX(alpha, NdotL, alphaSquared, NdotL * NdotL);
+    return G1L / (G1V + G1L - G1V * G1L);
 }
 
 float3 FresnelSchlick(float cosTheta, float3 F0)
 {
     //Fixes circular corruption when ensuring pow() doesn't get a negative number
-    return F0 + (1.0 - F0) * pow(abs(1.0 - cosTheta), 5.0);
-    //return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+    return F0 + (1.0 - F0) * pow(1.0 - abs(cosTheta), 5.0);
 }
 
 // Return random value between 0 and 1

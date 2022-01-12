@@ -94,6 +94,10 @@ PathTracerShader::PathTracerShader(std::string shaderName)
                                            IOEventDistributor::screenPixelHeight,
                                            TextureFormat::R16G16B16A16_FLOAT, "_diffusePrimarySurfaceModulation");
 
+    _specularPrimarySurfaceModulation = new RenderTexture(IOEventDistributor::screenPixelWidth,
+                                           IOEventDistributor::screenPixelHeight,
+                                           TextureFormat::R16G16B16A16_FLOAT, "_specularPrimarySurfaceModulation");
+
     // Sun lighting rays and occlusion
 
      // Segments the path tracer into separate passes that help improve coherency
@@ -505,6 +509,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("indirectLightRaysUAV", 0, _indirectLightRays, true, true);
     shader->updateData("indirectSpecularLightRaysUAV", 0, _indirectSpecularLightRays, true, true);
     shader->updateData("diffusePrimarySurfaceModulation", 0, _diffusePrimarySurfaceModulation, true, true);
+    shader->updateData("specularPrimarySurfaceModulation", 0, _specularPrimarySurfaceModulation, true, true);
 
     shader->updateData("skyboxTexture", 0, skyBoxTexture, true);
 
@@ -623,7 +628,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         barrierDesc[4].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
         barrierDesc[4].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-        cmdList->ResourceBarrier(5, barrierDesc);
+        barrierDesc[5].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[5].Transition.pResource = _specularPrimarySurfaceModulation->getResource()->getResource().Get();
+        barrierDesc[5].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[5].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[5].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+        cmdList->ResourceBarrier(6, barrierDesc);
 
         // Wrap the command buffer
         nri::CommandBufferD3D12Desc cmdDesc = {};
@@ -887,6 +898,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("indirectLightRaysHistoryBufferSRV", 0, _indirectLightRaysHistoryBuffer, true, false);
     shader->updateData("indirectSpecularLightRaysHistoryBufferSRV", 0, _indirectSpecularLightRaysHistoryBuffer, true, false);
     shader->updateData("diffusePrimarySurfaceModulation", 0, _diffusePrimarySurfaceModulation, true, false);
+    //shader->updateData("specularPrimarySurfaceModulation", 0, _specularPrimarySurfaceModulation, true, false);
 
     shader->updateData("pathTracerUAV", 0, _compositor, true, true);
 
@@ -957,7 +969,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     barrierDesc[2].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     barrierDesc[2].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
-    cmdList->ResourceBarrier(3, barrierDesc);
+    barrierDesc[3].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrierDesc[3].Transition.pResource = _specularPrimarySurfaceModulation->getResource()->getResource().Get();
+    barrierDesc[3].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrierDesc[3].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+    cmdList->ResourceBarrier(4, barrierDesc);
 
     //EngineManager* engMan = EngineManager::instance();
     //Bloom*         bloom  = engMan->getBloomShader();
