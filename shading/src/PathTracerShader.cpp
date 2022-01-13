@@ -356,7 +356,7 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     TextureBroker* textureManager = TextureBroker::instance();
 
     auto skyBoxTexture = textureManager->getTexture(SKYBOX_LOCATION);
-    int  texturesPerMaterial = Material::TexturesPerMaterial;
+    int  texturesPerMaterial = TexturesPerMaterial;
 
     auto cameraView          = viewEventDistributor->getView();
     auto prevCameraView    = viewEventDistributor->getPrevCameraView();

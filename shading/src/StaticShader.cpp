@@ -55,7 +55,7 @@ void StaticShader::startEntity()
                           static_cast<float>(IOEventDistributor::screenPixelHeight)};
 
     _shader->updateData("screenSize", screenSize, false);
-    int texturesPerMaterial = Material::TexturesPerMaterial;
+    int texturesPerMaterial = TexturesPerMaterial;
     _shader->updateData("texturesPerMaterial", &texturesPerMaterial, false);
 
 }

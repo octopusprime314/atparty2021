@@ -474,6 +474,10 @@ void ResourceManager::buildGeometry(Entity* entity)
             texture = textureBroker->getTexture(textureNames.roughnessMetallic);
             addSRVToUnboundedTextureDescriptorTable(texture);
             _texturesMap[bufferModel].first.push_back(texture);
+
+            texture = textureBroker->getTexture(textureNames.emissive);
+            addSRVToUnboundedTextureDescriptorTable(texture);
+            _texturesMap[bufferModel].first.push_back(texture);
         }
 
         if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)

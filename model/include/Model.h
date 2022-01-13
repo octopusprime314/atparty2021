@@ -58,12 +58,13 @@ struct UniformMaterial
     uint32_t validBits;
 };
 
+static constexpr int TexturesPerMaterial = 4;
 struct Material
 {
-    static constexpr int TexturesPerMaterial = 3;
     std::string albedo;
     std::string normal;
     std::string roughnessMetallic;
+    std::string emissive;
 
     UniformMaterial uniformMaterial;
 };

@@ -15,6 +15,7 @@ struct CompressedAttribute
 #define NormalValidBit    2
 #define RoughnessValidBit 4
 #define MetallicValidBit  8
+#define EmissiveValidBit  16
 
 struct UniformMaterial
 {

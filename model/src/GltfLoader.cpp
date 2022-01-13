@@ -694,7 +694,7 @@ void BuildGltfMeshes(const Document*           document,
 
             auto texturesPrevSize = textureIndexing.size();
 
-            bool materialsFound[3] = {false, false, false};
+            bool materialsFound[4] = {false, false, false, false};
 
             uniformMaterials.push_back(UniformMaterial());
 
@@ -710,6 +710,11 @@ void BuildGltfMeshes(const Document*           document,
                 }
             }
 
+            if (materialsFound[0] == false)
+            {
+                textureIndexing.push_back(-1);
+            }
+
             for (auto texture : textureInMaterial)
             {
                 if (texture.first.empty() == false &&
@@ -721,6 +726,11 @@ void BuildGltfMeshes(const Document*           document,
                 }
             }
 
+            if (materialsFound[1] == false)
+            {
+                textureIndexing.push_back(-1);
+            }
+
             for (auto texture : textureInMaterial)
             {
                 if (texture.first.empty() == false &&
@@ -730,6 +740,27 @@ void BuildGltfMeshes(const Document*           document,
                     textureIndexing.push_back(index);
                     materialsFound[2] = true;
                 }
+            }
+
+            if (materialsFound[2] == false)
+            {
+                textureIndexing.push_back(-1);
+            }
+
+            for (auto texture : textureInMaterial)
+            {
+                if (texture.first.empty() == false &&
+                    texture.second == Microsoft::glTF::TextureType::Emissive)
+                {
+                    int index = std::stoi(document->textures[texture.first].imageId, &sz);
+                    textureIndexing.push_back(index);
+                    materialsFound[3] = true;
+                }
+            }
+
+            if (materialsFound[3] == false)
+            {
+                textureIndexing.push_back(-1);
             }
 
             uniformMaterials.back().validBits = 0;
@@ -747,32 +778,39 @@ void BuildGltfMeshes(const Document*           document,
                 uniformMaterials.back().validBits |= RoughnessValidBit;
                 uniformMaterials.back().validBits |= MetallicValidBit;
             }
-
-            // Always use uniform emissive until textures are supported
-            uniformMaterials.back().validBits |= EmissiveValidBit;
-
-            // If material roughness is supplied then just use albedo
-            if (materialsFound[1] == false ||
-                materialsFound[2] == false)
+            if (materialsFound[3] == false)
             {
-                for (auto texture : textureInMaterial)
-                {
-                    if (texture.first.empty() == false &&
-                        texture.second == Microsoft::glTF::TextureType::BaseColor)
-                    {
-                        int index = std::stoi(document->textures[texture.first].imageId, &sz);
-
-                        if (materialsFound[1] == false)
-                        {
-                            textureIndexing.push_back(index);
-                        }
-                        if (materialsFound[2] == false)
-                        {
-                            textureIndexing.push_back(index);
-                        }
-                    }
-                }
+                // Always use uniform emissive until textures are supported
+                uniformMaterials.back().validBits |= EmissiveValidBit;
             }
+
+            //// If material roughness is supplied then just use albedo
+            //if (materialsFound[1] == false ||
+            //    materialsFound[2] == false ||
+            //    materialsFound[3] == false)
+            //{
+            //    for (auto texture : textureInMaterial)
+            //    {
+            //        if (texture.first.empty() == false &&
+            //            texture.second == Microsoft::glTF::TextureType::BaseColor)
+            //        {
+            //            int index = std::stoi(document->textures[texture.first].imageId, &sz);
+
+            //            if (materialsFound[1] == false)
+            //            {
+            //                textureIndexing.push_back(index);
+            //            }
+            //            if (materialsFound[2] == false)
+            //            {
+            //                textureIndexing.push_back(index);
+            //            }
+            //            if (materialsFound[3] == false)
+            //            {
+            //                textureIndexing.push_back(index);
+            //            }
+            //        }
+            //    }
+            //}
 
             if (material.extensions.empty() == false)
             {
@@ -824,8 +862,7 @@ void BuildGltfMeshes(const Document*           document,
         std::vector<std::string> materialTextureNames;
         std::set<std::string> materialRepeatCount;
 
-
-        if (textureIndexing.empty())
+        /*if (textureIndexing.empty())
         {
             if (uniformMaterials.back().validBits & ColorValidBit)
             {
@@ -839,36 +876,67 @@ void BuildGltfMeshes(const Document*           document,
             {
                 materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
             }
+            if (uniformMaterials.back().validBits & EmissiveValidBit)
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
+            }
 
             model->addMaterial(materialTextureNames, vertexStrides[i], vertexStrides[i], indexStrides[i], uniformMaterials[i]);
         }
         else
-        {
-            for (const auto& texture : textureIndexing)
+        {*/
+
+            /*if (uniformMaterials.back().validBits & ColorValidBit)
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
+            }
+            if (uniformMaterials.back().validBits & NormalValidBit)
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultNormal.dds");
+            }
+            if (uniformMaterials.back().validBits & RoughnessValidBit)
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
+            }
+            if (uniformMaterials.back().validBits & EmissiveValidBit)
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
+            }*/
+
+            for (const auto& textureSlot : textureIndexing)
             {
                 auto modelName            = model->getName();
                 auto lodStrippedModelName = modelName.substr(0, modelName.find_last_of("_"));
 
-                const auto& image = document->images.Elements()[texture];
-
                 std::string filename;
 
-                if (image.uri.empty())
+                if (textureSlot != -1)
                 {
-                    assert(!image.bufferViewId.empty());
+                    const auto& image = document->images.Elements()[textureSlot];
 
-                    auto& bufferView = document->bufferViews.Get(image.bufferViewId);
-                    auto& buffer     = document->buffers.Get(bufferView.bufferId);
 
-                    filename += buffer.uri; //NOTE: buffer uri is empty if image is stored in GLB binary chunk
-                }
-                else if (IsUriBase64(image.uri))
-                {
-                    filename = "Data URI";
+                    if (image.uri.empty())
+                    {
+                        assert(!image.bufferViewId.empty());
+
+                        auto& bufferView = document->bufferViews.Get(image.bufferViewId);
+                        auto& buffer     = document->buffers.Get(bufferView.bufferId);
+
+                        filename += buffer.uri; // NOTE: buffer uri is empty if image is stored in
+                                                // GLB binary chunk
+                    }
+                    else if (IsUriBase64(image.uri))
+                    {
+                        filename = "Data URI";
+                    }
+                    else
+                    {
+                        filename = image.uri;
+                    }
                 }
                 else
                 {
-                    filename = image.uri;
+                    filename = "DefaultBaseColor.dds";
                 }
 
                 if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
@@ -876,13 +944,17 @@ void BuildGltfMeshes(const Document*           document,
                     auto textureName = TEXTURE_LOCATION + "collections/" + filename;
                     if (materialRepeatCount.find(textureName) != materialRepeatCount.end())
                     {
-                        if (textureIndex % 3 == 1)
+                        if (textureIndex % (TexturesPerMaterial) == 1)
                         {
                             materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultNormal.dds");
                         }
-                        else if (textureIndex % 3 == 2)
+                        else if (textureIndex % (TexturesPerMaterial) == 2)
                         {
                             materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
+                        }
+                        else if (textureIndex % (TexturesPerMaterial) == 3)
+                        {
+                            materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
                         }
                     }
                     else
@@ -911,7 +983,7 @@ void BuildGltfMeshes(const Document*           document,
                 }
                 textureIndex++;
             }
-        }
+        //}
 
         if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
         {

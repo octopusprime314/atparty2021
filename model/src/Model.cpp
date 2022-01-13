@@ -137,6 +137,10 @@ void Model::addMaterial(std::vector<std::string> materialTextures, int textureSt
         {
             material.roughnessMetallic = materialTextureName;
         }
+        else if (i == 3)
+        {
+            material.emissive = materialTextureName;
+        }
 
         amalgamatedTextureName += materialTextureName;
         i++;

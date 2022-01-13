@@ -713,6 +713,15 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
     }
 
     transmittance = uniformMaterials[attributeIndex].transmittance;
-    emissiveColor = uniformMaterials[attributeIndex].emissiveColor;
+
+    if (uniformMaterials[attributeIndex].validBits & EmissiveValidBit)
+    {
+        emissiveColor = uniformMaterials[attributeIndex].emissiveColor;
+    }
+    else
+    {
+        emissiveColor = diffuseTexture[NonUniformResourceIndex(materialIndex + 3)]
+                       .SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz * uniformMaterials[attributeIndex].emissiveColor;
+    }
 }
 #endif
