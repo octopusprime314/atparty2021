@@ -862,128 +862,86 @@ void BuildGltfMeshes(const Document*           document,
         std::vector<std::string> materialTextureNames;
         std::set<std::string> materialRepeatCount;
 
-        /*if (textureIndexing.empty())
+        for (const auto& textureSlot : textureIndexing)
         {
-            if (uniformMaterials.back().validBits & ColorValidBit)
+            auto modelName            = model->getName();
+            auto lodStrippedModelName = modelName.substr(0, modelName.find_last_of("_"));
+
+            std::string filename;
+
+            if (textureSlot != -1)
             {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
+                const auto& image = document->images.Elements()[textureSlot];
+
+
+                if (image.uri.empty())
+                {
+                    assert(!image.bufferViewId.empty());
+
+                    auto& bufferView = document->bufferViews.Get(image.bufferViewId);
+                    auto& buffer     = document->buffers.Get(bufferView.bufferId);
+
+                    filename += buffer.uri; // NOTE: buffer uri is empty if image is stored in
+                                            // GLB binary chunk
+                }
+                else if (IsUriBase64(image.uri))
+                {
+                    filename = "Data URI";
+                }
+                else
+                {
+                    filename = image.uri;
+                }
             }
-            if (uniformMaterials.back().validBits & NormalValidBit)
+            else
             {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultNormal.dds");
-            }
-            if (uniformMaterials.back().validBits & RoughnessValidBit)
-            {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
-            }
-            if (uniformMaterials.back().validBits & EmissiveValidBit)
-            {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
+                filename = "DefaultBaseColor.dds";
             }
 
-            model->addMaterial(materialTextureNames, vertexStrides[i], vertexStrides[i], indexStrides[i], uniformMaterials[i]);
+            if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
+            {
+                auto textureName = TEXTURE_LOCATION + "collections/" + filename;
+                if (materialRepeatCount.find(textureName) != materialRepeatCount.end())
+                {
+                    if (textureIndex % (TexturesPerMaterial) == 1)
+                    {
+                        materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultNormal.dds");
+                    }
+                    else if (textureIndex % (TexturesPerMaterial) == 2)
+                    {
+                        materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
+                    }
+                    else if (textureIndex % (TexturesPerMaterial) == 3)
+                    {
+                        materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
+                    }
+                }
+                else
+                {
+                    materialTextureNames.push_back(textureName);
+                }
+                materialRepeatCount.insert(textureName);
+            }
+            else
+            {
+                materialTextureNames.push_back(TEXTURE_LOCATION + lodStrippedModelName + "/" + filename);
+            }
+
+            materialIndex++;
+            if (materialIndex == texturesPerMaterial[i])
+            {
+                model->addMaterial(materialTextureNames,
+                                    vertexStrides[i],
+                                    vertexStrides[i],
+                                    indexStrides[i],
+                                    uniformMaterials[i]);
+
+                i++;
+                materialIndex = 0;
+                materialTextureNames.clear();
+            }
+            textureIndex++;
         }
-        else
-        {*/
-
-            /*if (uniformMaterials.back().validBits & ColorValidBit)
-            {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
-            }
-            if (uniformMaterials.back().validBits & NormalValidBit)
-            {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultNormal.dds");
-            }
-            if (uniformMaterials.back().validBits & RoughnessValidBit)
-            {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
-            }
-            if (uniformMaterials.back().validBits & EmissiveValidBit)
-            {
-                materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
-            }*/
-
-            for (const auto& textureSlot : textureIndexing)
-            {
-                auto modelName            = model->getName();
-                auto lodStrippedModelName = modelName.substr(0, modelName.find_last_of("_"));
-
-                std::string filename;
-
-                if (textureSlot != -1)
-                {
-                    const auto& image = document->images.Elements()[textureSlot];
-
-
-                    if (image.uri.empty())
-                    {
-                        assert(!image.bufferViewId.empty());
-
-                        auto& bufferView = document->bufferViews.Get(image.bufferViewId);
-                        auto& buffer     = document->buffers.Get(bufferView.bufferId);
-
-                        filename += buffer.uri; // NOTE: buffer uri is empty if image is stored in
-                                                // GLB binary chunk
-                    }
-                    else if (IsUriBase64(image.uri))
-                    {
-                        filename = "Data URI";
-                    }
-                    else
-                    {
-                        filename = image.uri;
-                    }
-                }
-                else
-                {
-                    filename = "DefaultBaseColor.dds";
-                }
-
-                if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
-                {
-                    auto textureName = TEXTURE_LOCATION + "collections/" + filename;
-                    if (materialRepeatCount.find(textureName) != materialRepeatCount.end())
-                    {
-                        if (textureIndex % (TexturesPerMaterial) == 1)
-                        {
-                            materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultNormal.dds");
-                        }
-                        else if (textureIndex % (TexturesPerMaterial) == 2)
-                        {
-                            materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultAORoughness.dds");
-                        }
-                        else if (textureIndex % (TexturesPerMaterial) == 3)
-                        {
-                            materialTextureNames.push_back(TEXTURE_LOCATION + "collections/DefaultBaseColor.dds");
-                        }
-                    }
-                    else
-                    {
-                        materialTextureNames.push_back(textureName);
-                    }
-                    materialRepeatCount.insert(textureName);
-                }
-                else
-                {
-                    materialTextureNames.push_back(TEXTURE_LOCATION + lodStrippedModelName + "/" + filename);
-                }
-
-                materialIndex++;
-                if (materialIndex == texturesPerMaterial[i])
-                {
-                    model->addMaterial(materialTextureNames,
-                                        vertexStrides[i],
-                                        vertexStrides[i],
-                                        indexStrides[i],
-                                        uniformMaterials[i]);
-
-                    i++;
-                    materialIndex = 0;
-                    materialTextureNames.clear();
-                }
-                textureIndex++;
-            }
-        //}
 
         if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
         {
