@@ -366,6 +366,9 @@ void ResourceManager::buildGeometry(Entity* entity)
 
     int geometryIndex = 0;
 
+    int indexCountOffset  = 0;
+    int vertexCountOffset = 0;
+
     for (int i = 0; i < vertexAndBufferStrides.size(); i++)
     {
         auto indexDesc =
@@ -387,26 +390,25 @@ void ResourceManager::buildGeometry(Entity* entity)
         int indexCount  = vertexAndBufferStrides[i].second;
         int vertexCount = vertexAndBufferStrides[i].first;
 
-        int indexOffset  = 0;
-        int vertexOffset = 0;
 
         if (i > 0)
         {
             indexCount  = vertexAndBufferStrides[i].second - vertexAndBufferStrides[i - 1].second;
             vertexCount = vertexAndBufferStrides[i].first - vertexAndBufferStrides[i - 1].first;
+
         }
 
         auto indexGPUAddress = (*entity->getFrustumVAO())[0]
                                    ->getIndexResource()
                                    ->getResource()
                                    ->GetGPUVirtualAddress() +
-                               (indexOffset * indexTypeSize);
+                               (indexCountOffset * indexTypeSize);
 
         auto vertexGPUAddress = (*entity->getFrustumVAO())[0]
                                     ->getVertexResource()
                                     ->getResource()
                                     ->GetGPUVirtualAddress() + 
-                                 vertexOffset;
+                                 (vertexCountOffset * sizeof(CompressedAttribute));
 
         
         auto materialTransmittance = entity->getModel()->getMaterial(i).uniformMaterial.transmittance;
@@ -414,70 +416,83 @@ void ResourceManager::buildGeometry(Entity* entity)
         Model* bufferModel = entity->getModel();
 
         // Initialize the map values
-        _vertexBufferMap[bufferModel] = ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
-        _indexBufferMap[bufferModel] = ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
-        
-        _indexBufferMap[bufferModel].first.push_back(new D3DBuffer());
-        _vertexBufferMap[bufferModel].first.push_back(new D3DBuffer());
-
-        auto indexBuffer  = _indexBufferMap[bufferModel].first.back();
-        auto vertexBuffer = _vertexBufferMap[bufferModel].first.back();
-
-        indexBuffer->indexBufferFormat = indexFormat;
-        vertexBuffer->count            = static_cast<UINT>(vertexCount);
-        indexBuffer->count             = static_cast<UINT>(indexCount);
-        indexBuffer->resource          = (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
-
-        vertexBuffer->resource = (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
-        vertexBuffer->nameId   = entity->getModel()->getName();
-
-        vertexBuffer->offset = vertexOffset;
-        indexBuffer->offset  = indexOffset;
-
-        UINT vertexBufferDescriptorIndex = addSRVToUnboundedAttributeBufferDescriptorTable(
-            vertexBuffer, vertexBuffer->count, vertexBuffer->offset);
-
-        UINT indexBufferDescriptorIndex = addSRVToUnboundedIndexBufferDescriptorTable(
-            indexBuffer, indexBuffer->count, indexBuffer->offset);
-
-        _vertexBufferMap[bufferModel].second = vertexBufferDescriptorIndex;
-        _indexBufferMap[bufferModel].second  = indexBufferDescriptorIndex;
-
-        // lock in the same index for attribute buffers
-        _uniformMaterialMap[vertexBufferDescriptorIndex] = std::vector<UniformMaterial>();
-        _uniformMaterialMap[vertexBufferDescriptorIndex].push_back(bufferModel->getMaterialNames()[i].uniformMaterial);
-
-        auto materialNames = entity->getModel()->getMaterialNames();
-
-        UINT baseModelDescriptorIndex = -1;
-        for (auto textureNames : materialNames)
+        bool existed = false;
+        if (_vertexBufferMap.find(bufferModel) == _vertexBufferMap.end())
         {
+            _vertexBufferMap[bufferModel] = ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
+            _indexBufferMap[bufferModel] = ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
+
+            _indexBufferMap[bufferModel].first.push_back(new D3DBuffer());
+            _vertexBufferMap[bufferModel].first.push_back(new D3DBuffer());
+
+            auto indexBuffer  = _indexBufferMap[bufferModel].first.back();
+            auto vertexBuffer = _vertexBufferMap[bufferModel].first.back();
+
+            indexBuffer->indexBufferFormat = indexFormat;
+            vertexBuffer->count            = static_cast<UINT>(vertexCount);
+            indexBuffer->count             = static_cast<UINT>(indexCount);
+            indexBuffer->resource          = (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
+
+            vertexBuffer->resource = (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
+            vertexBuffer->nameId   = entity->getModel()->getName();
+
+            vertexBuffer->offset = (vertexCountOffset/* * sizeof(CompressedAttribute)*/);
+            indexBuffer->offset  = (indexCountOffset/* * indexTypeSize*/ );
+
+            UINT vertexBufferDescriptorIndex = addSRVToUnboundedAttributeBufferDescriptorTable(
+                vertexBuffer, vertexBuffer->count, vertexBuffer->offset);
+
+            UINT indexBufferDescriptorIndex = addSRVToUnboundedIndexBufferDescriptorTable(
+                indexBuffer, indexBuffer->count, indexBuffer->offset);
+
+            _vertexBufferMap[bufferModel].second = vertexBufferDescriptorIndex;
+            _indexBufferMap[bufferModel].second  = indexBufferDescriptorIndex;
+
+            // lock in the same index for attribute buffers
+            _uniformMaterialMap[vertexBufferDescriptorIndex] = std::vector<UniformMaterial>();
+        }
+        else
+        {
+            existed = true;
+        }
+
+        _uniformMaterialMap[_vertexBufferMap[bufferModel].second].push_back(bufferModel->getMaterialNames()[i].uniformMaterial);
+
+        if (_texturesMap.find(bufferModel) == _texturesMap.end())
+        {
+            auto materialNames = entity->getModel()->getMaterialNames();
+
+            UINT baseModelDescriptorIndex = -1;
             // Initialize the map values
             _texturesMap[bufferModel] = ResourceManager::TextureDescriptorHeapMap(std::vector<AssetTexture*>(), 0);
 
-            // Grab the first descriptor heap index into the material's resources
-            AssetTexture* texture = textureBroker->getTexture(textureNames.albedo);
-            UINT descriptorIndex = addSRVToUnboundedTextureDescriptorTable(texture);
-
-            // For models with more than one material only insert the base offset of all material
-            // resources
-            if (baseModelDescriptorIndex == -1)
+            for (auto textureNames : materialNames)
             {
-                _texturesMap[bufferModel].second = descriptorIndex;
+                // Grab the first descriptor heap index into the material's resources
+                AssetTexture* texture         = textureBroker->getTexture(textureNames.albedo);
+                UINT          descriptorIndex = addSRVToUnboundedTextureDescriptorTable(texture);
+
+                // For models with more than one material only insert the base offset of all
+                // material resources
+                if (baseModelDescriptorIndex == -1)
+                {
+                    baseModelDescriptorIndex         = descriptorIndex;
+                    _texturesMap[bufferModel].second = descriptorIndex;
+                }
+
+                // Build each SRV into the descriptor heap
+                _texturesMap[bufferModel].first.push_back(texture);
+                texture = textureBroker->getTexture(textureNames.normal);
+                addSRVToUnboundedTextureDescriptorTable(texture);
+                _texturesMap[bufferModel].first.push_back(texture);
+                texture = textureBroker->getTexture(textureNames.roughnessMetallic);
+                addSRVToUnboundedTextureDescriptorTable(texture);
+                _texturesMap[bufferModel].first.push_back(texture);
+
+                texture = textureBroker->getTexture(textureNames.emissive);
+                addSRVToUnboundedTextureDescriptorTable(texture);
+                _texturesMap[bufferModel].first.push_back(texture);
             }
-
-            // Build each SRV into the descriptor heap
-            _texturesMap[bufferModel].first.push_back(texture);
-            texture = textureBroker->getTexture(textureNames.normal);
-            addSRVToUnboundedTextureDescriptorTable(texture);
-            _texturesMap[bufferModel].first.push_back(texture);
-            texture = textureBroker->getTexture(textureNames.roughnessMetallic);
-            addSRVToUnboundedTextureDescriptorTable(texture);
-            _texturesMap[bufferModel].first.push_back(texture);
-
-            texture = textureBroker->getTexture(textureNames.emissive);
-            addSRVToUnboundedTextureDescriptorTable(texture);
-            _texturesMap[bufferModel].first.push_back(texture);
         }
 
         if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
@@ -506,6 +521,9 @@ void ResourceManager::buildGeometry(Entity* entity)
             (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexBuffer.StartAddress = vertexGPUAddress;
             (*staticGeometryDesc)[staticGeomIndex].Triangles.VertexBuffer.StrideInBytes = sizeof(CompressedAttribute);
         }
+
+        indexCountOffset += indexCount;
+        vertexCountOffset += vertexCount;
     }
 
     if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)

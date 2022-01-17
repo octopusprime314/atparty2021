@@ -513,34 +513,6 @@ void BuildGltfMeshes(const Document*           document,
 
     Vector4 cameraQuaternion = Vector4(0.0, 0.0, 0.0);
     Vector4 cameraPosition = Vector4(0.0, 0.0, 0.0);
-    //if (loadType == ModelLoadType::Scene)
-    //{
-    //    // Use the resource reader to get each mesh primitive's position data
-    //    for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
-    //    {
-    //        const auto& node = document->nodes.Elements()[nodeIndex];
-
-    //        // Load camera from child nodes
-    //        if (node.meshId.empty() == true && node.children.empty() == false)
-    //        {
-    //            std::string::size_type sz; // alias of size_t
-    //            auto                   childNodeIndex = std::stoi(node.children[0], &sz);
-
-    //            auto cameraNode = document->nodes.Elements()[childNodeIndex];
-
-    //            if (cameraNode.cameraId.empty() == true)
-    //            {
-    //                continue;
-    //            }
-
-    //            cameraPosition = Vector4(node.translation.x, node.translation.y, node.translation.z);
-    //            cameraQuaternion = Vector4(node.rotation.x + cameraNode.rotation.x,
-    //                                       node.rotation.y + cameraNode.rotation.y,
-    //                                       node.rotation.z + cameraNode.rotation.z,
-    //                                       node.rotation.w + cameraNode.rotation.w);
-    //        }
-    //    }
-    //}
 
     std::vector<PathWaypoint> waypoints;
     // Use the resource reader to get each mesh primitive's position data
@@ -571,8 +543,7 @@ void BuildGltfMeshes(const Document*           document,
 
             meshNodeTransforms[nodeIndex] = currentTransform;
         }
-        if (nodeToSamplerIndex.find(nodeIndex) != nodeToSamplerIndex.end()/* &&
-            (node.name == "Camera")*/)
+        if (nodeToSamplerIndex.find(nodeIndex) != nodeToSamplerIndex.end())
         {
             AnimatingNodes(document, resourceReader, waypoints, nodeIndex, 0, nodeWayPoints,
                           nodeToSamplerIndex, cameraPosition, cameraQuaternion);
@@ -783,35 +754,6 @@ void BuildGltfMeshes(const Document*           document,
                 // Always use uniform emissive until textures are supported
                 uniformMaterials.back().validBits |= EmissiveValidBit;
             }
-
-            //// If material roughness is supplied then just use albedo
-            //if (materialsFound[1] == false ||
-            //    materialsFound[2] == false ||
-            //    materialsFound[3] == false)
-            //{
-            //    for (auto texture : textureInMaterial)
-            //    {
-            //        if (texture.first.empty() == false &&
-            //            texture.second == Microsoft::glTF::TextureType::BaseColor)
-            //        {
-            //            int index = std::stoi(document->textures[texture.first].imageId, &sz);
-
-            //            if (materialsFound[1] == false)
-            //            {
-            //                textureIndexing.push_back(index);
-            //            }
-            //            if (materialsFound[2] == false)
-            //            {
-            //                textureIndexing.push_back(index);
-            //            }
-            //            if (materialsFound[3] == false)
-            //            {
-            //                textureIndexing.push_back(index);
-            //            }
-            //        }
-            //    }
-            //}
-
             if (material.extensions.empty() == false)
             {
                 for (const auto& extension : material.extensions)
