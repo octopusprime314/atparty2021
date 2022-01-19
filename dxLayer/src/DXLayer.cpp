@@ -202,7 +202,7 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
         _rayTracingEnabled = true;
     }
 
-    ShowCursor(false);
+    //ShowCursor(false);
 
     // show the window
     ShowWindow(_window, _cmdShow);
@@ -212,13 +212,9 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     (void)io;
-    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-    
+
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
-    // ImGui::StyleColorsClassic();
-    
     // Descriptor heaps
     ZeroMemory(&_descHeapDesc, sizeof(_descHeapDesc));
     _descHeapDesc.NumDescriptors = 1;
@@ -240,7 +236,6 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
 
 void DXLayer::initialize(HINSTANCE hInstance, int cmdShow)
 {
-
     if (_dxLayer == nullptr)
     {
         _dxLayer = new DXLayer(hInstance, cmdShow);
@@ -409,6 +404,30 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
 
     ImGui::Text(("TLAS count: " + std::to_string(entityList->size())).c_str());
     ImGui::Text(("BLAS count: " + std::to_string(resourceManager->getBLASCount())).c_str());
+
+    int      rpp        = resourceManager->getRaysPerPixel();
+    ImGui::InputInt("Rays Per Pixel", &rpp);
+    if (rpp < 0)
+    {
+        rpp = 0;
+    }
+    if (rpp > 32)
+    {
+        rpp = 32;
+    }
+    resourceManager->setRaysPerPixel(rpp);
+
+    int renderMode = resourceManager->getRenderMode();
+    const char* const renderModes[]  = {"DIFFUSE_DENOISED = 0", "SPECULAR_DENOISED = 1",
+                            "BOTH_DIFFUSE_AND_SPECULAR = 2", "DIFFUSE_RAW = 3", "SPECULAR_RAW = 4"};
+
+    ImGui::ListBox("Render mode", &renderMode, renderModes, _countof(renderModes));
+    resourceManager->setRenderMode(renderMode);
+
+    int               rayBounceIndex = resourceManager->getRayBounceIndex();
+
+    ImGui::InputInt("Visualize Ray Bounce Index", &rayBounceIndex);
+    resourceManager->setRayBounceIndex(rayBounceIndex);
 
     ImGui::End();
 

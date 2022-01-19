@@ -94,6 +94,7 @@ class IOEventDistributor
     static int        _prevMouseX;
     static int        _prevMouseY;
     static MouseState _mouseState;
+    static bool       _rightMouseButtonPressed;
     // All keyboard input from glfw will be notified here
     static void _keyboardUpdate(GLFWwindow* window, int key, int scancode, int action, int mods);
     // One frame draw update call

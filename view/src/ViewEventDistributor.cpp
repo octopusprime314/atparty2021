@@ -502,10 +502,10 @@ void ViewEventDistributor::_updateMouse(double x, double y)
         Vector4 newRot = Vector4(0.0, 0.0, 0.0);
 
         // Filter out large changes because that causes view twitching
-        if (x != _prevMouseX && x != IOEventDistributor::screenPixelWidth / 2)
+        if (x != IOEventDistributor::screenPixelWidth / 2)
         {
 
-            double diffX = _prevMouseX - x;
+            double diffX = x;
 
             if (diffX > 0)
             { // rotate left around y axis
@@ -524,16 +524,12 @@ void ViewEventDistributor::_updateMouse(double x, double y)
                 _currCamera->setViewMatrix(_currCamera->getView());
             }
             _currCamera->getState()->setActive(true);
-
-            /*char str[256];
-            sprintf(str, "Mouse x: %f y: %f, Delta x: %f, Delta y: %f\n", x, y, _prevMouseX - x,
-            _prevMouseY - y); OutputDebugString(str);*/
         }
 
-        if (y != _prevMouseY && y != IOEventDistributor::screenPixelHeight / 2)
+        if (y != IOEventDistributor::screenPixelHeight / 2)
         {
 
-            double diffY = _prevMouseY - y;
+            double diffY = y;
 
             if (diffY > 0)
             { // rotate left around y axis
@@ -552,10 +548,6 @@ void ViewEventDistributor::_updateMouse(double x, double y)
                 _currCamera->setViewMatrix(_currCamera->getView());
             }
             _currCamera->getState()->setActive(true);
-
-            /*char str[256];
-            sprintf(str, "Mouse x: %f y: %f, Delta x: %f, Delta y: %f\n", x, y, _prevMouseX - x,
-            _prevMouseY - y); OutputDebugString(str);*/
         }
     }
     _prevMouseX = x;

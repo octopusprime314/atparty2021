@@ -125,6 +125,9 @@ class ResourceManager
     bool                                                              _useCompaction        = true;
     int                                                               _topLevelIndex        = 0;
     int                                                               _instanceMappingIndex = 0;
+    int                                                               _raysPerPixel         = 5;
+    int                                                               _renderMode           = 2;
+    int                                                               _rayBounceIndex       = 0; // 0 means all rays are visualized
     
     UINT _allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
                              UINT descriptorIndexToUse = UINT_MAX);
@@ -193,4 +196,13 @@ class ResourceManager
                               UINT64           datasize,
                               ID3D12Resource** ppResource,
                               const wchar_t*   resourceName = nullptr);
+
+    void setRaysPerPixel(int rpp) { _raysPerPixel = rpp; }
+    int  getRaysPerPixel() { return _raysPerPixel; }
+
+    void setRenderMode(int renderMode) { _renderMode = renderMode; }
+    int  getRenderMode() { return _renderMode; }
+
+    void setRayBounceIndex(int rayBounceIndex) { _rayBounceIndex = rayBounceIndex; }
+    int  getRayBounceIndex() { return _rayBounceIndex; }
 };

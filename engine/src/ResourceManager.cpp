@@ -450,13 +450,45 @@ void ResourceManager::buildGeometry(Entity* entity)
 
             // lock in the same index for attribute buffers
             _uniformMaterialMap[vertexBufferDescriptorIndex] = std::vector<UniformMaterial>();
+
+            
+            _uniformMaterialMap[_vertexBufferMap[bufferModel].second].push_back(
+                bufferModel->getMaterialNames()[i].uniformMaterial);
+
         }
         else
         {
+            _indexBufferMap[bufferModel].first.push_back(new D3DBuffer());
+            _vertexBufferMap[bufferModel].first.push_back(new D3DBuffer());
+
+            auto indexBuffer  = _indexBufferMap[bufferModel].first.back();
+            auto vertexBuffer = _vertexBufferMap[bufferModel].first.back();
+
+            indexBuffer->indexBufferFormat = indexFormat;
+            vertexBuffer->count            = static_cast<UINT>(vertexCount);
+            indexBuffer->count             = static_cast<UINT>(indexCount);
+            indexBuffer->resource =
+                (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
+
+            vertexBuffer->resource =
+                (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
+            vertexBuffer->nameId = entity->getModel()->getName();
+
+            vertexBuffer->offset = (vertexCountOffset /* * sizeof(CompressedAttribute)*/);
+            indexBuffer->offset  = (indexCountOffset /* * indexTypeSize*/);
+
+            UINT vertexBufferDescriptorIndex = addSRVToUnboundedAttributeBufferDescriptorTable(
+                vertexBuffer, vertexBuffer->count, vertexBuffer->offset);
+
+            UINT indexBufferDescriptorIndex = addSRVToUnboundedIndexBufferDescriptorTable(
+                indexBuffer, indexBuffer->count, indexBuffer->offset);
+
+            _uniformMaterialMap[_vertexBufferMap[bufferModel].second].push_back(
+                bufferModel->getMaterialNames()[i].uniformMaterial);
+
             existed = true;
         }
 
-        _uniformMaterialMap[_vertexBufferMap[bufferModel].second].push_back(bufferModel->getMaterialNames()[i].uniformMaterial);
 
         if (_texturesMap.find(bufferModel) == _texturesMap.end())
         {

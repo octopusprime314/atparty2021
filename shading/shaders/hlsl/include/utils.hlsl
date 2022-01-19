@@ -651,7 +651,7 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
                         .y * uniformMaterials[attributeIndex].roughness;
     }
 
-    roughness = max(roughness, 0.05);
+    //roughness = max(roughness, 0.05);
 
     metallic = 0.0;
     if (uniformMaterials[attributeIndex].validBits & MetallicValidBit)

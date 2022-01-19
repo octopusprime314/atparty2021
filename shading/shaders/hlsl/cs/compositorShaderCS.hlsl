@@ -14,7 +14,6 @@ cbuffer globalData : register(b0)
     float2 screenSize;
     int    reflectionMode;
     int    shadowMode;
-    int    viewMode;
 }
 
 [numthreads(8, 8, 1)]

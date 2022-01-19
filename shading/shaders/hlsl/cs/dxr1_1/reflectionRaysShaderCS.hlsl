@@ -5,21 +5,24 @@ RaytracingAccelerationStructure             rtAS                             : r
 Texture2D                                   diffuseTexture[]                 : register(t1, space1);
 StructuredBuffer<CompressedAttribute>       vertexBuffer[]                   : register(t2, space2);
 Buffer<uint>                                indexBuffer[]                    : register(t3, space3);
-//Texture2D                                   albedoSRV                        : register(t4, space0);
-//Texture2D                                   normalSRV                        : register(t5, space0);
-//Texture2D                                   positionSRV                      : register(t6, space0);
 Buffer<uint>                                instanceIndexToMaterialMapping   : register(t4, space0);
 Buffer<uint>                                instanceIndexToAttributesMapping : register(t5, space0);
 Buffer<float>                               instanceNormalMatrixTransforms   : register(t6, space0);
 StructuredBuffer<UniformMaterial>           uniformMaterials                 : register(t7, space0);
 StructuredBuffer<AlignedHemisphereSample3D> sampleSets                       : register(t8, space0);
-Texture2D                                   viewZSRV                         : register(t9, space0);
-TextureCube                                 skyboxTexture                    : register(t10, space0);
+TextureCube                                 skyboxTexture                    : register(t9, space0);
+//Texture2D                                   indirectLightRaysHistoryBufferSRV         : register(t10, space0);
+//Texture2D                                   indirectSpecularLightRaysHistoryBufferSRV : register(t11, space0);
 
 RWTexture2D<float4> indirectLightRaysUAV : register(u0);
 RWTexture2D<float4> indirectSpecularLightRaysUAV : register(u1);
 RWTexture2D<float4> diffusePrimarySurfaceModulation : register(u2);
 RWTexture2D<float4> specularPrimarySurfaceModulation : register(u3);
+RWTexture2D<float4> albedoUAV : register(u4);
+RWTexture2D<float4> positionUAV : register(u5);
+RWTexture2D<float4> normalUAV : register(u6);
+RWTexture2D<float4> viewZUAV : register(u7);
+
 
 SamplerState bilinearWrap : register(s0);
 
@@ -46,6 +49,21 @@ cbuffer globalData : register(b0)
 
     uint resetHistoryBuffer;
     uint frameNumber;
+
+    uint maxBounces;
+
+    // class enum renderMode
+    //{
+    //    DIFFUSE_DENOISED = 0,
+    //    SPECULAR_DENOISED = 1,
+    //    BOTH_DIFFUSE_AND_SPECULAR = 2
+    //    DIFFUSE_RAW = 3,
+    //    SPECULAR_RAW = 4
+    //};
+
+    // Default to both specular and diffuse
+    int renderMode;
+    int rayBounceIndex;
 }
 
 #include "../../include/sunLightCommon.hlsl"
@@ -90,36 +108,16 @@ void main(int3 threadId            : SV_DispatchThreadID,
           int3 threadGroupThreadId : SV_GroupThreadID)
 {
 
-    uint   bounceIndex = 0;
-
-    //class enum RenderVariant
-    //{
-    //    ONLY_DIFFUSE = 0,
-    //    ONLY_SPECULAR = 1,
-    //    BOTH_DIFFUSE_AND_SPECULAR = 2
-    //};
-
-    
     float4 diffHitDistParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
     float4 specHitDistParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
 
-    int renderVariant = 2;
-
-    float4 nrdDiffuse  = float4(0.0, 0.0, 0.0, 0.0);
-    float4 nrdSpecular = float4(0.0, 0.0, 0.0, 0.0);
-
-    float3 indirectDiffuse   = float3(0.0, 0.0, 0.0);
-    float3 indirectSpecular = float3(0.0, 0.0, 0.0);
+    float4 nrdSpecular = REBLUR_FrontEnd_PackRadiance(float3(0.0, 0.0, 0.0), 0.0, 0);
+    float4 nrdDiffuse = REBLUR_FrontEnd_PackRadiance(float3(0.0, 0.0, 0.0), 0.0, 0);
 
     float3 indirectPos    = float3(0.0, 0.0, 0.0);
     float3 indirectNormal = float3(0.0, 0.0, 0.0);
 
-    float3 indirectSpecularLightEnergy = float3(1.0, 1.0, 1.0);
-    float3 indirectDiffuseLightEnergy = float3(1.0, 1.0, 1.0);
-    float3 throughput                  = float3(1.0, 1.0, 1.0);
-
-    float  indirecDiffusetHitDistance = 0.0;
-    float indirectHitDistanceSpecular = 0.0;
+    float3 throughput = float3(1.0, 1.0, 1.0);
 
     int i = 0;
 
@@ -141,45 +139,60 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     float roughnessAccumulation = 0.0;
 
-    int specularRayCount = 0;
+    int reflectedSpecularRayCount = 0;
+    int reflectedDiffuseRayCount = 0;
+    int refractedDiffuseRayCount  = 0;
+    int refractedSpecularRayCount = 0;
 
     bool grabbedPrimarySurfaceDemodulator = false;
 
-    for (i = 0; i < 10; i++)
+    for (i = 0; i < maxBounces; i++)
     {
-        indirectNormal = normalize(-indirectNormal);
-
         // First ray is directional and perfect mirror from camera eye so specular it is
         bool diffuseRay = false;
 
         if (i == 0)
         {
             GenerateCameraRay(threadId.xy, indirectPos, rayDir, viewTransform);
+            reflectedSpecularRayCount++;
         }
         else
         {
-            float2 rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
+            indirectNormal = normalize(-indirectNormal);
+
+            float2 diffuseOrSpecular = GetRandomSample(threadId.xy, screenSize).xy;
             
-            if (rng3.x < 0.0 || rng3.y < 0.0)
+            if (diffuseOrSpecular.x < 0.0 /*false*/)
             {
                 diffuseRay = true;
                 // Punch through ray with zero reflection
-                if (transmittance > 0.0)
+                if (transmittance > 0.0 && diffuseOrSpecular.y < 0.0)
                 {
-                    rayDir = RefractionRay(-indirectNormal, rayDir);
+                    indirectNormal = normalize(-indirectNormal);
+                    rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    refractedDiffuseRayCount++;
                 }
                 // Opaque materials make a reflected ray
                 else
                 {
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    reflectedDiffuseRayCount++;
                 }
 
                 float3 diffuseWeight = albedo * (1.0 - metallic);
-                throughput *= diffuseWeight;
+                throughput *= (diffuseWeight);
+                // pdf stuff
+                //throughput /= 0.5;
             }
             else
             {
                 diffuseRay = false;
+
+                // Punch through ray with zero reflection
+                if (transmittance > 0.0 && diffuseOrSpecular.y >= 0.0/*true*/)
+                {
+                    indirectNormal = normalize(-indirectNormal);
+                }
 
                 // Specular
                 float3x3 basis = orthoNormalBasis(indirectNormal);
@@ -191,39 +204,41 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 float3 viewVector = normalize(indirectPos - previousPosition);
 
-                float2 rng3 = GetRandomSample(threadId.xy, screenSize, indirectPos).xy;
+                // ImportanceSampleGGX_VNDF doesn't like negative input
+                float2 rng = abs(GetRandomSample(threadId.xy, screenSize).xy);
 
-                float3 N = indirectNormal;
                 float3 V = viewVector;
-                float3 H = ImportanceSampleGGX_VNDF(rng3, roughness, V, basis);
+                float3 H = ImportanceSampleGGX_VNDF(rng, roughness, V, basis);
 
                 // Punch through ray with zero reflection
-                if (transmittance > 0.0)
+                if (transmittance > 0.0 && diffuseOrSpecular.y >= 0.0/*true*/)
                 {
-                    rayDir = RefractionRay(-indirectNormal, rayDir);
+                    rayDir = reflect(V, H);
+                    refractedSpecularRayCount++;
                 }
                 // Opaque materials make a reflected ray
                 else
                 {
                     // VNDF reflection sampling
                     rayDir = reflect(V, H);
-
-                    // For mirror reflection testing
-                    //rayDir = normalize(viewVector - (2.0f * dot(viewVector, indirectNormal) * indirectNormal));
-                    //H = normalize(viewVector + rayDir);
+                    reflectedSpecularRayCount++;
                 }
 
-                float NdotV = max(0, -dot(indirectNormal, viewVector));
+                float3 N = indirectNormal;
+                
+                float NdotV = max(0, -dot(N, viewVector));
                 float NdotL = max(0, dot(N, rayDir));
                 //float NoH = max(0, dot(N, H));
                 float VoH = max(0, -dot(V, H));
-
+                
                 float3 F0  = float3(0.04f, 0.04f, 0.04f);
                 F0       = lerp(F0, albedo, metallic);
-
+                
                 float3 F              = FresnelSchlick(VoH, F0);
                 float3 specularWeight = F * Smith_G2_Over_G1_Height_Correlated(roughness, roughness * roughness, NdotL, NdotV);
                 throughput *= specularWeight;
+                // pdf stuff
+                //throughput /= 0.5;
             }
         }
         // See the Heitz paper referenced above for the estimator explanation.
@@ -256,15 +271,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
         ray.TMin = MIN_RAY_LENGTH;
         ray.TMax = MAX_RAY_LENGTH;
 
-        //if (transmittance > 0.0)
-        //{
-        //    ray.Origin = indirectPos + (specularRayDirection * -0.001);
-        //}
-        //else
-        //{
-            //ray.Origin = indirectPos + (indirectNormal * 0.001);
-            ray.Origin = indirectPos + (rayDirection * 0.001);
-        //}
+        //ray.Origin = indirectPos + (rayDirection * 0.001);
+        ray.Origin = indirectPos + (indirectNormal * 0.001);
+
         ray.Direction = rayDirection;
 
         RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> rayQuery;
@@ -285,12 +294,28 @@ void main(int3 threadId            : SV_DispatchThreadID,
             rayData.objectToWorld     = rayQuery.CommittedObjectToWorld4x3();
             rayData.uvIsValid         = false;
 
+            float3 prevIndirectPos = indirectPos;
+
             ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal, indirectPos,
                                   transmittance, emissiveColor);
 
+            //if (i == rayBounceIndex || rayBounceIndex == -1)
+            //{
+            //  float normDist = REBLUR_FrontEnd_GetNormHitDist(rayQuery.CommittedRayT(), viewZUAV[threadId.xy].x, diffHitDistParams,
+            //                                                roughness);
+            //
+            //    nrdDiffuse  = REBLUR_FrontEnd_PackRadiance(albedo, normDist, USE_SANITIZATION);
+            //    nrdSpecular = REBLUR_FrontEnd_PackRadiance(albedo, normDist, USE_SANITIZATION);
+            //
+            //    //nrdDiffuse  = REBLUR_FrontEnd_PackRadiance(throughput, normDist, USE_SANITIZATION);
+            //    //nrdSpecular = REBLUR_FrontEnd_PackRadiance(throughput, normDist, USE_SANITIZATION);
+            //
+            //    break;
+            //}
+
             emissiveColor *= 10.0;
 
-            if (rayQuery.CommittedTriangleFrontFace() == false && transmittance == 0.0)
+            if (rayQuery.CommittedTriangleFrontFace() == false/* && transmittance == 1.0*/)
             {
                 indirectNormal = -indirectNormal;
             }
@@ -316,15 +341,44 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     accumulatedDiffuseRadiance += indirectDiffuseRadiance;
                     accumulatedSpecularRadiance += indirectSpecularRadiance;
                 }
+            }
 
-                // Only reconstruct primary surface hits in composite if the metallic is less than or equal to 0.5
-                // otherwise let denoiser take care of it
-                if (i == 0 && metallic <= 0.5)
-                {
-                    diffuseAlbedoDemodulation += indirectDiffuseRadiance;
-                    specularFresnelDemodulation += indirectSpecularRadiance;
-                    grabbedPrimarySurfaceDemodulator = true;
-                }
+            // Only reconstruct primary surface hits in composite if the metallic is less than or
+            // equal to 0.5 otherwise let denoiser take care of it
+            if (/*i == 0 */grabbedPrimarySurfaceDemodulator == false && metallic <= 0.5 && transmittance == 0.0)
+            {
+                //diffuseAlbedoDemodulation = albedo * (1.0 - metallic);
+                //grabbedPrimarySurfaceDemodulator = true;
+                //
+                //normalUAV[threadId.xy].xyz   = (indirectNormal + 1.0) / 2.0;
+                //positionUAV[threadId.xy].xyz = indirectPos;
+                //albedoUAV[threadId.xy].xyz   = albedo.xyz;
+                //
+                //// Denoiser can't handle roughness value of 0.0
+                //normalUAV[threadId.xy].w   = max(roughness, 0.05);
+                //positionUAV[threadId.xy].w = rayData.instanceIndex;
+                //albedoUAV[threadId.xy].w   = metallic;
+                //
+                //viewZUAV[threadId.xy].x = mul(float4(indirectPos, 1.0), viewTransform).z;
+            }
+
+            // Primary surface recording for denoiser
+            if (i == 0)
+            {
+                diffuseAlbedoDemodulation = albedo * (1.0 - metallic);
+                // specularFresnelDemodulation = indirectSpecularRadiance;
+                grabbedPrimarySurfaceDemodulator = true;
+            
+                normalUAV[threadId.xy].xyz   = (-indirectNormal + 1.0) / 2.0;
+                positionUAV[threadId.xy].xyz = indirectPos;
+                albedoUAV[threadId.xy].xyz   = albedo.xyz;
+            
+                // Denoiser can't handle roughness value of 0.0
+                normalUAV[threadId.xy].w   = max(roughness, 0.05);
+                positionUAV[threadId.xy].w = rayData.instanceIndex;
+                albedoUAV[threadId.xy].w   = metallic;
+            
+                viewZUAV[threadId.xy].x = mul(float4(indirectPos, 1.0), viewTransform).z;
             }
 
             roughnessAccumulation += roughness;
@@ -332,58 +386,46 @@ void main(int3 threadId            : SV_DispatchThreadID,
             if (diffuseRay == true)
             {
                 float3 light = float3(0.0, 0.0, 0.0);
-                if (i == 0)
-                {
-                    light = accumulatedLightRadiance * throughput;
-                }
-                else
-                {
-                    light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
-                            accumulatedLightRadiance * throughput;
-                }
+
+                light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
+                        accumulatedLightRadiance * throughput;
+
                 if (length(emissiveColor) > 0.0)
                 {
                     // Account for emissive surfaces
                     light += throughput * emissiveColor;
                 }
-                indirecDiffusetHitDistance += rayQuery.CommittedRayT();
 
-                indirectDiffuse += light;
+                if (i == rayBounceIndex || rayBounceIndex == -1)
+                {
+                    float normDist = REBLUR_FrontEnd_GetNormHitDist(rayQuery.CommittedRayT(),
+                                                                    viewZUAV[threadId.xy].x,
+                                                                    diffHitDistParams, roughness);
 
-                float normDist = REBLUR_FrontEnd_GetNormHitDist(rayQuery.CommittedRayT(), viewZSRV[threadId.xy].x, diffHitDistParams,
-                                                                roughness);
-
-                nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
-
+                    nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                }
             }
             else
             {
                 float3 light = float3(0.0, 0.0, 0.0);
-                /*if (i == 0)
-                {
-                    light = accumulatedLightRadiance * throughput;
-                }
-                else
-                {*/
-                    light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
-                            accumulatedLightRadiance * throughput;
-                //}
+               
+                light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
+                        accumulatedLightRadiance * throughput;
+
                 if (length(emissiveColor) > 0.0)
                 {
                     // Account for emissive surfaces
                     light += throughput * emissiveColor;
                 }
 
-                indirectHitDistanceSpecular += rayQuery.CommittedRayT();
+                if (i == rayBounceIndex || rayBounceIndex == -1)
+                {
+                    float normDist = REBLUR_FrontEnd_GetNormHitDist(rayQuery.CommittedRayT(),
+                                                                    viewZUAV[threadId.xy].x,
+                                                                    specHitDistParams, roughness);
 
-                indirectSpecular += light;
-
-                float normDist = REBLUR_FrontEnd_GetNormHitDist(rayQuery.CommittedRayT(), viewZSRV[threadId.xy].x, specHitDistParams,
-                                                                roughness);
-
-                nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
-
-                specularRayCount++;
+                    nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                }
             }
         }
         else
@@ -397,41 +439,60 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 skyboxContribution = light;
 
                 diffuseAlbedoDemodulation += skyboxContribution;
-                nrdDiffuse = float4(1.0, 1.0, 1.0, 1.0);
+
+                if (i == rayBounceIndex || rayBounceIndex == -1)
+                {
+                    nrdDiffuse = float4(1.0, 1.0, 1.0, 1.0);
+                }
                 grabbedPrimarySurfaceDemodulator = true;
+
+                float3 sampleVector = normalize(rayDir);
+                float4 dayColor     = skyboxTexture.SampleLevel(bilinearWrap, float3(sampleVector.x, sampleVector.y, sampleVector.z), 0);
+
+                albedoUAV[threadId.xy]   = float4(dayColor.xyz, 0.0);
+                normalUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 1.0);
+                positionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, -1.0);
+
+                viewZUAV[threadId.xy].x = 1e5;
             }
             else
             {
                 if (diffuseRay == true)
                 {
-                    float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZSRV[threadId.xy].x,
+                    float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZUAV[threadId.xy].x,
                                                                     diffHitDistParams, 1.0);
 
                     float3 light = dayColor.xyz * throughput;
-                    indirectDiffuse += light;
-                    nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist,
-                                                               USE_SANITIZATION);
+
+                    if (i == rayBounceIndex || rayBounceIndex == -1)
+                    {
+                        nrdDiffuse +=
+                            REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                    }
                 }
                 else
                 {
-                    float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZSRV[threadId.xy].x,
+                    float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZUAV[threadId.xy].x,
                                                                     specHitDistParams, 1.0);
                     float3 light    = dayColor.xyz * throughput;
-                    indirectSpecular += light;
-                    nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist,
-                                                                USE_SANITIZATION);
+                    
+                    if (i == rayBounceIndex || rayBounceIndex == -1)
+                    {
+                        nrdSpecular +=
+                            REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                    }
                 }
             }
             break;
         }
     }
 
-    if (renderVariant == 1 || renderVariant == 2)
+    if (renderMode == 1 || renderMode == 2 || renderMode == 4)
     {
         indirectSpecularLightRaysUAV[threadId.xy] = nrdSpecular;
     }
 
-    if (renderVariant == 0 || renderVariant == 2)
+    if (renderMode == 0 || renderMode == 2 || renderMode == 3)
     {
         indirectLightRaysUAV[threadId.xy] = nrdDiffuse;
     }
@@ -445,5 +506,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
         diffusePrimarySurfaceModulation[threadId.xy] = float4(diffuseAlbedoDemodulation.xyz, 1.0);
     }
 
-    specularPrimarySurfaceModulation[threadId.xy] = float4(throughput, i);
+    // Write out number of diffuse rays, specular rays and total rays cast
+    specularPrimarySurfaceModulation[threadId.xy] =
+            float4(reflectedDiffuseRayCount, reflectedSpecularRayCount, refractedDiffuseRayCount, refractedSpecularRayCount);
 }

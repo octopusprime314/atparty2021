@@ -16,6 +16,7 @@ int         IOEventDistributor::_prevMouseX       = 0;
 int         IOEventDistributor::_prevMouseY       = 0;
 int         IOEventDistributor::screenPixelWidth  = -1;
 int         IOEventDistributor::screenPixelHeight = -1;
+bool        IOEventDistributor::_rightMouseButtonPressed = false;
 
 std::chrono::milliseconds nowMs()
 {
@@ -70,10 +71,15 @@ void IOEventDistributor::updateGameState(EngineStateFlags state)
 {
     IOEvents::updateGameState(state);
 }
+// Forward declare message handler from imgui_impl_win32.cpp
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-LRESULT CALLBACK IOEventDistributor::dxEventLoop(HWND hWnd, UINT message, WPARAM wParam,
-                                                 LPARAM lParam)
+LRESULT CALLBACK IOEventDistributor::dxEventLoop(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+
+    if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
+        return true;
+
     switch (message)
     {
         case WM_KEYDOWN:
@@ -92,11 +98,40 @@ LRESULT CALLBACK IOEventDistributor::dxEventLoop(HWND hWnd, UINT message, WPARAM
             _keyboardUpdate(nullptr, key, 0, 0, 0);
             break;
         }
+
+        case WM_RBUTTONDOWN:
+        {
+            _rightMouseButtonPressed = true;
+
+            int xPos                 = GET_X_LPARAM(lParam);
+            int yPos                 = GET_Y_LPARAM(lParam);
+
+            _prevMouseX = xPos;
+            _prevMouseY = yPos;
+           
+            break;
+        }
+        case WM_RBUTTONUP:
+        {
+            _rightMouseButtonPressed = false;
+
+            break;
+        }
         case WM_MOUSEMOVE:
         {
-            int xPos = GET_X_LPARAM(lParam);
-            int yPos = GET_Y_LPARAM(lParam);
-            _mouseUpdate(nullptr, xPos * 10, yPos * 10);
+            if (_rightMouseButtonPressed)
+            {
+                int xPos = GET_X_LPARAM(lParam);
+                int yPos = GET_Y_LPARAM(lParam);
+
+                if (_prevMouseX - xPos != 0 || _prevMouseY - yPos != 0)
+                {
+                    _mouseUpdate(nullptr, _prevMouseX - xPos, _prevMouseY - yPos);
+                }
+
+                _prevMouseX = xPos;
+                _prevMouseY = yPos;
+            }
             break;
         }
         case WM_DESTROY:
@@ -122,10 +157,8 @@ void IOEventDistributor::quit()
 void IOEventDistributor::_keyboardUpdate(GLFWwindow* window, int key, int scancode, int action,
                                          int mods)
 {
-
     if (action == 1)
     {
-
         // Escape key pressed, hard exit no cleanup, TODO FIX THIS!!!!
         if (key == 27)
         {
@@ -152,12 +185,11 @@ void IOEventDistributor::_keyboardUpdate(GLFWwindow* window, int key, int scanco
 // One frame draw update call
 void IOEventDistributor::_drawUpdate()
 {
+
     // this struct holds Windows event messages
     MSG      msg           = {0};
     auto     last          = nowMs();
     uint64_t updateTrigger = KINEMATICS_TIME;
-
-    uint64_t cyclesWithoutMouseMovement = 0;
 
     // main loop
     while (true)
@@ -174,36 +206,15 @@ void IOEventDistributor::_drawUpdate()
                 break;
         }
 
-        // Keep cursor locked inside the window
-        RECT rect = {0, 0, IOEventDistributor::screenPixelWidth,
-                        IOEventDistributor::screenPixelHeight};
-        ClipCursor(&rect);
-
-        /*if (cyclesWithoutMouseMovement > 100)
-        {
-            SetCursorPos(IOEventDistributor::screenPixelWidth / 2,
-                            IOEventDistributor::screenPixelHeight / 2);
-
-            cyclesWithoutMouseMovement = 0;
-        }
-
-        cyclesWithoutMouseMovement++;*/
-
         auto now = nowMs();
         updateTrigger += (now - last).count();
         last = now;
 
-        auto millisecondsPerFrame = 16;
-        // if (updateTrigger >= millisecondsPerFrame)
-        //{
-        // Update kinematics by 1 mS
-        // MasterClock::instance()->update(16);
         MasterClock::instance()->update(updateTrigger);
         updateTrigger = 0;
 
         // Draw frame every second
         IOEvents::updateDraw(_window);
-        //}
     }
 }
 

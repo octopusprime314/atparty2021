@@ -371,129 +371,26 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     Vector4 deltaCameraVector = deltaCameraView * Vector4(1.0, 1.0, 1.0);
     bool   isCameraMoving     = deltaCameraVector.getMagnitude() >= 0.000001 ? true : false;
 
-    // Primary rays
-    cmdList->BeginEvent(0, L"Primary Rays", sizeof(L"Primary Rays"));
-
-    shader = _primaryRaysShader;
-
-    shader->bind();
-    shader->updateData("albedoUAV", 0, _albedoPrimaryRays, true, true);
-    shader->updateData("positionUAV", 0, _positionPrimaryRays, true, true);
-    shader->updateData("normalUAV", 0, _normalPrimaryRays, true, true);
-    shader->updateData("viewZUAV", 0, _viewZPrimaryRays, true, true);
-
-
-    shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
-    shader->updateData("viewTransform", cameraView.getFlatBuffer(), true);
-
-    Vector4 cameraPos = viewEventDistributor->getCameraPos();
-    shader->updateData("cameraPos", cameraPos.getFlatBuffer(), true);
-
-    shader->updateData("screenSize", screenSize, true);
-    
-    shader->updateData("texturesPerMaterial", &texturesPerMaterial, true);
-
-    shader->updateData("skyboxTexture", 0, skyBoxTexture, true);
-    shader->updateRTAS("rtAS", resourceManager->getRTASDescHeap(), resourceManager->getRTASGPUVA(), true);
-
-    resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
-    resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
-    resourceManager->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
-
-    resourceManager->updateAndBindMaterialBuffer(shader->_resourceIndexes, true);
-    resourceManager->updateAndBindAttributeBuffer(shader->_resourceIndexes, true);
-    resourceManager->updateAndBindNormalMatrixBuffer(shader->_resourceIndexes, true);
-    resourceManager->updateAndBindUniformMaterialBuffer(shader->_resourceIndexes, true);
-
-    if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_1_PATHTRACER)
-    {
-        shader->dispatch(ceilf(screenSize[0] / static_cast<float>(threadGroupWidth)),
-                         ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
-    }
-    else if (EngineManager::getGraphicsLayer() == GraphicsLayer::DXR_1_0_PATHTRACER)
-    {
-        _dxrStateObject->dispatchPrimaryRays();
-    }
-
-    shader->unbind();
-
-    cmdList->EndEvent();
-
-    ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-
-    barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc[0].Transition.pResource   =_albedoPrimaryRays->getResource()->getResource().Get();
-    barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_GENERIC_READ;
-
-    barrierDesc[3] = barrierDesc[2] = barrierDesc[1] = barrierDesc[0];
-    barrierDesc[1].Transition.pResource = _positionPrimaryRays->getResource()->getResource().Get();
-    barrierDesc[2].Transition.pResource = _normalPrimaryRays->getResource()->getResource().Get();
-    barrierDesc[3].Transition.pResource = _viewZPrimaryRays->getResource()->getResource().Get();
-
-    cmdList->ResourceBarrier(4, barrierDesc);
-
     // Process point lights
     PointLightList lightList;
-    EngineManager::instance()->processLights(lights, viewEventDistributor, lightList, RandomInsertAndRemoveEntities);
+    EngineManager::instance()->processLights(lights, viewEventDistributor, lightList,
+                                             RandomInsertAndRemoveEntities);
 
-    auto end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    //auto milliSecondsPassed = end - begin;
+    auto end = std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::system_clock::now().time_since_epoch())
+                   .count();
+    // auto milliSecondsPassed = end - begin;
 
     const long long timing = 500000;
     end                    = end % timing;
 
-    //// Process directional light
-    //// more yellow light Vector4(0.97, 0.84, 0.1)
-    //float   sunLightRange  = 1000.0;
-    ////Default light if there isn't one in the file
-    //Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4);
-    ////Vector4 sunLightPos = Vector4(0.0, 7.6, 0.0);
-    //// Vector4 sunLightPos    = Vector4(-50000.0 * std::cos(90 * ((end/(timing / 2.0f)) - 1.0)), 1000.0, 50000.0);
-    //// Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4) * 500.0;
-    //Vector4 sunLightPos = Vector4(5000.0, 1600.0, 0.0);
-    //float   sunLightRadius = 100.0f;
-
-    //for (auto& light : lights)
-    //{
-    //    if (light->getType() == LightType::POINT)
-    //    {
-    //        // Point lights need to remain stationary so move lights with camera space changes
-    //        sunLightPos   = light->getPosition();
-    //        sunLightColor = light->getColor();
-    //        sunLightRange = light->getScale().getx();
-    //        break;
-    //    }
-    //}
-
     std::uniform_int_distribution<UINT> seedDistribution(0, UINT_MAX);
-    UINT seed                  = seedDistribution(_generatorURNG);
-    UINT numSamplesPerSet      = 64;
-    UINT numSampleSets         = 83;
-    UINT numPixelsPerDimPerSet = 8;
+    UINT                                seed                  = seedDistribution(_generatorURNG);
+    UINT                                numSamplesPerSet      = 64;
+    UINT                                numSampleSets         = 83;
+    UINT                                numPixelsPerDimPerSet = 8;
 
     DXLayer::instance()->setTimeStamp();
-
-    if (_denoising)
-    {
-        auto motionVectors = _svgfDenoiser->getMotionVectors();
-
-        _svgfDenoiser->computeMotionVectors(viewEventDistributor,
-                                            _positionPrimaryRays);
-
-        D3D12_RESOURCE_BARRIER barrierDesc[1];
-        ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-
-        barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrierDesc[0].Transition.pResource   = motionVectors->getResource()->getResource().Get();
-        barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-
-        cmdList->ResourceBarrier(1, barrierDesc);
-    }
-
   
     cmdList->BeginEvent(0, L"Reflection Rays", sizeof(L"Reflection Rays"));
 
@@ -504,12 +401,19 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader = _reflectionRaysShader;
 
     shader->bind();
-    shader->updateData("viewZSRV", 0, _viewZPrimaryRays, true, false);
-    
+
+    //shader->updateData("indirectLightRaysHistoryBufferSRV", 0, _indirectLightRaysHistoryBuffer, true, false);
+    //shader->updateData("indirectSpecularLightRaysHistoryBufferSRV", 0, _indirectSpecularLightRaysHistoryBuffer, true, false);
+
     shader->updateData("indirectLightRaysUAV", 0, _indirectLightRays, true, true);
     shader->updateData("indirectSpecularLightRaysUAV", 0, _indirectSpecularLightRays, true, true);
     shader->updateData("diffusePrimarySurfaceModulation", 0, _diffusePrimarySurfaceModulation, true, true);
     shader->updateData("specularPrimarySurfaceModulation", 0, _specularPrimarySurfaceModulation, true, true);
+
+    shader->updateData("albedoUAV", 0, _albedoPrimaryRays, true, true);
+    shader->updateData("positionUAV", 0, _positionPrimaryRays, true, true);
+    shader->updateData("normalUAV", 0, _normalPrimaryRays, true, true);
+    shader->updateData("viewZUAV", 0, _viewZPrimaryRays, true, true);
 
     shader->updateData("skyboxTexture", 0, skyBoxTexture, true);
 
@@ -517,6 +421,12 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     shader->updateData("inverseView", inverseCameraView.getFlatBuffer(), true);
     shader->updateData("viewTransform", cameraView.getFlatBuffer(), true);
+    int rpp = resourceManager->getRaysPerPixel();
+    shader->updateData("maxBounces", &rpp, true);
+    int renderMode = resourceManager->getRenderMode();
+    shader->updateData("renderMode", &renderMode, true);
+    int rayBounceIndex = resourceManager->getRayBounceIndex() - 1;
+    shader->updateData("rayBounceIndex", &rayBounceIndex, true);
 
     resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
     resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
@@ -565,6 +475,41 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     }
 
     shader->unbind();
+
+    ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+
+    barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrierDesc[0].Transition.pResource   = _albedoPrimaryRays->getResource()->getResource().Get();
+    barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_GENERIC_READ;
+
+    barrierDesc[3] = barrierDesc[2] = barrierDesc[1] = barrierDesc[0];
+    barrierDesc[1].Transition.pResource = _positionPrimaryRays->getResource()->getResource().Get();
+    barrierDesc[2].Transition.pResource = _normalPrimaryRays->getResource()->getResource().Get();
+    barrierDesc[3].Transition.pResource = _viewZPrimaryRays->getResource()->getResource().Get();
+
+    cmdList->ResourceBarrier(4, barrierDesc);
+
+
+    if (_denoising)
+    {
+        auto motionVectors = _svgfDenoiser->getMotionVectors();
+
+        _svgfDenoiser->computeMotionVectors(viewEventDistributor, _positionPrimaryRays);
+
+        D3D12_RESOURCE_BARRIER barrierDesc[1];
+        ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+
+        barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[0].Transition.pResource   = motionVectors->getResource()->getResource().Get();
+        barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+        cmdList->ResourceBarrier(1, barrierDesc);
+    }
+
 
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
     barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -895,8 +840,23 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader = _compositorShader;
 
     shader->bind();
-    shader->updateData("indirectLightRaysHistoryBufferSRV", 0, _indirectLightRaysHistoryBuffer, true, false);
-    shader->updateData("indirectSpecularLightRaysHistoryBufferSRV", 0, _indirectSpecularLightRaysHistoryBuffer, true, false);
+    if (renderMode == 3)
+    {
+        shader->updateData("indirectLightRaysHistoryBufferSRV", 0, _indirectLightRays, true, false);
+    }
+    else
+    {
+        shader->updateData("indirectLightRaysHistoryBufferSRV", 0, _indirectLightRaysHistoryBuffer, true, false);
+    }
+
+    if (renderMode == 4)
+    {
+        shader->updateData("indirectSpecularLightRaysHistoryBufferSRV", 0, _indirectSpecularLightRays, true, false);
+    }
+    else
+    {
+        shader->updateData("indirectSpecularLightRaysHistoryBufferSRV", 0, _indirectSpecularLightRaysHistoryBuffer, true, false);
+    }
     shader->updateData("diffusePrimarySurfaceModulation", 0, _diffusePrimarySurfaceModulation, true, false);
     //shader->updateData("specularPrimarySurfaceModulation", 0, _specularPrimarySurfaceModulation, true, false);
 
@@ -905,7 +865,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("reflectionMode", &_reflectionMode, true);
     shader->updateData("shadowMode", &_shadowMode, true);
     shader->updateData("screenSize", screenSize, true);
-    shader->updateData("viewMode", &_viewMode, true);
 
     shader->dispatch(ceilf(screenSize[0] / static_cast<float>(threadGroupWidth)),
                      ceilf(screenSize[1] / static_cast<float>(threadGroupHeight)), 1);
