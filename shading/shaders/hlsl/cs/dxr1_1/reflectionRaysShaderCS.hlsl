@@ -299,23 +299,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
             ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal, indirectPos,
                                   transmittance, emissiveColor);
 
-            //if (i == rayBounceIndex || rayBounceIndex == -1)
-            //{
-            //  float normDist = REBLUR_FrontEnd_GetNormHitDist(rayQuery.CommittedRayT(), viewZUAV[threadId.xy].x, diffHitDistParams,
-            //                                                roughness);
-            //
-            //    nrdDiffuse  = REBLUR_FrontEnd_PackRadiance(albedo, normDist, USE_SANITIZATION);
-            //    nrdSpecular = REBLUR_FrontEnd_PackRadiance(albedo, normDist, USE_SANITIZATION);
-            //
-            //    //nrdDiffuse  = REBLUR_FrontEnd_PackRadiance(throughput, normDist, USE_SANITIZATION);
-            //    //nrdSpecular = REBLUR_FrontEnd_PackRadiance(throughput, normDist, USE_SANITIZATION);
-            //
-            //    break;
-            //}
-
             emissiveColor *= 10.0;
 
-            if (rayQuery.CommittedTriangleFrontFace() == false/* && transmittance == 1.0*/)
+            if (rayQuery.CommittedTriangleFrontFace() == false)
             {
                 indirectNormal = -indirectNormal;
             }
