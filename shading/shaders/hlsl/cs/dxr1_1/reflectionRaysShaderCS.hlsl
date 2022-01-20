@@ -64,6 +64,9 @@ cbuffer globalData : register(b0)
     // Default to both specular and diffuse
     int renderMode;
     int rayBounceIndex;
+
+    int diffuseOrSpecular;
+    int reflectionOrRefraction;
 }
 
 #include "../../include/sunLightCommon.hlsl"
@@ -146,6 +149,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     bool grabbedPrimarySurfaceDemodulator = false;
 
+    bool rayIsBotched = false;
+
     for (i = 0; i < maxBounces; i++)
     {
         // First ray is directional and perfect mirror from camera eye so specular it is
@@ -160,20 +165,27 @@ void main(int3 threadId            : SV_DispatchThreadID,
         {
             indirectNormal = normalize(-indirectNormal);
 
-            float2 diffuseOrSpecular = GetRandomSample(threadId.xy, screenSize).xy;
+            float2 stochastic = GetRandomSample(threadId.xy, screenSize).xy;
             
-            if (diffuseOrSpecular.x < 0.0 /*false*/)
+            if ((stochastic.x < 0.0 && diffuseOrSpecular == 2) || diffuseOrSpecular == 0)
             {
                 diffuseRay = true;
-                // Punch through ray with zero reflection
-                if (transmittance > 0.0 && diffuseOrSpecular.y < 0.0)
+
+                if (transmittance > 0.0)
                 {
-                    indirectNormal = normalize(-indirectNormal);
-                    rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
-                    refractedDiffuseRayCount++;
+                    if ((stochastic.y < 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
+                    {
+                        indirectNormal = normalize(-indirectNormal);
+                        rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                        refractedDiffuseRayCount++;
+                    }
+                    else if ((stochastic.y >= 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
+                    {
+                        rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                        reflectedDiffuseRayCount++;
+                    }
                 }
-                // Opaque materials make a reflected ray
-                else
+                else if (reflectionOrRefraction == 2 || reflectionOrRefraction == 0)
                 {
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
                     reflectedDiffuseRayCount++;
@@ -184,15 +196,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 // pdf stuff
                 //throughput /= 0.5;
             }
-            else
+            else if ((stochastic.x >= 0.0 && diffuseOrSpecular == 2) || diffuseOrSpecular == 1)
             {
                 diffuseRay = false;
-
-                // Punch through ray with zero reflection
-                if (transmittance > 0.0 && diffuseOrSpecular.y >= 0.0/*true*/)
-                {
-                    indirectNormal = normalize(-indirectNormal);
-                }
 
                 // Specular
                 float3x3 basis = orthoNormalBasis(indirectNormal);
@@ -210,18 +216,40 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 float3 V = viewVector;
                 float3 H = ImportanceSampleGGX_VNDF(rng, roughness, V, basis);
 
-                // Punch through ray with zero reflection
-                if (transmittance > 0.0 && diffuseOrSpecular.y >= 0.0/*true*/)
+                float VoH = max(0, -dot(V, H));
+                
+                float3 F0  = float3(0.04f, 0.04f, 0.04f);
+                F0 = lerp(F0, albedo, metallic);
+                float3 F = FresnelSchlick(VoH, F0);
+
+                if (transmittance > 0.0)
                 {
-                    rayDir = reflect(V, H);
-                    refractedSpecularRayCount++;
+                    if ((stochastic.y >= 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
+                    {
+                        float3 refractedRay = RefractionRay(indirectNormal, V);
+                        rayDir       = refractedRay;
+                        refractedSpecularRayCount++;
+                    }
+                    else if ((stochastic.y < 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
+                    {
+                        // VNDF reflection sampling
+                        rayDir = reflect(V, H);
+                        reflectedSpecularRayCount++;
+                    }
                 }
-                // Opaque materials make a reflected ray
-                else
+                else if (reflectionOrRefraction == 2 || reflectionOrRefraction == 0)
                 {
                     // VNDF reflection sampling
                     rayDir = reflect(V, H);
                     reflectedSpecularRayCount++;
+                }
+
+                if (transmittance > 0.0)
+                {
+                    if ((stochastic.y >= 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
+                    {
+                        indirectNormal = normalize(-indirectNormal);
+                    }
                 }
 
                 float3 N = indirectNormal;
@@ -229,12 +257,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 float NdotV = max(0, -dot(N, viewVector));
                 float NdotL = max(0, dot(N, rayDir));
                 //float NoH = max(0, dot(N, H));
-                float VoH = max(0, -dot(V, H));
                 
-                float3 F0  = float3(0.04f, 0.04f, 0.04f);
-                F0       = lerp(F0, albedo, metallic);
-                
-                float3 F              = FresnelSchlick(VoH, F0);
                 float3 specularWeight = F * Smith_G2_Over_G1_Height_Correlated(roughness, roughness * roughness, NdotL, NdotV);
                 throughput *= specularWeight;
                 // pdf stuff
@@ -301,14 +324,14 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             emissiveColor *= 10.0;
 
+            float3 accumulatedLightRadiance = float3(0.0, 0.0, 0.0);
+            float3 accumulatedDiffuseRadiance = float3(0.0, 0.0, 0.0);
+            float3 accumulatedSpecularRadiance = float3(0.0, 0.0, 0.0);
+
             if (rayQuery.CommittedTriangleFrontFace() == false)
             {
                 indirectNormal = -indirectNormal;
             }
-
-            float3 accumulatedLightRadiance = float3(0.0, 0.0, 0.0);
-            float3 accumulatedDiffuseRadiance = float3(0.0, 0.0, 0.0);
-            float3 accumulatedSpecularRadiance = float3(0.0, 0.0, 0.0);
 
             for (int lightIndex = 0; lightIndex < numLights; lightIndex++)
             {

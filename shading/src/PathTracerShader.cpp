@@ -428,6 +428,12 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     int rayBounceIndex = resourceManager->getRayBounceIndex() - 1;
     shader->updateData("rayBounceIndex", &rayBounceIndex, true);
 
+    int diffuseOrSpecular  = resourceManager->getDiffuseOrSpecular();
+    int reflectionOrRefraction = resourceManager->getReflectionOrRefraction();
+
+    shader->updateData("diffuseOrSpecular", &diffuseOrSpecular, true);
+    shader->updateData("reflectionOrRefraction", &reflectionOrRefraction, true);
+
     resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
     resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
     resourceManager->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);

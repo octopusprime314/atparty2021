@@ -128,7 +128,10 @@ class ResourceManager
     int                                                               _raysPerPixel         = 5;
     int                                                               _renderMode           = 2;
     int                                                               _rayBounceIndex       = 0; // 0 means all rays are visualized
-    
+    int                                                               _diffuseOrSpecular = 2; // Indicates stochastic
+    int                                                               _reflectionOrRefraction = 2; // Indicates stochastic
+
+
     UINT _allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
                              UINT descriptorIndexToUse = UINT_MAX);
     void _updateTransformData();
@@ -205,4 +208,11 @@ class ResourceManager
 
     void setRayBounceIndex(int rayBounceIndex) { _rayBounceIndex = rayBounceIndex; }
     int  getRayBounceIndex() { return _rayBounceIndex; }
+
+    void setDiffuseOrSpecular(int diffuseOrSpecular) { _diffuseOrSpecular = diffuseOrSpecular; }
+    int getDiffuseOrSpecular() { return _diffuseOrSpecular; }
+
+    void setReflectionOrRefraction(int reflectionOrRefraction) { _reflectionOrRefraction = reflectionOrRefraction; }
+    int getReflectionOrRefraction() { return _reflectionOrRefraction; }
+
 };

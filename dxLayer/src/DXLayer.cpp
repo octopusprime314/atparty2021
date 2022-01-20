@@ -419,13 +419,22 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
 
     int renderMode = resourceManager->getRenderMode();
     const char* const renderModes[]  = {"DIFFUSE_DENOISED = 0", "SPECULAR_DENOISED = 1",
-                            "BOTH_DIFFUSE_AND_SPECULAR = 2", "DIFFUSE_RAW = 3", "SPECULAR_RAW = 4"};
+                                        "BOTH_DIFFUSE_AND_SPECULAR = 2", "DIFFUSE_RAW = 3", "SPECULAR_RAW = 4"};
 
     ImGui::ListBox("Render mode", &renderMode, renderModes, _countof(renderModes));
     resourceManager->setRenderMode(renderMode);
 
-    int               rayBounceIndex = resourceManager->getRayBounceIndex();
+    int               diffuseOrSpecular        = resourceManager->getDiffuseOrSpecular();
+    const char* const diffuseOrSpecularModes[]  = {"DIFFUSE_RAYS_ONLY = 0", "SPECULAR_RAYS_ONLY = 1", "STOCHASTIC = 2"};
+    ImGui::ListBox("Diffuse or Specular Rays", &diffuseOrSpecular, diffuseOrSpecularModes, _countof(diffuseOrSpecularModes));
+    resourceManager->setDiffuseOrSpecular(diffuseOrSpecular);
 
+    int               reflectionOrRefraction    = resourceManager->getReflectionOrRefraction();
+    const char* const reflectionOrRefractionModes[]  = {"REFLECTIONS_RAYS_ONLY = 0", "REFRACTION_RAYS_ONLY = 1", "STOCHASTIC = 2"};
+    ImGui::ListBox("Reflection or Refraction Rays", &reflectionOrRefraction, reflectionOrRefractionModes, _countof(reflectionOrRefractionModes));
+    resourceManager->setReflectionOrRefraction(reflectionOrRefraction);
+
+    int rayBounceIndex = resourceManager->getRayBounceIndex();
     ImGui::InputInt("Visualize Ray Bounce Index", &rayBounceIndex);
     resourceManager->setRayBounceIndex(rayBounceIndex);
 

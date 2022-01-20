@@ -376,11 +376,21 @@ bool ProcessTransparentTriangle(in RayTraversalData rayData)
     return false;
 }
 
+float3 refract(const float3 normal, const float3 incident, float n)
+{
+    const float  cosI  = -dot(normal, incident);
+    const float  sinT2 = n * n * (1.0 - cosI * cosI);
+    if (sinT2 > 1.0)
+        return float3(0.0, 0.0, 0.0); // Total internal reflection....what
+    const float cosT = sqrt(1.0 - sinT2);
+    return n * incident + (n * cosI - cosT) * normal;
+}
+
 float3 RefractionRay(float3 normal, float3 incidentRayDirection)
 {
     float cosIncident   = clamp(-1.0, 1.0, dot(incidentRayDirection, normal));
-    float etaIncident   = 1.0;
-    float etaRefraction = GLASS_IOR;
+    float  etaIncident   = 1.0;
+    float  etaRefraction = WATER_IOR;
     float3 n   = normal;
     if (cosIncident < 0.0)
     {
@@ -388,7 +398,7 @@ float3 RefractionRay(float3 normal, float3 incidentRayDirection)
     }
     else
     {
-        etaIncident = GLASS_IOR;
+        etaIncident   = WATER_IOR;
         etaRefraction = 1.0;
         n    = -normal;
     }
