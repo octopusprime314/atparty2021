@@ -735,4 +735,34 @@ void ProcessOpaqueTriangle(in  RayTraversalData        rayData,
                        .SampleLevel(bilinearWrap, uvCoord, mipLevel).xyz * uniformMaterials[attributeIndex].emissiveColor;
     }
 }
+
+float luminance(float3 rgb) { return dot(rgb, float3(0.2126f, 0.7152f, 0.0722f)); }
+
+// Calculates probability of selecting BRDF (specular or diffuse) using the approximate Fresnel term
+float getBrdfProbability(float3 albedo, float metallic, float3 V, float3 shadingNormal)
+{
+
+    // Evaluate Fresnel term using the shading normal
+    // Note: we use the shading normal instead of the microfacet normal (half-vector) for Fresnel
+    // term here. That's suboptimal for rough surfaces at grazing angles, but half-vector is yet
+    // unknown at this point
+    float3 F0        = float3(0.04f, 0.04f, 0.04f);
+    F0               = lerp(F0, albedo, metallic);
+    float specularF0         = luminance(F0);
+
+    float diffuseReflectance = luminance(albedo * (1.0 - metallic));
+    float Fresnel = saturate(luminance(FresnelSchlick(max(0.0f, dot(V, shadingNormal)), specularF0)));
+
+    // Approximate relative contribution of BRDFs using the Fresnel term
+    float specular = Fresnel;
+    float diffuse =
+        diffuseReflectance *
+        (1.0f - Fresnel); //< If diffuse term is weighted by Fresnel, apply it here as well
+
+    // Return probability of selecting specular BRDF over diffuse BRDF
+    float p = (specular / max(0.0001f, (specular + diffuse)));
+
+    // Clamp probability to avoid undersampling of less prominent BRDF
+    return clamp(p, 0.1f, 0.9f);
+}
 #endif

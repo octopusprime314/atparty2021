@@ -149,10 +149,15 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     bool grabbedPrimarySurfaceDemodulator = false;
 
+    uint totalDiffuseRayCount = specularPrimarySurfaceModulation[threadId.xy].x;
+    uint totalSpecularRayCount = specularPrimarySurfaceModulation[threadId.xy].y;
+    uint totalRayCount = specularPrimarySurfaceModulation[threadId.xy].w;
+
     bool rayIsBotched = false;
 
     for (i = 0; i < maxBounces; i++)
     {
+        totalRayCount++;
         // First ray is directional and perfect mirror from camera eye so specular it is
         bool diffuseRay = false;
 
@@ -163,29 +168,46 @@ void main(int3 threadId            : SV_DispatchThreadID,
         }
         else
         {
+            float2 stochastic = GetRandomSample(threadId.xy, screenSize).xy;
+            stochastic        = (stochastic + 1.0) / 2.0;
+            
+            float3 viewVector = normalize(indirectPos - previousPosition);
+            // Decide whether to sample diffuse or specular BRDF (based on Fresnel term)
+            float brdfProbability = getBrdfProbability(albedo, metallic, viewVector, indirectNormal);
+
+            // When calculating the fresnel term we need to make the probability flipped for translucent geometry
+            // and shoot rays based on the flipped brdf probability
+            bool isRefractiveRay = false;
+            if (transmittance > 0.0 && stochastic.y < 1.0f - brdfProbability)
+            {
+                brdfProbability = 1.0f - brdfProbability;
+                isRefractiveRay = true;
+            }
+
+            // specular ray
+            if (stochastic.x < brdfProbability)
+            {
+                throughput /= brdfProbability;
+                diffuseRay = false;
+            }
+            // diffuse ray
+            else
+            {
+                throughput /= (1.0f - brdfProbability);
+                diffuseRay = true;
+            }
+
             indirectNormal = normalize(-indirectNormal);
 
-            float2 stochastic = GetRandomSample(threadId.xy, screenSize).xy;
-            
-            if ((stochastic.x < 0.0 && diffuseOrSpecular == 2) || diffuseOrSpecular == 0)
+            if ((diffuseRay == true && diffuseOrSpecular == 2) || diffuseOrSpecular == 0)
             {
-                diffuseRay = true;
-
-                if (transmittance > 0.0)
+                if ((isRefractiveRay == true && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
                 {
-                    if ((stochastic.y < 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
-                    {
-                        indirectNormal = normalize(-indirectNormal);
-                        rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
-                        refractedDiffuseRayCount++;
-                    }
-                    else if ((stochastic.y >= 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
-                    {
-                        rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
-                        reflectedDiffuseRayCount++;
-                    }
+                    indirectNormal = normalize(-indirectNormal);
+                    rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    refractedDiffuseRayCount++;
                 }
-                else if (reflectionOrRefraction == 2 || reflectionOrRefraction == 0)
+                else if ((isRefractiveRay == false && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
                 {
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
                     reflectedDiffuseRayCount++;
@@ -193,13 +215,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 float3 diffuseWeight = albedo * (1.0 - metallic);
                 throughput *= (diffuseWeight);
-                // pdf stuff
-                //throughput /= 0.5;
             }
-            else if ((stochastic.x >= 0.0 && diffuseOrSpecular == 2) || diffuseOrSpecular == 1)
+            else if ((diffuseRay == false && diffuseOrSpecular == 2) || diffuseOrSpecular == 1)
             {
-                diffuseRay = false;
-
                 // Specular
                 float3x3 basis = orthoNormalBasis(indirectNormal);
 
@@ -216,77 +234,40 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 float3 V = viewVector;
                 float3 H = ImportanceSampleGGX_VNDF(rng, roughness, V, basis);
 
-                float VoH = max(0, -dot(V, H));
-                
-                float3 F0  = float3(0.04f, 0.04f, 0.04f);
-                F0 = lerp(F0, albedo, metallic);
-                float3 F = FresnelSchlick(VoH, F0);
-
-                if (transmittance > 0.0)
+                if ((isRefractiveRay == true && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
                 {
-                    if ((stochastic.y >= 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
-                    {
-                        float3 refractedRay = RefractionRay(indirectNormal, V);
-                        rayDir       = refractedRay;
-                        refractedSpecularRayCount++;
-                    }
-                    else if ((stochastic.y < 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
-                    {
-                        // VNDF reflection sampling
-                        rayDir = reflect(V, H);
-                        reflectedSpecularRayCount++;
-                    }
+                    float3 refractedRay = RefractionRay(indirectNormal, V);
+                    rayDir       = refractedRay;
+                    refractedSpecularRayCount++;
                 }
-                else if (reflectionOrRefraction == 2 || reflectionOrRefraction == 0)
+                else if ((isRefractiveRay == false && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
                 {
                     // VNDF reflection sampling
                     rayDir = reflect(V, H);
                     reflectedSpecularRayCount++;
                 }
 
-                if (transmittance > 0.0)
+                if ((isRefractiveRay == true && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
                 {
-                    if ((stochastic.y >= 0.0 && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
-                    {
-                        indirectNormal = normalize(-indirectNormal);
-                    }
+                    indirectNormal = normalize(-indirectNormal);
                 }
 
                 float3 N = indirectNormal;
                 
                 float NdotV = max(0, -dot(N, viewVector));
                 float NdotL = max(0, dot(N, rayDir));
-                //float NoH = max(0, dot(N, H));
+                float VoH = max(0, -dot(V, H));
+
+                float3 F0 = float3(0.04f, 0.04f, 0.04f);
+                F0        = lerp(F0, albedo, metallic);
+                float3 F  = FresnelSchlick(VoH, F0);
                 
                 float3 specularWeight = F * Smith_G2_Over_G1_Height_Correlated(roughness, roughness * roughness, NdotL, NdotV);
                 throughput *= specularWeight;
-                // pdf stuff
-                //throughput /= 0.5;
             }
         }
-        // See the Heitz paper referenced above for the estimator explanation.
-        //   (BRDF / PDF) = F * G2(V, L) / G1(V)
-        // The Fresnel term F is already embedded into "primary_specular" by
-        // direct_lighting.rgen. Assume G2 = G1(V) * G1(L) here and simplify that
-        // expression to just G1(L).
 
-        // float G1_NoL = G1_Smith(primary_roughness, NoL);
-        //
-        // bounce_throughput *= G1_NoL;
-        //
-        // bounce_throughput *= 1 / specular_pdf;
-        // is_specular_ray  = true;
-
-        float3 rayDirection = float3(0.0, 0.0, 0.0);
-        //if (i == 0)
-        //{
-            rayDirection = normalize(rayDir);
-        //}
-        //else
-        //{
-        //    float3 viewVector = normalize(indirectPos - previousPosition);
-        //    rayDirection = normalize(viewVector - (2.0f * dot(viewVector, indirectNormal) * indirectNormal));
-        //}
+        float3 rayDirection = normalize(rayDir);
 
         previousPosition = indirectPos;
 
@@ -374,23 +355,21 @@ void main(int3 threadId            : SV_DispatchThreadID,
             // Primary surface recording for denoiser
             if (i == 0)
             {
-                diffuseAlbedoDemodulation = albedo * (1.0 - metallic);
+                diffuseAlbedoDemodulation = albedo;
                 // specularFresnelDemodulation = indirectSpecularRadiance;
                 grabbedPrimarySurfaceDemodulator = true;
-            
+
                 normalUAV[threadId.xy].xyz   = (-indirectNormal + 1.0) / 2.0;
                 positionUAV[threadId.xy].xyz = indirectPos;
                 albedoUAV[threadId.xy].xyz   = albedo.xyz;
             
                 // Denoiser can't handle roughness value of 0.0
-                normalUAV[threadId.xy].w   = max(roughness, 0.05);
+                normalUAV[threadId.xy].w   = roughness;
                 positionUAV[threadId.xy].w = rayData.instanceIndex;
                 albedoUAV[threadId.xy].w   = metallic;
             
                 viewZUAV[threadId.xy].x = mul(float4(indirectPos, 1.0), viewTransform).z;
             }
-
-            roughnessAccumulation += roughness;
 
             if (diffuseRay == true)
             {
@@ -516,6 +495,20 @@ void main(int3 threadId            : SV_DispatchThreadID,
     }
 
     // Write out number of diffuse rays, specular rays and total rays cast
-    specularPrimarySurfaceModulation[threadId.xy] =
-            float4(reflectedDiffuseRayCount, reflectedSpecularRayCount, refractedDiffuseRayCount, refractedSpecularRayCount);
-}
+    //specularPrimarySurfaceModulation[threadId.xy] =
+    //        float4(reflectedDiffuseRayCount, reflectedSpecularRayCount, refractedDiffuseRayCount, refractedSpecularRayCount);
+
+    // Write out number of diffuse rays, specular rays and total rays cast
+
+    totalDiffuseRayCount += reflectedDiffuseRayCount;
+    totalSpecularRayCount += reflectedSpecularRayCount;
+
+    float percentOfDiffuseRays = ((float)reflectedDiffuseRayCount) / ((float)(i + 1));
+    float percentOfSpecularRays = ((float)reflectedSpecularRayCount) / ((float)(i + 1));
+
+    float averagePercentOfDiffuseRays = (percentOfDiffuseRays / ((float)frameNumber + 1)) + specularPrimarySurfaceModulation[threadId.xy].x;
+    float averagePercentOfSpecularRays = (percentOfSpecularRays / ((float)frameNumber + 1)) + specularPrimarySurfaceModulation[threadId.xy].y;
+
+    specularPrimarySurfaceModulation[threadId.xy] = float4(
+            totalDiffuseRayCount, totalSpecularRayCount, ((float)totalSpecularRayCount) / ((float)totalRayCount), totalRayCount);
+    }
