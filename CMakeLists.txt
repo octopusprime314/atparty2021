@@ -208,8 +208,8 @@ target_link_libraries(atparty2021 optimized ${CMAKE_SOURCE_DIR}/libs/_NRD_SDK/_N
 
 #pre fetches assets during cmake -G configuration
 FetchContent_Populate(assets
-                      URL        https://www.dropbox.com/s/y6iaayixvbwrrva/assets.zip?dl=0
-                      URL_HASH   MD5=ccc7d38d58234b94b3b764fefc799c8b
+                      URL        https://www.dropbox.com/s/mv6ljk0ourxf9al/assets.zip?dl=0
+                      URL_HASH   MD5=da6ad69c06317135fc0105970af3f2fb
                       SOURCE_DIR assets)
 
 #pre fetches lib dependencies during cmake -G configuration

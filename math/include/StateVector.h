@@ -43,6 +43,7 @@ class StateVector
     bool    _active;
     Vector4 _force;
     float   _mass;
+    Matrix  _transform;
 
   public:
     StateVector();
@@ -51,6 +52,7 @@ class StateVector
     void setAngularPosition(Vector4 position);
     void setAngularVelocity(Vector4 velocity);
     void setLinearVelocity(Vector4 velocity);
+    void setTransform(Matrix transform);
     void setLinearPosition(Vector4 position);
     void setContact(bool contact);
     void setGravity(bool enableGravity);
@@ -65,6 +67,7 @@ class StateVector
     Vector4 getAngularVelocity();
     Vector4 getLinearPosition();
     Vector4 getLinearVelocity();
+    Matrix  getTransform();
     bool    getContact();
     bool    getActive();
     Vector4 getTorque();

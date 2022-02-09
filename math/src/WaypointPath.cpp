@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iterator>
 #include <sstream>
+#include <algorithm>
 
 // Refactor to prop struct
 WaypointPath::WaypointPath(const std::string& name, bool visualize, bool accelerate)
@@ -35,7 +36,7 @@ WaypointPath::WaypointPath(const std::string& name, Vector4 finalPos, Vector4 fi
     : _name(name), _accelerate(accelerate)
 {
     _name = name;
-    _waypoints.emplace_back(finalPos, finalRotation, Vector4(1.0, 1.0, 1.0), time);
+    _waypoints.emplace_back(finalPos, finalRotation, Vector4(1.0, 1.0, 1.0), time, Matrix());
     _elapsedTime     = 0;
     _currentWaypoint = 0;
 }
@@ -47,6 +48,47 @@ WaypointPath::WaypointPath(const std::string& name, const std::vector<PathWaypoi
     _name            = name;
     _elapsedTime     = 0;
     _currentWaypoint = 0;
+}
+
+float WaypointPath::ConvertToDegrees(float radian) { return (180.0f / PI) * radian; }
+
+float WaypointPath::GetRoll(Vector4 q)
+{
+    float x = ConvertToDegrees(atan2(2 * q.getx() * q.getw() - 2 * q.gety() * q.getz(),
+                                     1 - 2 * pow(q.getx(), 2.0f) - 2 * pow(q.getz(), 2.0f)));
+
+    if (q.getx() * q.gety() + q.getz() * q.getw() == 0.5)
+    {
+        x = ConvertToDegrees((float)(2 * atan2(q.getx(), q.getw())));
+    }
+
+    else if (q.getx() * q.gety() + q.getz() * q.getw() == -0.5)
+    {
+        x = ConvertToDegrees((float)(-2 * atan2(q.getx(), q.getw())));
+    }
+    return x;
+}
+
+float WaypointPath::GetPitch(Vector4 q)
+{
+    float y = ConvertToDegrees(atan2(2 * q.gety() * q.getw() - 2 * q.getx() * q.getz(),
+                                     1 - 2 * pow(q.gety(), 2.0f) - 2 * pow(q.getz(), 2.0f)));
+    if (q.getx() * q.gety() + q.getz() * q.getw() == 0.5)
+    {
+        y = 0;
+    }
+    else if (q.getx() * q.gety() + q.getz() * q.getw() == -0.5)
+    {
+        y = 0;
+    }
+    return y;
+}
+
+float WaypointPath::GetYaw(Vector4 q)
+{
+    float z = ConvertToDegrees(
+        asin(std::clamp(2 * q.getx() * q.gety() + 2 * q.getz() * q.getw(), -1.0f, 1.0f)));
+    return z;
 }
 
 void WaypointPath::updateState(int milliseconds, StateVector* state)
@@ -98,6 +140,10 @@ void WaypointPath::updateState(int milliseconds, StateVector* state)
             if (_currentWaypoint >= _waypoints.size())
             {
                 _currentWaypoint = -1;
+                
+                _currentWaypoint = 0;
+                _elapsedTime     = 0;
+
                 return;
             }
 
@@ -110,10 +156,18 @@ void WaypointPath::updateState(int milliseconds, StateVector* state)
                 }
             }
 
-            state->setLinearPosition(_waypoints[_currentWaypoint].position);
-            state->setAngularPosition(_waypoints[_currentWaypoint].rotation);
+            //state->setLinearPosition(_waypoints[_currentWaypoint].position);
+            //state->setAngularPosition(_waypoints[_currentWaypoint].rotation);
+
+            state->setTransform(_waypoints[_currentWaypoint].transform);
         }
         _elapsedTime += milliseconds;
+    }
+
+    if (_currentWaypoint == _waypoints.size())
+    {
+        _currentWaypoint = 0;
+        _elapsedTime     = 0;
     }
 }
 
@@ -184,7 +238,7 @@ void WaypointPath::_loadWaypointsFromFile(const std::string& file)
         Vector4 d(static_cast<float>(v_x), static_cast<float>(v_y), static_cast<float>(v_z));
         Vector4 r(static_cast<float>(r_x), static_cast<float>(r_y), static_cast<float>(r_z));
         Vector4 s(1.0, 1.0, 1.0);
-        _waypoints.emplace_back(d, r, s, time);
+        _waypoints.emplace_back(d, r, s, time, Matrix());
 
         // Probably don't know initial position for first entry
         if (_waypoints.size() > 1)

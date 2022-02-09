@@ -125,6 +125,8 @@ class EngineManager
 
     void setEngineScene(std::shared_ptr<EngineScene> scene) { _scene = scene; }
 
+    void setEntityWayPointpath(std::string name, std::vector<PathWaypoint> waypointVectors);
+
     static GraphicsLayer             getGraphicsLayer();
     static ResourceManager* getResourceManager();
 };

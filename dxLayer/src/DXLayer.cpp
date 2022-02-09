@@ -31,13 +31,13 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
     int height = GetSystemMetrics(SM_CYSCREEN);
 
     // windowed fullscreen
-    //_window = CreateWindowEx(NULL, windowClass.lpszClassName, windowClass.lpszClassName,
-    //                         WS_OVERLAPPEDWINDOW, 0, 0, width, height, NULL, NULL, hInstance, NULL);
+    _window = CreateWindowEx(NULL, windowClass.lpszClassName, windowClass.lpszClassName,
+                             WS_OVERLAPPEDWINDOW, 0, 0, width, height, NULL, NULL, hInstance, NULL);
 
     // borderless fullscreen
-    _window = CreateWindowEx(NULL, windowClass.lpszClassName, windowClass.lpszClassName,
-                   WS_EX_TOPMOST | WS_POPUP,
-                   0, 0, width, height, NULL, NULL, hInstance, NULL);
+    //_window = CreateWindowEx(NULL, windowClass.lpszClassName, windowClass.lpszClassName,
+    //               WS_EX_TOPMOST | WS_POPUP,
+    //               0, 0, width, height, NULL, NULL, hInstance, NULL);
 
     RECT rect = {0};
     GetWindowRect(_window, &rect);
@@ -438,6 +438,14 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
     ImGui::InputInt("Visualize Ray Bounce Index", &rayBounceIndex);
     resourceManager->setRayBounceIndex(rayBounceIndex);
 
+    bool enableEmissives = resourceManager->getEnableEmissives();
+    ImGui::Checkbox("Enable Emissives", &enableEmissives);
+    resourceManager->setEnableEmissives(enableEmissives);
+
+    bool enableIBL = resourceManager->getEnableIBL();
+    ImGui::Checkbox("Enable IBL", &enableIBL);
+    resourceManager->setEnableIBL(enableIBL);
+
     ImGui::End();
 
     ImGui::Render();
@@ -592,7 +600,7 @@ void DXLayer::getTimestamp(int cmdListIndex)
 
     std::string regimeNames[] = 
     {
-        "Acceleration Structure Build", "Primary Rays", "Sun Rays", "Reflection Rays", "Denoiser", "", "", "", ""
+        "Acceleration Structure Build", "Path Tracing", "Denoiser", "", "", "", ""
     };
 
     for (int i = 0; i < 8; i++)

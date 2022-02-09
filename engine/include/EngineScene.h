@@ -17,6 +17,7 @@ struct SceneEntity
     std::string              waypointPath;
     std::vector<std::string> vectorPaths;
     std::vector<PathWaypoint> waypointVectors;
+    Entity*                   entityPtr;
 };
 
 struct SceneLight

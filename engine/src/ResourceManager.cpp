@@ -4,6 +4,7 @@
 #include "ModelBroker.h"
 #include "ShaderTable.h"
 #include "DXLayer.h"
+#include "AnimatedModel.h"
 #include <random>
 #include <set>
 
@@ -330,6 +331,194 @@ void ResourceManager::updateAndBindWorldToObjectMatrixBuffer(std::map<std::strin
             resourceBindings["instanceWorldToObjectSpaceMatrixTransforms"],
             _worldToObjectInstanceTransformsGPUBuffer->gpuDescriptorHandle);
     }
+}
+
+void ResourceManager::updateBLAS()
+{
+    auto dxLayer = DXLayer::instance();
+    auto device  = dxLayer->getDevice();
+    auto cmdList = dxLayer->usingAsyncCompute() ? DXLayer::instance()->getComputeCmdList()
+                                                : DXLayer::instance()->getCmdList();
+
+
+    // Deform vertices compute shader for updates to acceleration structure blas
+    std::vector<DXGI_FORMAT>* deformVertsFormats = new std::vector<DXGI_FORMAT>();
+
+    deformVertsFormats->push_back(DXGI_FORMAT_R32G32B32_FLOAT);
+
+    if (_deformVerticesShader == nullptr)
+    {
+        _deformVerticesShader = new HLSLShader(SHADERS_LOCATION + "hlsl/cs/transformVerticesCS", "",
+                                               deformVertsFormats);
+    }
+
+    device->QueryInterface(IID_PPV_ARGS(&_dxrDevice));
+
+    cmdList->BeginEvent(0, L"Deform vertices", sizeof(L"Deform vertices"));
+
+    auto entityList       = *EngineManager::instance()->getEntityList();
+    int  instanceIndex    = 0;
+    bool updatesPerformed = false;
+    for (auto entity : entityList)
+    {
+        bool isValidBlas = _blasMap.find(entity->getModel()) != _blasMap.end();
+
+        if (entity->isAnimated() && isValidBlas)
+        {
+            updatesPerformed = true;
+            _deformVerticesShader->bind();
+
+            AnimatedModel* animatedModel = static_cast<AnimatedModel*>(entity->getModel());
+
+            animatedModel->updateAnimation();
+
+            // Bone uniforms
+            auto   bones           = animatedModel->getBones();
+            float* bonesArray      = new float[16 * 150]; // 4x4 times number of bones
+            int    bonesArrayIndex = 0;
+            for (auto bone : *bones)
+            {
+                for (int i = 0; i < 16; i++)
+                {
+                    float* buff                   = bone.getFlatBuffer();
+                    bonesArray[bonesArrayIndex++] = buff[i];
+                }
+            }
+
+            _deformVerticesShader->updateData("bones[0]", bonesArray, true);
+
+            delete[] bonesArray;
+
+            auto                  resourceBindings  = _deformVerticesShader->_resourceIndexes;
+            ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
+            cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+            cmdList->SetComputeRootDescriptorTable(
+                resourceBindings["inputVertex"],
+                _vertexBufferMap[entity->getModel()].first[0]->gpuDescriptorHandle);
+
+            std::vector<VAO*>* vao = animatedModel->getVAO();
+
+            D3DBuffer* boneWeights = ((*vao)[0])->getBoneWeightSRV();
+            D3DBuffer* boneIndexes = ((*vao)[0])->getBoneIndexSRV();
+
+            cmdList->SetComputeRootDescriptorTable(resourceBindings["indexes"],
+                                                   boneIndexes->gpuDescriptorHandle);
+            cmdList->SetComputeRootDescriptorTable(resourceBindings["weights"],
+                                                   boneWeights->gpuDescriptorHandle);
+
+            static RenderTexture* _deformedVertices[2];
+            static ComPtr<ID3D12Resource> _blUpdateScratchResource;
+            if (_deformedVertices[0] == nullptr)
+            {
+                _deformedVertices[0] =
+                    new RenderTexture(_vertexBufferMap[entity->getModel()].first[0]->count, 0,
+                                      TextureFormat::RGB_FLOAT, "DeformedVerts");
+            }
+
+            _deformVerticesShader->updateData("deformedVertices", 0, _deformedVertices[0], true,
+                                                  true);
+
+            auto cameraView = EngineManager::instance()->getViewManager()->getView();
+
+            _deformVerticesShader->updateData("view", cameraView.getFlatBuffer(), true);
+
+            _deformVerticesShader->updateData("model", entity->getMVP()->getModelBuffer(),
+                                                true);
+
+            _deformVerticesShader->dispatch(
+                ceilf(static_cast<float>(3 * _vertexBufferMap[entity->getModel()].first[0]->count) /
+                        64.0f),
+                1, 1);
+
+            cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
+
+            _deformVerticesShader->unbind();
+
+            // Get required sizes for an acceleration structure.
+            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags =
+                D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
+
+            buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+            buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+
+            D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
+            geomDesc.Type                           = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+            geomDesc.Triangles.IndexBuffer =
+                _indexBufferMap[entity->getModel()].first[0]->resource->GetGPUVirtualAddress();
+            auto indexDesc =
+                (*entity->getFrustumVAO())[0]->getIndexResource()->getResource()->GetDesc();
+            geomDesc.Triangles.IndexCount   = static_cast<UINT>(indexDesc.Width) / sizeof(uint32_t);
+            geomDesc.Triangles.IndexCount   = _vertexBufferMap[entity->getModel()].first[0]->count;
+            geomDesc.Triangles.IndexFormat  = DXGI_FORMAT_R32_UINT;
+            geomDesc.Triangles.Transform3x4 = 0;
+            geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+            geomDesc.Triangles.VertexCount  = _vertexBufferMap[entity->getModel()].first[0]->count;
+            geomDesc.Triangles.VertexBuffer.StartAddress =
+                _deformedVertices[0]->getResource()->getResource()->GetGPUVirtualAddress();
+            geomDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(float) * 3;
+
+            // If model is a light holder then flag it as non opaque to indicate during shadow
+            // traversal that we don't want to intersect with it to determine occlusion Also
+            // reflective surfaces we don't to intersect with for shadows
+            if (/*(entity->getModel()->getName().find("hanginglantern") != std::string::npos) ||
+                (entity->getModel()->getName().find("torch") != std::string::npos) ||
+                (entity->getModel()->getName().find("fluid") != std::string::npos) ||
+                (entity->getName().find("SUZANNEGHOST") != std::string::npos) ||*/
+                (entity->getModel()->getName().find("hagraven") != std::string::npos))
+            {
+                geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+            }
+            else
+            {
+                geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+            }
+
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC    bottomLevelBuildDesc = {};
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& bottomLevelInputs =
+                bottomLevelBuildDesc.Inputs;
+            bottomLevelInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+            bottomLevelInputs.Flags       = buildFlags;
+            bottomLevelInputs.NumDescs    = static_cast<UINT>(1);
+            bottomLevelInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+            bottomLevelInputs.pGeometryDescs = &geomDesc;
+
+            bottomLevelBuildDesc.DestAccelerationStructureData =
+                _blasMap[entityList[instanceIndex]->getModel()]->GetASBuffer();
+
+            bottomLevelBuildDesc.SourceAccelerationStructureData =
+                bottomLevelBuildDesc.DestAccelerationStructureData;
+
+            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
+            _dxrDevice->GetRaytracingAccelerationStructurePrebuildInfo(&bottomLevelInputs,
+                                                                       &prebuildInfo);
+            auto updateBufferDesc =
+                CD3DX12_RESOURCE_DESC::Buffer(prebuildInfo.UpdateScratchDataSizeInBytes,
+                                              D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            auto defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+
+            if (_blUpdateScratchResource == nullptr)
+            {
+                _dxrDevice->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                                    &updateBufferDesc,
+                                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+                                                    IID_PPV_ARGS(&_blUpdateScratchResource));
+            }
+
+            bottomLevelBuildDesc.ScratchAccelerationStructureData =
+                _blUpdateScratchResource->GetGPUVirtualAddress();
+
+            cmdList->BuildRaytracingAccelerationStructure(&bottomLevelBuildDesc, 0, nullptr);
+        }
+        instanceIndex++;
+    }
+
+    if (updatesPerformed == true)
+    {
+        cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
+    }
+
+    cmdList->EndEvent();
 }
 
 void ResourceManager::buildGeometry(Entity* entity)

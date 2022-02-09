@@ -130,6 +130,9 @@ class ResourceManager
     int                                                               _rayBounceIndex       = 0; // 0 means all rays are visualized
     int                                                               _diffuseOrSpecular = 2; // Indicates stochastic
     int                                                               _reflectionOrRefraction = 2; // Indicates stochastic
+    bool                                                              _enableEmissives =  true;
+    bool                                                              _enableIBL       = true;
+    HLSLShader* _deformVerticesShader                                                  = nullptr;
 
 
     UINT _allocateDescriptor(D3D12_CPU_DESCRIPTOR_HANDLE* cpuDescriptor,
@@ -214,5 +217,13 @@ class ResourceManager
 
     void setReflectionOrRefraction(int reflectionOrRefraction) { _reflectionOrRefraction = reflectionOrRefraction; }
     int getReflectionOrRefraction() { return _reflectionOrRefraction; }
+
+    void setEnableEmissives(bool enableEmissives) { _enableEmissives = enableEmissives; }
+    bool getEnableEmissives() { return _enableEmissives; }
+
+    void setEnableIBL(bool enableIBL) { _enableIBL = enableIBL; }
+    bool getEnableIBL() { return _enableIBL; }
+
+    void updateBLAS();
 
 };

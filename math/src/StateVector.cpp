@@ -60,6 +60,8 @@ Vector4 StateVector::getAngularPosition() { return _angularPosition; }
 
 Vector4 StateVector::getLinearVelocity() { return _linearVelocity; }
 
+Matrix StateVector::getTransform() { return _transform; }
+
 Vector4 StateVector::getAngularVelocity() { return _angularVelocity; }
 
 Vector4 StateVector::getLinearAcceleration() { return _linearAcceleration; }
@@ -85,6 +87,9 @@ void StateVector::setAngularPosition(Vector4 position) { _angularPosition = posi
 void StateVector::setLinearVelocity(Vector4 velocity) { _linearVelocity = velocity; }
 
 void StateVector::setAngularVelocity(Vector4 velocity) { _angularVelocity = velocity; }
+
+void StateVector::setTransform(Matrix transform) { _transform = transform; }
+
 
 void StateVector::setLinearAcceleration(Vector4 acceleration)
 {

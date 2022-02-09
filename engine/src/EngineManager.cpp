@@ -116,9 +116,20 @@ Entity* EngineManager::addEntity(SceneEntity sceneEntity)
     auto& entityList                        = _scene->entityList;
     _scene->sceneEntities[sceneEntity.name] = sceneEntity;
     entityList.push_back(new Entity(sceneEntity, _viewManager));
+    _scene->sceneEntities[sceneEntity.name].entityPtr = entityList.back();
     _entityListLock.unlock();
 
     return entityList.back();
+}
+
+void EngineManager::setEntityWayPointpath(std::string               name,
+                                             std::vector<PathWaypoint> waypointVectors)
+{
+    _entityListLock.lock();
+    _scene->sceneEntities[name].waypointVectors = waypointVectors;
+    _scene->sceneEntities[name].entityPtr->reset(_scene->sceneEntities[name], _viewManager);
+    _entityListLock.unlock();
+
 }
 
 std::optional<SceneEntity> EngineManager::getSceneEntity(const std::string& entityName)

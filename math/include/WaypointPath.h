@@ -7,13 +7,15 @@
 
 struct PathWaypoint
 {
+    Matrix  transform;
     Vector4 position;
     Vector4 rotation;
     Vector4 scale;
     Vector4 linearVelocity; // calculated
     float   time;
 
-    PathWaypoint(const Vector4& p, const Vector4& r, const Vector4& s, float t) : position(p), rotation(r), scale(s), time(t) {}
+    PathWaypoint() {}
+    PathWaypoint(const Vector4& p, const Vector4& r, const Vector4& s, float t, Matrix trans) : position(p), rotation(r), scale(s), time(t), transform(trans) {}
 };
 
 class WaypointPath
@@ -42,6 +44,12 @@ class WaypointPath
     void        _loadWaypointsFromFile(const std::string& file);
     void        _drawPath();
     void        _calculateVelocities(StateVector* state);
+    float       ConvertToDegrees(float radian);
+    float       GetRoll(Vector4 q);
+    float       GetPitch(Vector4 q);
+    float       GetYaw(Vector4 q);
+
+
     std::string _name;
 
     bool                      _accelerate;

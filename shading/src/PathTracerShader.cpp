@@ -390,20 +390,14 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     UINT                                numSampleSets         = 83;
     UINT                                numPixelsPerDimPerSet = 8;
 
-    DXLayer::instance()->setTimeStamp();
-  
+ 
     cmdList->BeginEvent(0, L"Reflection Rays", sizeof(L"Reflection Rays"));
-
-    DXLayer::instance()->setTimeStamp();
 
     // Reflection rays
 
     shader = _reflectionRaysShader;
 
     shader->bind();
-
-    //shader->updateData("indirectLightRaysHistoryBufferSRV", 0, _indirectLightRaysHistoryBuffer, true, false);
-    //shader->updateData("indirectSpecularLightRaysHistoryBufferSRV", 0, _indirectSpecularLightRaysHistoryBuffer, true, false);
 
     shader->updateData("indirectLightRaysUAV", 0, _indirectLightRays, true, true);
     shader->updateData("indirectSpecularLightRaysUAV", 0, _indirectSpecularLightRays, true, true);
@@ -430,9 +424,13 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
     int diffuseOrSpecular  = resourceManager->getDiffuseOrSpecular();
     int reflectionOrRefraction = resourceManager->getReflectionOrRefraction();
+    int enableEmissives        = resourceManager->getEnableEmissives();
+    int enableIBL               = resourceManager->getEnableIBL();
 
     shader->updateData("diffuseOrSpecular", &diffuseOrSpecular, true);
     shader->updateData("reflectionOrRefraction", &reflectionOrRefraction, true);
+    shader->updateData("enableEmissives", &enableEmissives, true);
+    shader->updateData("enableIBL", &enableIBL, true);
 
     resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
     resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
@@ -596,95 +594,78 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         _NRI.CreateCommandBufferD3D12(*_nriDevice, cmdDesc, cmdBuffer);
 
         // Wrap required textures
-        constexpr uint32_t                N              = 9;
+        constexpr uint32_t                N              = 7;
         nri::TextureTransitionBarrierDesc entryDescs[N]  = {};
         nri::Format                       entryFormat[N] = {};
-
-        nri::TextureD3D12Desc textureDesc = {};
-        textureDesc.d3d12Resource         = _occlusionRays->getResource()->getResource().Get();
-        nri::Texture* texture             = (nri::Texture*)entryDescs[0].texture;
-        _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
 
         // You need to specify the current state of the resource here, after denoising NRD can
         // modify this state. Application must continue state tracking from this point. Useful
         // information:
         //    SRV = nri::AccessBits::SHADER_RESOURCE, nri::TextureLayout::SHADER_RESOURCE
         //    UAV = nri::AccessBits::SHADER_RESOURCE_STORAGE, nri::TextureLayout::GENERAL
+
+        nri::TextureD3D12Desc textureDesc = {};
+        textureDesc.d3d12Resource = _normalPrimaryRays->getResource()->getResource().Get();
+        nri::Texture* texture     = (nri::Texture*)entryDescs[0].texture;
+        _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
+        
         entryDescs[0].texture = texture;
         entryDescs[0].nextAccess = nri::AccessBits::SHADER_RESOURCE;
         entryDescs[0].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
 
-        textureDesc = {};
-        textureDesc.d3d12Resource = _denoisedOcclusionRays->getResource()->getResource().Get();
-        texture             = (nri::Texture*)entryDescs[1].texture;
+        textureDesc               = {};
+        textureDesc.d3d12Resource = _svgfDenoiser->getMotionVectors()->getResource()->getResource().Get();
+        texture                   = (nri::Texture*)entryDescs[1].texture;
         _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
 
         entryDescs[1].texture    = texture;
-        entryDescs[1].nextAccess = nri::AccessBits::SHADER_RESOURCE_STORAGE;
-        entryDescs[1].nextLayout = nri::TextureLayout::GENERAL;
+        entryDescs[1].nextAccess = nri::AccessBits::SHADER_RESOURCE;
+        entryDescs[1].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
 
         textureDesc               = {};
-        textureDesc.d3d12Resource = _normalPrimaryRays->getResource()->getResource().Get();
+        textureDesc.d3d12Resource = _indirectLightRays->getResource()->getResource().Get();
         texture                   = (nri::Texture*)entryDescs[2].texture;
         _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
-        
-        entryDescs[2].texture = texture;
+
+        entryDescs[2].texture    = texture;
         entryDescs[2].nextAccess = nri::AccessBits::SHADER_RESOURCE;
         entryDescs[2].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
 
         textureDesc               = {};
-        textureDesc.d3d12Resource = _svgfDenoiser->getMotionVectors()->getResource()->getResource().Get();
+        textureDesc.d3d12Resource = _viewZPrimaryRays->getResource()->getResource().Get();
         texture                   = (nri::Texture*)entryDescs[3].texture;
         _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
 
         entryDescs[3].texture    = texture;
         entryDescs[3].nextAccess = nri::AccessBits::SHADER_RESOURCE;
         entryDescs[3].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
-
+        
         textureDesc               = {};
-        textureDesc.d3d12Resource = _indirectLightRays->getResource()->getResource().Get();
+        textureDesc.d3d12Resource = _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
         texture                   = (nri::Texture*)entryDescs[4].texture;
         _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
 
         entryDescs[4].texture    = texture;
-        entryDescs[4].nextAccess = nri::AccessBits::SHADER_RESOURCE;
-        entryDescs[4].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
+        entryDescs[4].nextAccess = nri::AccessBits::SHADER_RESOURCE_STORAGE;
+        entryDescs[4].nextLayout = nri::TextureLayout::GENERAL;
 
         textureDesc               = {};
-        textureDesc.d3d12Resource = _viewZPrimaryRays->getResource()->getResource().Get();
+        textureDesc.d3d12Resource = _indirectSpecularLightRays->getResource()->getResource().Get();
         texture                   = (nri::Texture*)entryDescs[5].texture;
         _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
 
         entryDescs[5].texture    = texture;
         entryDescs[5].nextAccess = nri::AccessBits::SHADER_RESOURCE;
         entryDescs[5].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
-        
+
         textureDesc               = {};
-        textureDesc.d3d12Resource = _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
+        textureDesc.d3d12Resource = _indirectSpecularLightRaysHistoryBuffer->getResource()->getResource().Get();
         texture                   = (nri::Texture*)entryDescs[6].texture;
         _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
 
         entryDescs[6].texture    = texture;
         entryDescs[6].nextAccess = nri::AccessBits::SHADER_RESOURCE_STORAGE;
         entryDescs[6].nextLayout = nri::TextureLayout::GENERAL;
-
-        textureDesc               = {};
-        textureDesc.d3d12Resource = _indirectSpecularLightRays->getResource()->getResource().Get();
-        texture                   = (nri::Texture*)entryDescs[7].texture;
-        _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
-
-        entryDescs[7].texture    = texture;
-        entryDescs[7].nextAccess = nri::AccessBits::SHADER_RESOURCE;
-        entryDescs[7].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
-
-        textureDesc               = {};
-        textureDesc.d3d12Resource = _indirectSpecularLightRaysHistoryBuffer->getResource()->getResource().Get();
-        texture                   = (nri::Texture*)entryDescs[8].texture;
-        _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
-
-        entryDescs[8].texture    = texture;
-        entryDescs[8].nextAccess = nri::AccessBits::SHADER_RESOURCE_STORAGE;
-        entryDescs[8].nextLayout = nri::TextureLayout::GENERAL;
 
         // Populate common settings
         //  - for the first time use defaults
@@ -713,62 +694,70 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         //commonSettings.debug       = 1.0;
 
 
-        //enum class ResourceType : uint32_t
-        //{
-        //    // INPUTS
-        //    // ===========================================================================================================================
+        ////=============================================================================================================================
+        //// INPUTS
+        ////=============================================================================================================================
 
-        //    // 3D world space motion (RGBA16f+) or 2D screen space motion (RG16f+), MVs must be
-        //    // non-jittered, MV = previous - current
-        //    IN_MV,
+        //// 3D world space motion (RGBA16f+) or 2D screen space motion (RG16f+), MVs must be
+        //// non-jittered, MV = previous - current
+        //IN_MV,
 
-        //    // See "NRD.hlsl/NRD_FrontEnd_UnpackNormalAndRoughness" (RGBA8+ or R10G10B10A2+
-        //    // depending on encoding)
-        //    IN_NORMAL_ROUGHNESS,
+        //// See "NRD.hlsl/NRD_FrontEnd_UnpackNormalAndRoughness" (RGBA8+ or R10G10B10A2+
+        //// depending on encoding)
+        //IN_NORMAL_ROUGHNESS,
 
-        //    // Linear view depth for primary rays (R16f+)
-        //    IN_VIEWZ,
+        //// Linear view depth for primary rays (R16f+)
+        //IN_VIEWZ,
 
-        //    // Data must be packed using "NRD.hlsl/XXX_PackRadiance" (RGBA16f+)
-        //    IN_DIFF_HIT,
-        //    IN_SPEC_HIT,
+        //// Data must be packed using "NRD.hlsl/XXX_PackRadianceAndHitDist" (RGBA16f+)
+        //IN_DIFF_RADIANCE_HITDIST, IN_SPEC_RADIANCE_HITDIST,
 
-        //    // (Optional) Data must be packed using "NRD.hlsl/NRD_PackRayDirectionAndPdf" (RGBA8+)
-        //    IN_DIFF_DIRECTION_PDF,
-        //    IN_SPEC_DIRECTION_PDF,
+        //// Ambient (AO) and specular (SO) occlusion (R8+)
+        //IN_DIFF_HITDIST, IN_SPEC_HITDIST,
 
-        //    // Data must be packed using "NRD.hlsl/XXX_PackShadow (3 args)" (RG16f+). INF pixels
-        //    // must be cleared with NRD_INF_SHADOW macro
-        //    IN_SHADOWDATA,
+        //// (Optional) Data must be packed using "NRD.hlsl/NRD_PackRayDirectionAndPdf" (RGBA8+)
+        //IN_DIFF_DIRECTION_PDF, IN_SPEC_DIRECTION_PDF,
 
-        //    // Data must be packed using "NRD.hlsl/XXX_PackShadow (4 args)" (RGBA8+)
-        //    IN_SHADOW_TRANSLUCENCY,
+        //// (Optional) User-provided history confidence in range 0-1, i.e. antilag (R8+)
+        //IN_DIFF_CONFIDENCE, IN_SPEC_CONFIDENCE,
 
-        //    // OUTPUTS
-        //    // ==========================================================================================================================
+        //// Data must be packed using "NRD.hlsl/XXX_PackShadow (3 args)" (RG16f+). INF pixels
+        //// must be cleared with NRD_INF_SHADOW macro
+        //IN_SHADOWDATA,
 
-        //    // IMPORTANT: These textures can potentially be used as history buffers
+        //// Data must be packed using "NRD.hlsl/XXX_PackShadow (4 args)" (RGBA8+)
+        //IN_SHADOW_TRANSLUCENCY,
 
-        //    // SIGMA_SHADOW_TRANSLUCENCY - .x - shadow, .yzw - translucency (RGBA8+)
-        //    // SIGMA_SHADOW - .x - shadow (R8+)
-        //    // Data must be unpacked using "NRD.hlsl/XXX_UnpackShadow"
-        //    OUT_SHADOW_TRANSLUCENCY,
+        ////=============================================================================================================================
+        //// OUTPUTS
+        ////=============================================================================================================================
 
-        //    // .xyz - radiance (in case of REBLUR .w is normalized hit distance) (RGBA16f+)
-        //    OUT_DIFF_HIT,
-        //    OUT_SPEC_HIT,
+        //// IMPORTANT: These textures can potentially be used as history buffers
 
-        //    // POOLS
-        //    // ============================================================================================================================
+        //// SIGMA_SHADOW_TRANSLUCENCY - .x - shadow, .yzw - translucency (RGBA8+)
+        //// SIGMA_SHADOW - .x - shadow (R8+)
+        //// Data must be unpacked using "NRD.hlsl/XXX_UnpackShadow"
+        //OUT_SHADOW_TRANSLUCENCY,
 
-        //    // Can be reused after denoising
-        //    TRANSIENT_POOL,
+        //// .xyz - radiance, .w - normalized hit distance (in case of REBLUR) or signal variance
+        //// (in case of ReLAX) (RGBA16f+)
+        //OUT_DIFF_RADIANCE_HITDIST, OUT_SPEC_RADIANCE_HITDIST,
 
-        //    // Dedicated to NRD, can't be reused
-        //    PERMANENT_POOL,
+        //// .x - normalized hit distance (R8+)
+        //OUT_DIFF_HITDIST, OUT_SPEC_HITDIST,
 
-        //    MAX_NUM,
-        //};
+        ////=============================================================================================================================
+        //// POOLS
+        ////=============================================================================================================================
+
+        //// Can be reused after denoising
+        //TRANSIENT_POOL,
+
+        //// Dedicated to NRD, can't be reused
+        //PERMANENT_POOL,
+
+        //MAX_NUM,
+
 
         // Fill up the user pool
         NrdUserPool userPool = {{
@@ -777,19 +766,25 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
             // nri::Format::UNKNOWN}
 
             // IN_MV
-            {&entryDescs[3], nri::Format::RGBA16_SFLOAT},
+            {&entryDescs[1], nri::Format::RGBA16_SFLOAT},
 
             // IN_NORMAL_ROUGHNESS
-            {&entryDescs[2], nri::Format::RGBA8_UNORM},
+            {&entryDescs[0], nri::Format::RGBA8_UNORM},
 
             // IN_VIEWZ
-            {&entryDescs[5], nri::Format::R32_SFLOAT},
+            {&entryDescs[3], nri::Format::R32_SFLOAT},
 
             // IN_DIFF_HIT,
-            {&entryDescs[4], nri::Format::RGBA16_SFLOAT},
+            {&entryDescs[2], nri::Format::RGBA16_SFLOAT},
 
             // IN_SPEC_HIT,
-            {&entryDescs[7], nri::Format::RGBA16_SFLOAT},
+            {&entryDescs[5], nri::Format::RGBA16_SFLOAT},
+
+            //// Ambient (AO) occlusion (R8+)
+            //{nullptr, nri::Format::UNKNOWN},
+            //
+            //// specular (SO) occlusion (R8+)
+            //{nullptr, nri::Format::UNKNOWN},
 
             // IN_DIFF_DIRECTION_PDF,
             {nullptr, nri::Format::UNKNOWN},
@@ -797,22 +792,29 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
             // IN_SPEC_DIRECTION_PDF,
             {nullptr, nri::Format::UNKNOWN},
 
+            //// (Optional) User-provided history confidence in range 0-1, i.e. antilag (R8+)
+            //// IN_DIFF_CONFIDENCE
+            //{nullptr, nri::Format::UNKNOWN},
+            //
+            ////IN_SPEC_CONFIDENCE,
+            //{nullptr, nri::Format::UNKNOWN},
+
             // IN_SHADOW
-            {&entryDescs[0], nri::Format::RG16_SFLOAT},
+            {nullptr, nri::Format::UNKNOWN},
 
             // IN_TRANSLUCENCY
             {nullptr, nri::Format::UNKNOWN},
 
             // OUT_SHADOW | OUT_TRANSMITTANCE
-            {&entryDescs[1], nri::Format::RGBA8_UNORM},
+            {nullptr, nri::Format::UNKNOWN},
             // when using Translusent Shadows, OUT_SHADOWS texture is not required. and vice
             // versa
 
             // OUT_DIFF_HIT
-            {&entryDescs[6], nri::Format::RGBA16_SFLOAT},
+            {&entryDescs[4], nri::Format::RGBA16_SFLOAT},
 
             // OUT_SPEC_HIT
-            {&entryDescs[8], nri::Format::RGBA16_SFLOAT},
+            {&entryDescs[6], nri::Format::RGBA16_SFLOAT},
         }};
 
         _NRD.Denoise(0, *cmdBuffer, commonSettings, userPool);
