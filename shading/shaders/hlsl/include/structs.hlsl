@@ -62,7 +62,7 @@ struct Payload
 #define MIN_RAY_LENGTH 0.0
 #define RECURSION_LIMIT 31
 
-#define WATER_IOR   1.05
+#define WATER_IOR   1.2
 #define GLASS_IOR   1.5
 #define DIAMOND_IOR 1.8
 

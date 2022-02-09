@@ -214,11 +214,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
             float brdfProbability = getBrdfProbability(albedo, metallic, viewVector, indirectNormal);
 
             // When calculating the fresnel term we need to make the probability flipped for translucent geometry
-            // and shoot rays based on the flipped brdf probability
+            // and shoot rays based on the brdf probability
             bool isRefractiveRay = false;
-            if (transmittance > 0.0 && stochastic.y < 1.0f - brdfProbability)
+            if (transmittance > 0.0 && stochastic.y < brdfProbability)
             {
-                brdfProbability = 1.0f - brdfProbability;
+                brdfProbability = brdfProbability;
                 isRefractiveRay = true;
             }
 
