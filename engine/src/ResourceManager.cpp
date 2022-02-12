@@ -27,6 +27,8 @@ ResourceManager::ResourceManager()
     createUnboundedTextureSrvDescriptorTable(MaxBLASSRVsForRayTracing);
     createUnboundedAttributeBufferSrvDescriptorTable(MaxBLASSRVsForRayTracing);
     createUnboundedIndexBufferSrvDescriptorTable(MaxBLASSRVsForRayTracing);
+
+   
 }
 
 void ResourceManager::init(ComPtr<ID3D12Device> device)
@@ -74,6 +76,17 @@ void ResourceManager::init(ComPtr<ID3D12Device> device)
         _rtASSrvHeapDesc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         _dxrDevice->CreateDescriptorHeap(&_rtASSrvHeapDesc,
                                          IID_PPV_ARGS(_rtASDescriptorHeap.GetAddressOf()));
+
+        if (_deformVerticesShader == nullptr)
+        {
+             // Deform vertices compute shader for updates to acceleration structure blas
+             std::vector<DXGI_FORMAT>* deformVertsFormats = new std::vector<DXGI_FORMAT>();
+
+             deformVertsFormats->push_back(DXGI_FORMAT_R32G32B32_FLOAT);
+
+            _deformVerticesShader = new HLSLShader(SHADERS_LOCATION + "hlsl/cs/transformVerticesCS",
+                                                   "", deformVertsFormats);
+        }
 
     }
     _doneAdding = false;
@@ -341,17 +354,6 @@ void ResourceManager::updateBLAS()
                                                 : DXLayer::instance()->getCmdList();
 
 
-    // Deform vertices compute shader for updates to acceleration structure blas
-    std::vector<DXGI_FORMAT>* deformVertsFormats = new std::vector<DXGI_FORMAT>();
-
-    deformVertsFormats->push_back(DXGI_FORMAT_R32G32B32_FLOAT);
-
-    if (_deformVerticesShader == nullptr)
-    {
-        _deformVerticesShader = new HLSLShader(SHADERS_LOCATION + "hlsl/cs/transformVerticesCS", "",
-                                               deformVertsFormats);
-    }
-
     device->QueryInterface(IID_PPV_ARGS(&_dxrDevice));
 
     cmdList->BeginEvent(0, L"Deform vertices", sizeof(L"Deform vertices"));
@@ -373,10 +375,10 @@ void ResourceManager::updateBLAS()
             animatedModel->updateAnimation();
 
             // Bone uniforms
-            auto   bones           = animatedModel->getBones();
+            auto   bones           = animatedModel->getJointMatrices();
             float* bonesArray      = new float[16 * 150]; // 4x4 times number of bones
             int    bonesArrayIndex = 0;
-            for (auto bone : *bones)
+            for (auto bone : bones)
             {
                 for (int i = 0; i < 16; i++)
                 {
@@ -389,20 +391,23 @@ void ResourceManager::updateBLAS()
 
             delete[] bonesArray;
 
-            auto                  resourceBindings  = _deformVerticesShader->_resourceIndexes;
-            ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
-            cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+            auto resourceBindings  = _deformVerticesShader->_resourceIndexes;
+           
+            updateStructuredAttributeBufferUnbounded(
+                _deformVerticesShader->_resourceIndexes["vertexBuffer"], nullptr, true);
 
-            cmdList->SetComputeRootDescriptorTable(
-                resourceBindings["inputVertex"],
-                _vertexBufferMap[entity->getModel()].first[0]->gpuDescriptorHandle);
+            //updateStructuredIndexBufferUnbounded(
+            //    _deformVerticesShader->_resourceIndexes["indexBuffer"], nullptr, true);
 
             std::vector<VAO*>* vao = animatedModel->getVAO();
 
             D3DBuffer* boneWeights = ((*vao)[0])->getBoneWeightSRV();
             D3DBuffer* boneIndexes = ((*vao)[0])->getBoneIndexSRV();
 
-            cmdList->SetComputeRootDescriptorTable(resourceBindings["indexes"],
+            ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
+            cmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+            cmdList->SetComputeRootDescriptorTable(resourceBindings["joints"],
                                                    boneIndexes->gpuDescriptorHandle);
             cmdList->SetComputeRootDescriptorTable(resourceBindings["weights"],
                                                    boneWeights->gpuDescriptorHandle);
@@ -421,13 +426,11 @@ void ResourceManager::updateBLAS()
 
             auto cameraView = EngineManager::instance()->getViewManager()->getView();
 
-            _deformVerticesShader->updateData("view", cameraView.getFlatBuffer(), true);
-
-            _deformVerticesShader->updateData("model", entity->getMVP()->getModelBuffer(),
-                                                true);
+            int modelIndex = 0;
+            _deformVerticesShader->updateData("modelIndex", &modelIndex, true);
 
             _deformVerticesShader->dispatch(
-                ceilf(static_cast<float>(3 * _vertexBufferMap[entity->getModel()].first[0]->count) /
+                ceilf(static_cast<float>(/*3 * */_vertexBufferMap[entity->getModel()].first[0]->count) /
                         64.0f),
                 1, 1);
 
@@ -448,9 +451,16 @@ void ResourceManager::updateBLAS()
                 _indexBufferMap[entity->getModel()].first[0]->resource->GetGPUVirtualAddress();
             auto indexDesc =
                 (*entity->getFrustumVAO())[0]->getIndexResource()->getResource()->GetDesc();
-            geomDesc.Triangles.IndexCount   = static_cast<UINT>(indexDesc.Width) / sizeof(uint32_t);
-            geomDesc.Triangles.IndexCount   = _vertexBufferMap[entity->getModel()].first[0]->count;
-            geomDesc.Triangles.IndexFormat  = DXGI_FORMAT_R32_UINT;
+
+            auto indexFormat = entity->getModel()->getRenderBuffers()->is32BitIndices()
+                       ? DXGI_FORMAT_R32_UINT
+                       : DXGI_FORMAT_R16_UINT;
+
+            geomDesc.Triangles.IndexCount   = static_cast<UINT>(indexDesc.Width) / (indexFormat == DXGI_FORMAT_R32_UINT ? sizeof(uint32_t) : sizeof(uint16_t));
+            //geomDesc.Triangles.IndexCount   = _indexBufferMap[entity->getModel()].first[0]->count / sizeof(uint32_t);
+
+
+            geomDesc.Triangles.IndexFormat  = indexFormat;
             geomDesc.Triangles.Transform3x4 = 0;
             geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
             geomDesc.Triangles.VertexCount  = _vertexBufferMap[entity->getModel()].first[0]->count;
@@ -1266,6 +1276,8 @@ void ResourceManager::_updateGeometryData()
             commandList->ResourceBarrier(resourcesToBarrier.size(), barrierDesc);
         }
     }
+
+    updateBLAS();
 }
 
 

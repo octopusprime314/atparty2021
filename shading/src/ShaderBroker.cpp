@@ -117,7 +117,8 @@ void ShaderBroker::_gatherShaderNames()
                             mapName.find("motionBlur"              ) != std::string::npos ||
                             mapName.find("upsample"                ) != std::string::npos ||
                             mapName.find("upsampleRGB"             ) != std::string::npos ||
-                            mapName.find("mipGen"                  ) != std::string::npos)
+                            mapName.find("mipGen"                  ) != std::string::npos ||
+                            mapName.find("transformVertices"       ) != std::string::npos)
                         {
                             _shaders[upperCaseMapName] = new ComputeShader(mapName);
                         }

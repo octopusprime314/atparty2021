@@ -4,6 +4,8 @@
 #include "Model.h"
 #include "FloatConverter.h"
 
+#include "AnimatedModel.h"
+
 VAO::VAO() {}
 VAO::~VAO() {}
 
@@ -57,7 +59,7 @@ uint32_t VAO::getVAOContext() { return _vaoContext; }
 
 uint32_t VAO::getVAOShadowContext() { return _vaoShadowContext; }
 
-void VAO::createVAO(RenderBuffers* renderBuffers, ModelClass classId)
+void VAO::createVAO(RenderBuffers* renderBuffers, ModelClass classId, AnimatedModel* model)
 {
     auto      vertices            = renderBuffers->getVertices();
     auto      normals             = renderBuffers->getNormals();
@@ -163,4 +165,47 @@ void VAO::createVAO(RenderBuffers* renderBuffers, ModelClass classId)
     _ibv.SizeInBytes    = indexBytes;
 
     delete[] compressedAttributes;
+
+    if (classId == ModelClass::AnimatedModelType)
+    {
+        auto                   boneIndexes         = model->getJoints();
+        auto                   boneWeights         = model->getWeights();
+        size_t                 boneIndexesBuffSize = boneIndexes->size();
+        float*                 flattenIndexes      = new float[boneIndexesBuffSize];
+        float*                 flattenWeights      = new float[boneIndexesBuffSize];
+
+        for (int i = 0; i < boneIndexesBuffSize; i++)
+        {
+            flattenIndexes[i]   = (*boneIndexes)[i];
+            flattenWeights[i] = (*boneWeights)[i];
+        }
+
+        UINT byteSize = static_cast<UINT>(boneIndexesBuffSize * sizeof(float));
+
+        copyCommandBuffer->BeginEvent(0, L"Upload joints and weights", sizeof(L"Upload joints and weights"));
+
+        _boneWeightBuffer = new ResourceBuffer(flattenWeights, byteSize, copyCommandBuffer,
+                                               DXLayer::instance()->getDevice());
+
+        _boneIndexBuffer = new ResourceBuffer(flattenIndexes, byteSize, copyCommandBuffer,
+                                              DXLayer::instance()->getDevice());
+
+        copyCommandBuffer->EndEvent();
+
+        _boneWeightSRV = new D3DBuffer();
+        _boneIndexSRV  = new D3DBuffer();
+
+        _boneWeightSRV->count    = boneIndexesBuffSize;
+        _boneWeightSRV->resource = _boneWeightBuffer->getResource();
+
+        _boneIndexSRV->count    = boneIndexesBuffSize;
+        _boneIndexSRV->resource = _boneIndexBuffer->getResource();
+
+        ResourceManager* resourceManager = EngineManager::getResourceManager();
+
+        UINT descriptorIndexBoneWeights =
+            resourceManager->createBufferSRV(_boneWeightSRV, _boneWeightSRV->count, 0, DXGI_FORMAT_R32_FLOAT);
+        UINT descriptorIndexBoneIndexes =
+            resourceManager->createBufferSRV(_boneIndexSRV, _boneIndexSRV->count, 0, DXGI_FORMAT_R32_FLOAT);
+    }
 }

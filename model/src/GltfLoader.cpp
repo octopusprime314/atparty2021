@@ -2,6 +2,7 @@
 #include "EngineManager.h"
 #include "Entity.h"
 #include "Model.h"
+#include "AnimatedModel.h"
 #include "ModelBroker.h"
 #include "RenderBuffers.h"
 #include "Texture.h"
@@ -183,7 +184,10 @@ void buildModel(std::vector<float>& vertices, std::vector<float>& normals,
 
     renderBuffers->addVertexIndices(indices);
 
-    (*model->getVAO())[0]->createVAO(renderBuffers, ModelClass::ModelType);
+    auto animatedModel = dynamic_cast<AnimatedModel*>(model);
+    (*model->getVAO())[0]->createVAO(renderBuffers,
+        animatedModel == nullptr ? ModelClass::ModelType : ModelClass::AnimatedModelType,
+                                     animatedModel);
 }
 
 float ConvertToDegrees(float radian) 
@@ -315,84 +319,7 @@ std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFRes
             resourceReader->ReadBinaryData<float>(*document, outputAccessorForAnimation[TARGET_SCALE]);
     }
 
-    
-    std::map<int, int>              inverseBindMatricesIndices;
-    std::map<int, std::vector<int>> jointIds;
-
-    std::vector<Matrix> inverseBindMatrices;
-
-    int skinIndex = 0;
-    for (const auto& skin : document->skins.Elements())
-    {
-        std::string skinName                  = skin.name;
-        int         inverseBindMatricesIndex  = std::stoi(skin.inverseBindMatricesAccessorId, &sz);
-        inverseBindMatricesIndices[skinIndex] = inverseBindMatricesIndex;
-
-        for (int i = 0; i < skin.jointIds.size(); i++)
-        {
-            int jointId = std::stoi(skin.jointIds[i], &sz);
-            jointIds[skinIndex].push_back(jointId);
-        }
-
-        auto inverseBindMatricesArray = document->accessors.Get(skin.inverseBindMatricesAccessorId);
-        auto matrices = resourceReader->ReadBinaryData<float>(*document, inverseBindMatricesArray);
-
-        int i = 0;
-        for (auto jointId : jointIds)
-        {
-            for (int i = 0; i < jointId.second.size(); i++)
-            {
-                Matrix constructedMatrix;
-                for (int j = 0; j < 16; j++)
-                {
-                    constructedMatrix.getFlatBuffer()[j] = matrices[(i * 16) + j];
-                }
-                inverseBindMatrices.push_back(constructedMatrix);
-            }
-        }
-        skinIndex++;
-    }
-
-    // Skinning
-    std::vector<int>   joints;
-    std::vector<float> weights;
-    bool loadedJoints  = false;
-    bool loadedWeights = false;
-    std::string        accessorId;
-
-
-    if( node.meshId.empty() == false)
-    {
-
-        int  meshIndex = std::stoi(node.meshId, &sz);
-        auto mesh = document->meshes[meshIndex];
-
-        for (int meshPrimIndex = 0; meshPrimIndex < mesh.primitives.size(); meshPrimIndex++)
-        {
-            const auto& meshPrimitive = mesh.primitives[meshPrimIndex];
-
-            if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_JOINTS_0, accessorId))
-            {
-                const Accessor& accessor = document->accessors.Get(accessorId);
-
-                auto tempJoints = resourceReader->ReadBinaryData<uint8_t>(*document, accessor);
-                joints.insert(joints.end(), tempJoints.begin(), tempJoints.end());
-                const auto dataByteLength = joints.size() * sizeof(float);
-
-                loadedJoints = true;
-            }
-            if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_WEIGHTS_0, accessorId))
-            {
-                const Accessor& accessor = document->accessors.Get(accessorId);
-
-                auto tempWeights = resourceReader->ReadBinaryData<float>(*document, accessor);
-                weights.insert(weights.end(), tempWeights.begin(), tempWeights.end());
-                const auto dataByteLength = weights.size() * sizeof(float);
-
-                loadedWeights = true;
-            }
-        }
-    }
+  
 
     int rotationIndex    = 0;
     int scaleIndex       = 0;
@@ -416,8 +343,6 @@ std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFRes
     float currentTime = timeOffset;
 
     currWayPoints.resize(iterations);
-
-    std::map<int, std::vector<Matrix>> jointMatricesPerAnimationFrame;
 
     // Don't process step interpolation by making sure iterations are greater than 1
     while (timeIndex < iterations)
@@ -484,15 +409,6 @@ std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFRes
                            Matrix::scale(scale.getx(), scale.gety(), scale.getz());
 
         currentTransform = currWayPoints[waypoints.size()].transform * currentTransform;
-
-
-        if (loadedJoints && loadedWeights)
-        {
-            for (int i = 0; i < inverseBindMatrices.size(); i++)
-            {
-                jointMatricesPerAnimationFrame[timeIndex].push_back(currentTransform * inverseBindMatrices[i]);
-            }
-        }
 
         PathWaypoint addedWaypoint(translation,
                                    rotation,
@@ -612,22 +528,45 @@ void BuildGltfMeshes(const Document*           document,
 
     if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
     {
-        Model* saveMaster = model;
+        
+        // Find skin nodes
+
+        Model* saveMaster             = model;
         int    modelWorkerThreadIndex = 0;
-        for (int meshIndex = 0; meshIndex < document->meshes.Elements().size(); meshIndex++)
+
+        for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
         {
-            const auto& mesh              = document->meshes.Elements()[meshIndex];
-            std::string meshName          = mesh.name;
+            Node node = document->nodes.Elements()[nodeIndex];
+            if (node.meshId.empty() == false)
+            {
+                std::string::size_type sz; // alias of size_t
+                int                    meshIndex = std::stoi(node.meshId, &sz);
+                const auto& mesh     = document->meshes.Elements()[meshIndex];
+                std::string meshName = mesh.name;
 
-            std::string strippedLod = pathFile.substr(0, pathFile.find("_"));
-            std::string strippedExtension = pathFile.substr(0, pathFile.find_last_of("."));
-            std::string name = COLLECTIONS_MESH_LOCATION + strippedLod + "/" + strippedExtension +
-                               std::to_string(meshIndex) + meshName + "collection";
-            model = new Model(name);
-            ModelBroker::instance()->addCollectionEntry(model);
+                std::string strippedLod       = pathFile.substr(0, pathFile.find("_"));
+                std::string strippedExtension = pathFile.substr(0, pathFile.find_last_of("."));
+                std::string name              = COLLECTIONS_MESH_LOCATION + strippedLod + "/" +
+                                   strippedExtension + std::to_string(meshIndex) + meshName +
+                                   "collection";
+                std::string shortName =
+                    strippedExtension + std::to_string(meshIndex) + meshName + "collection";
 
-            modelsPending.push_back(model);
+                if (ModelBroker::instance()->getModel(shortName) == nullptr)
+                {
+                    if (node.skinId.empty() == false)
+                    {
+                        model = new AnimatedModel(name);
+                    }
+                    else
+                    {
+                        model = new Model(name);
+                    }
+                    ModelBroker::instance()->addCollectionEntry(model);
 
+                    modelsPending.push_back(model);
+                }
+            }
         }
         saveMaster->setLoadModelCount(modelsPending.size());
     }
@@ -711,6 +650,170 @@ void BuildGltfMeshes(const Document*           document,
                          currentTransform, nodeToSamplerIndex, nodeWayPoints, wayPointPathsCurrent, recursionIndex);
         }
     }
+
+    std::set<int> skinnedNodesIndices;
+    std::vector<Node> skinnedNodes;
+    // Use the resource reader to get each mesh primitive's position data
+    for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
+    {
+        Node node = document->nodes.Elements()[nodeIndex];
+
+        if (node.skinId.empty() == false)
+        {
+            skinnedNodes.push_back(node);
+            skinnedNodesIndices.insert(nodeIndex);
+        }
+    }
+
+    std::map<int, int>              inverseBindMatricesIndices;
+    std::map<int, std::vector<int>> jointIds;
+
+    std::map<int, Matrix> inverseBindMatrices;
+
+    int skinIndex = 0;
+    for (const auto& skin : document->skins.Elements())
+    {
+        std::string skinName                  = skin.name;
+        int         inverseBindMatricesIndex  = std::stoi(skin.inverseBindMatricesAccessorId, &sz);
+        inverseBindMatricesIndices[skinIndex] = inverseBindMatricesIndex;
+
+        for (int i = 0; i < skin.jointIds.size(); i++)
+        {
+            int jointId = std::stoi(skin.jointIds[i], &sz);
+            jointIds[skinIndex].push_back(jointId);
+        }
+
+        auto inverseBindMatricesArray = document->accessors.Get(skin.inverseBindMatricesAccessorId);
+        auto matrices = resourceReader->ReadBinaryData<float>(*document, inverseBindMatricesArray);
+
+        int i = 0;
+        for (auto jointId : jointIds)
+        {
+            for (int i = 0; i < jointId.second.size(); i++)
+            {
+                Matrix constructedMatrix;
+                constructedMatrix.getFlatBuffer()[0]  = matrices[(i * 16)  + 0];
+                constructedMatrix.getFlatBuffer()[1]  = matrices[(i * 16)  + 1];
+                constructedMatrix.getFlatBuffer()[2]  = matrices[(i * 16)  + 2];
+                constructedMatrix.getFlatBuffer()[3]  = matrices[(i * 16)  + 3];
+                constructedMatrix.getFlatBuffer()[4]  = matrices[(i * 16)  + 4];
+                constructedMatrix.getFlatBuffer()[5]  = matrices[(i * 16)  + 5];
+                constructedMatrix.getFlatBuffer()[6]  = matrices[(i * 16)  + 6];
+                constructedMatrix.getFlatBuffer()[7]  = matrices[(i * 16)  + 7];
+                constructedMatrix.getFlatBuffer()[8]  = matrices[(i * 16)  + 8];
+                constructedMatrix.getFlatBuffer()[9]  = matrices[(i * 16)  + 9];
+                constructedMatrix.getFlatBuffer()[10] = matrices[(i * 16) + 10];
+                constructedMatrix.getFlatBuffer()[11] = matrices[(i * 16) + 11];
+                constructedMatrix.getFlatBuffer()[12] = matrices[(i * 16) + 12];
+                constructedMatrix.getFlatBuffer()[13] = matrices[(i * 16) + 13];
+                constructedMatrix.getFlatBuffer()[14] = matrices[(i * 16) + 14];
+                constructedMatrix.getFlatBuffer()[15] = matrices[(i * 16) + 15];
+
+                inverseBindMatrices[jointId.second[i]] = constructedMatrix;
+
+            }
+        }
+        skinIndex++;
+    }
+
+    std::map<int, std::vector<Matrix>> jointMatricesPerAnimationFrame;
+
+    int skinNodeIndex = 0;
+    for (auto node : skinnedNodes)
+    {
+        // Skinning
+        std::vector<float> joints;
+        std::vector<float> weights;
+        bool               loadedJoints  = false;
+        bool               loadedWeights = false;
+        std::string        accessorId;
+
+        if (node.meshId.empty() == false)
+        {
+
+            int  meshIndex = std::stoi(node.meshId, &sz);
+            auto mesh      = document->meshes[meshIndex];
+
+            for (int meshPrimIndex = 0; meshPrimIndex < mesh.primitives.size(); meshPrimIndex++)
+            {
+                const auto& meshPrimitive = mesh.primitives[meshPrimIndex];
+
+                if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_JOINTS_0, accessorId))
+                {
+                    const Accessor& accessor = document->accessors.Get(accessorId);
+
+                    auto tempJoints = resourceReader->ReadBinaryData<uint8_t>(*document, accessor);
+                    joints.insert(joints.end(), tempJoints.begin(), tempJoints.end());
+                    const auto dataByteLength = joints.size() * sizeof(float);
+
+                    loadedJoints = true;
+                }
+                if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_WEIGHTS_0, accessorId))
+                {
+                    const Accessor& accessor = document->accessors.Get(accessorId);
+
+                    auto tempWeights = resourceReader->ReadBinaryData<float>(*document, accessor);
+                    weights.insert(weights.end(), tempWeights.begin(), tempWeights.end());
+                    const auto dataByteLength = weights.size() * sizeof(float);
+
+                    loadedWeights = true;
+                }
+            }
+
+            auto animatedModel = dynamic_cast<AnimatedModel*>(modelsPending[meshIndex]);
+            
+            int totalTransforms = 0;
+            int maxFrames       = 0;
+            int nodeWayPointsCount = nodeWayPoints.size();
+            for (auto nodeWayPoint : nodeWayPoints)
+            {
+                totalTransforms += nodeWayPoint.second.size();
+                if (nodeWayPoint.second.size() > maxFrames)
+                {
+                    maxFrames = nodeWayPoint.second.size();
+                }
+            }
+
+            std::vector<Matrix> finalTransforms;
+            animatedModel->setWeights(weights);
+            animatedModel->setJoints(joints);
+
+            // Use the resource reader to get each mesh primitive's position data
+            for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
+            {
+                Node node = document->nodes.Elements()[nodeIndex];
+
+                if (skinnedNodesIndices.find(nodeIndex) != skinnedNodesIndices.end())
+                {
+                    for (int i = 0; i < maxFrames; i++)
+                    {
+                        int j = 0;
+                        //for (auto jointId : jointIds)
+                        auto jointId = jointIds[0];
+                        for (auto nodeWayPoint : nodeWayPoints)
+                        {
+                            if (j < jointId.size())
+                            {
+                                auto   worldToRoot = meshNodeTransforms[jointId[j]].inverse();
+                                Matrix jointMatrix;
+
+                                jointMatrix = /*inverseBindMatrices[jointId[j]].transpose() **/
+                                    nodeWayPoints[jointId[j]][i].transform * worldToRoot;
+
+                                finalTransforms.push_back(jointMatrix);
+                            }
+                            j++;
+                        }
+                    }
+                }
+            }
+            animatedModel->setKeyFrames(maxFrames);
+            animatedModel->setJointMatrices(finalTransforms);
+        }
+        skinNodeIndex++;
+    }
+
+   
 
     int modelIndex = 0;
     while (modelIndex < document->meshes.Elements().size())
@@ -940,6 +1043,19 @@ void BuildGltfMeshes(const Document*           document,
             texturesPerMaterial.push_back(textureIndexing.size() - texturesPrevSize);
         }
 
+        if (materialIndices.size() == 0)
+        {
+            uniformMaterials.back().validBits = 0xFF;
+            uniformMaterials.back().baseColor[0]     = 1.0;
+            uniformMaterials.back().baseColor[1]     = 1.0;
+            uniformMaterials.back().baseColor[2]     = 1.0;
+            uniformMaterials.back().metallic         = 0.0;
+            uniformMaterials.back().roughness        = 0.0;
+            uniformMaterials.back().emissiveColor[0] = 0.0;
+            uniformMaterials.back().emissiveColor[1] = 0.0;
+            uniformMaterials.back().emissiveColor[2] = 0.0;
+        }
+
         if (loadType == ModelLoadType::Collection || loadType == ModelLoadType::Scene)
         {
             const auto& mesh              = document->meshes.Elements()[modelIndex];
@@ -1058,6 +1174,7 @@ void BuildGltfMeshes(const Document*           document,
 
     std::map<int, int> meshIdsAssigned;
     std::vector<PathWaypoint> currNodeWayPoints;
+
     if (loadType == ModelLoadType::Scene)
     {
         ViewEventDistributor::CameraSettings camSettings;
@@ -1078,7 +1195,6 @@ void BuildGltfMeshes(const Document*           document,
                                    node.rotation.w);
 
                 Vector4 baseQuaternion(-0.7071067690849304, 0.0, 0.0, 0.7071067690849304);
-                //Vector4 baseQuaternion(-0.0, 0.0, 0.0, 0.0);
 
                 camSettings.bobble           = false;
                 camSettings.lockedEntity     = -1;
@@ -1121,11 +1237,6 @@ void BuildGltfMeshes(const Document*           document,
                 {
                     sceneEntity.waypointVectors = nodeWayPoints[nodeIndex];
                 }
-
-                //std::vector<PathWaypoint> wayPointPathsCurrent;
-                //wayPointPathsCurrent = AnimatingNodes(document, resourceReader, waypoints, nodeIndex, 0,
-                //                        nodeWayPoints, wayPointPathsCurrent, nodeToSamplerIndex, meshNodeTransforms[nodeIndex]);
-
                 EngineManager::instance()->addEntity(sceneEntity);
             }
             else if (node.children.size() > 0)

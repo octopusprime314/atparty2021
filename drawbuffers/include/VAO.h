@@ -54,6 +54,8 @@ using namespace Microsoft::WRL;
 enum class GeometryConstruction;
 enum class ModelClass;
 
+class AnimatedModel;
+
 using TextureMetaData = std::vector<std::pair<std::string, int>>;
 using VIBStrides      = std::vector<std::pair<int, int>>;
 class VAO
@@ -88,7 +90,7 @@ class VAO
 
     void addTextureStride(std::pair<std::string, int> textureStride, int vertexStride, int indexStride);
 
-    void createVAO(RenderBuffers* renderBuffers, ModelClass classId);
+    void createVAO(RenderBuffers* renderBuffers, ModelClass classId, AnimatedModel* model);
     void createVAO(RenderBuffers* renderBuffers, int begin, int range);
 
     void                     setNormalDebugContext(uint32_t context);

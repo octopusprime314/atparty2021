@@ -28,10 +28,10 @@ AnimatedModel::AnimatedModel(std::string name)
     //_shaderProgram =
     //    static_cast<AnimationShader*>(ShaderBroker::instance()->getShader("animatedShader"));
 
-    _currBones = _animations[_currentAnimation]->getBones();
+    //_currBones = _animations[_currentAnimation]->getBones();
 
-    _vao[0]->createVAO(&_renderBuffers, ModelClass::AnimatedModelType/*,
-                       _animations[_currentAnimation]*/);
+    //_vao[0]->createVAO(&_renderBuffers, ModelClass::AnimatedModelType/*,
+    //                   _animations[_currentAnimation]*/);
 }
 
 AnimatedModel::~AnimatedModel() {}
@@ -61,7 +61,7 @@ void AnimatedModel ::updateAnimation()
     //{
 
         // Set bone animation frame
-        _currBones = _animations[_currentAnimation]->getBones();
+        //_currBones = &_jointMatrices;//_animations[_currentAnimation]->getBones();
         // Set animation to the next frame
         _animations[_currentAnimation]->nextFrame();
 
@@ -70,6 +70,37 @@ void AnimatedModel ::updateAnimation()
         _updateLock.unlock();
     //}
 }
+
+void AnimatedModel::setJointMatrices(std::vector<Matrix> jointMatrices) { _jointMatrices = jointMatrices; }
+void AnimatedModel::setJoints(std::vector<float> joints) { _joints = joints; }
+void AnimatedModel::setWeights(std::vector<float> weights) { _weights = weights; }
+void AnimatedModel::setKeyFrames(int frames) { _frames = frames; }
+
+std::vector<Matrix> AnimatedModel::getJointMatrices()
+{
+   static int frameOffset = 0;
+   static int counter = 0;
+   auto jointCount = _jointMatrices.size() / _frames;
+   std::vector<Matrix> matricesForFrame;
+   for (int i = 0; i < jointCount; i++)
+   {
+       matricesForFrame.push_back(_jointMatrices[i + (frameOffset * jointCount)]);
+   }
+   if (counter % 25 == 0)
+   {
+       frameOffset++;
+   }
+   counter++;
+   if (frameOffset >= _frames)
+   {
+       frameOffset = 0;
+   }
+   return matricesForFrame;
+   //return &_jointMatrices;
+}
+std::vector<float>*    AnimatedModel::getJoints() { return &_joints; }
+std::vector<float>* AnimatedModel::getWeights() { return &_weights; }
+
 
 void AnimatedModel::addAnimation(Animation* animation) { _animations.push_back(animation); }
 

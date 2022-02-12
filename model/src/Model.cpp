@@ -62,7 +62,7 @@ void Model::runShader(Entity* entity)
 
 void Model::addVAO(ModelClass classType)
 {
-    _vao[_vao.size() - 1]->createVAO(&_renderBuffers, classType);
+    _vao[_vao.size() - 1]->createVAO(&_renderBuffers, classType, nullptr);
     _vao.back()->setPrimitiveOffsetId(0);
 }
 

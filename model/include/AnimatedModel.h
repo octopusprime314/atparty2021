@@ -38,6 +38,10 @@ class AnimatedModel : public Model
     std::vector<Animation*> _animations;
     std::mutex              _updateLock;
     std::vector<Matrix>*    _currBones;
+    std::vector<Matrix>       _jointMatrices;
+    std::vector<float>       _joints;
+    std::vector<float>        _weights;
+    int                       _frames;
 
   public:
     AnimatedModel(std::string name);
@@ -51,4 +55,11 @@ class AnimatedModel : public Model
     // Return current animation
     Animation*           getAnimation();
     std::vector<Matrix>* getBones();
+    void                    setJointMatrices(std::vector<Matrix> jointMatrices);
+    void                 setJoints(std::vector<float> joints);
+    void                 setWeights(std::vector<float> weights);
+    void                 setKeyFrames(int frames);
+    std::vector<Matrix>  getJointMatrices();
+    std::vector<float>*     getJoints();
+    std::vector<float>*  getWeights();
 };
