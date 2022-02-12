@@ -37,5 +37,5 @@ void main(int3 threadId : SV_DispatchThreadID,
     // gamma correction
     mapped = pow(mapped, float3(1.0, 1.0, 1.0) / float3(gamma, gamma, gamma));
 
-    pathTracerUAV[threadId.xy] = float4(mapped, 1.0);
+    pathTracerUAV[threadId.xy] += float4(mapped, 1.0);
 }

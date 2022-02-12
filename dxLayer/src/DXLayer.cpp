@@ -446,6 +446,10 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
     ImGui::Checkbox("Enable IBL", &enableIBL);
     resourceManager->setEnableIBL(enableIBL);
 
+    bool enableBloom = resourceManager->getEnableBloom();
+    ImGui::Checkbox("Enable Bloom", &enableBloom);
+    resourceManager->setEnableBloom(enableBloom);
+
     ImGui::End();
 
     ImGui::Render();

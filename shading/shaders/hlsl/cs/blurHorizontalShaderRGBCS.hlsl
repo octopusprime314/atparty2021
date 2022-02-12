@@ -6,7 +6,7 @@ RWTexture2D<float4> writeTexture : register(u0);
                                 : SV_DispatchThreadID) {
     static float weight[5] = {0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216};
     // current fragment's contribution
-    float3 result = readTexture.Load(int3(threadId.x, threadId.y, 10)).rgb * weight[0];
+    float3 result = readTexture.Load(int3(threadId.x, threadId.y, 0)).rgb * weight[0];
 
     for (int i = 1; i < 5; ++i)
     {

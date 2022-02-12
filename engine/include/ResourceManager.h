@@ -132,6 +132,7 @@ class ResourceManager
     int                                                               _reflectionOrRefraction = 2; // Indicates stochastic
     bool                                                              _enableEmissives =  true;
     bool                                                              _enableIBL       = true;
+    bool                                                              _enableBloom     = true;
     HLSLShader* _deformVerticesShader                                                  = nullptr;
 
 
@@ -223,6 +224,9 @@ class ResourceManager
 
     void setEnableIBL(bool enableIBL) { _enableIBL = enableIBL; }
     bool getEnableIBL() { return _enableIBL; }
+
+    void setEnableBloom(bool enableBloom) { _enableBloom = enableBloom; }
+    bool getEnableBloom() { return _enableBloom; }
 
     void updateBLAS();
 

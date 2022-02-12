@@ -352,6 +352,11 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
          _indirectLightRays->getUAVCPUHandle(),
          _indirectLightRays->getResource()->getResource().Get(), zeroValues, 0, nullptr);
 
+    cmdList->ClearUnorderedAccessViewFloat(
+         _compositor->getUAVGPUHandle(),
+         _compositor->getUAVCPUHandle(),
+         _compositor->getResource()->getResource().Get(), zeroValues, 0, nullptr);
+
     // Get skybox texture
     TextureBroker* textureManager = TextureBroker::instance();
 
@@ -841,6 +846,47 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         //NRD.Destroy();
     }
 
+    if (resourceManager->getEnableBloom())
+    {
+        DXLayer::instance()->setTimeStamp();
+
+        EngineManager* engMan = EngineManager::instance();
+        Bloom*         bloom  = engMan->getBloomShader();
+        SSCompute*     add    = engMan->getAddShader();
+
+        add->uavBarrier();
+
+        cmdList->BeginEvent(0, L"Bloom Pass", sizeof(L"Bloom Pass"));
+
+        // Compute bloom from finalized render target
+        bloom->compute(_indirectSpecularLightRaysHistoryBuffer);
+
+        ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+        barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[0].Transition.pResource =
+            bloom->getTexture()->getResource()->getResource().Get();
+        barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        cmdList->ResourceBarrier(1, barrierDesc);
+
+        // Adds bloom data back into the composite render target
+        add->compute(bloom->getTexture(), _compositor);
+
+        ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+        barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[0].Transition.pResource =
+            bloom->getTexture()->getResource()->getResource().Get();
+        barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        cmdList->ResourceBarrier(1, barrierDesc);
+
+        add->uavBarrier();
+
+        cmdList->EndEvent();
+    }
+
     cmdList->BeginEvent(0, L"Compositor", sizeof(L"Compositor"));
 
     // Composite all ray passes into a final render
@@ -943,47 +989,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
     cmdList->ResourceBarrier(4, barrierDesc);
-
-    //EngineManager* engMan = EngineManager::instance();
-    //Bloom*         bloom  = engMan->getBloomShader();
-    //SSCompute*     add    = engMan->getAddShader();
-
-    //add->uavBarrier();
-
-    //cmdList->BeginEvent(0, L"Bloom Pass", sizeof(L"Bloom Pass"));
-
-    //// Compute bloom from finalized render target
-    //bloom->compute(_compositor);
-
-    //// THE FINAL ADD TO THE COMPOSITION RENDER TARGET CAUSES CORRUPTION
-    //// IN THE FORM OF OVERLAYING A RANDOM COLLECTION TEXTURE IN THE TOP
-    //// LEFT CORNER OF THE SCREEN...LOOKS LIKE DOWNSAMPLING OR SOME PASS
-    //// OF THE BLOOM SHADERS ARE BEING WRITTEN TO THE FINAL COMPOSITION???
-
-    //ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-    //barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    //barrierDesc[0].Transition.pResource =
-    //    bloom->getTexture()->getResource()->getResource().Get();
-    //barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    //barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-    //barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    //cmdList->ResourceBarrier(1, barrierDesc);
-
-    //// Adds bloom data back into the composite render target
-    //add->compute(bloom->getTexture(), _compositor);
-
-    //ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-    //barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    //barrierDesc[0].Transition.pResource =
-    //    bloom->getTexture()->getResource()->getResource().Get();
-    //barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    //barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    //barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    //cmdList->ResourceBarrier(1, barrierDesc);
-
-    //add->uavBarrier();
-
-    //cmdList->EndEvent();
 
     DXLayer::instance()->setTimeStamp();
 
