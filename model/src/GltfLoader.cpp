@@ -658,8 +658,8 @@ void BuildGltfMeshes(const Document*           document,
         }
     }
 
-    std::set<int> skinnedNodesIndices;
-    std::vector<Node> skinnedNodes;
+    std::map<int, int> skinnedNodesIndices;
+    std::vector<Node>  skinnedNodes;
     // Use the resource reader to get each mesh primitive's position data
     for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
     {
@@ -668,20 +668,21 @@ void BuildGltfMeshes(const Document*           document,
         if (node.skinId.empty() == false)
         {
             skinnedNodes.push_back(node);
-            skinnedNodesIndices.insert(nodeIndex);
+            int skinNodeIndex              = std::stoi(node.skinId, &sz);
+            skinnedNodesIndices[nodeIndex] = skinNodeIndex;
         }
     }
 
-    std::map<int, int>              inverseBindMatricesIndices;
-    std::map<int, std::vector<int>> jointIds;
+    std::map<int, std::vector<int>>    jointIds;
+    std::map<int, std::vector<Matrix>> inverseBindMatrices;
 
-    std::map<int, Matrix> inverseBindMatrices;
+    int skinIndex = document->skins.Elements().size() - 1;
 
-    int skinIndex = 0;
-    for (const auto& skin : document->skins.Elements())
+    while (skinIndex >= 0)
     {
-        int         inverseBindMatricesIndex  = std::stoi(skin.inverseBindMatricesAccessorId, &sz);
-        inverseBindMatricesIndices[skinIndex] = inverseBindMatricesIndex;
+        auto skin = document->skins.Elements()[skinIndex];
+
+        int inverseBindMatricesIndex = std::stoi(skin.inverseBindMatricesAccessorId, &sz);
 
         for (int i = 0; i < skin.jointIds.size(); i++)
         {
@@ -692,47 +693,32 @@ void BuildGltfMeshes(const Document*           document,
         auto inverseBindMatricesArray = document->accessors.Get(skin.inverseBindMatricesAccessorId);
         auto matrices = resourceReader->ReadBinaryData<float>(*document, inverseBindMatricesArray);
 
-        int i = 0;
-        for (auto jointId : jointIds)
+        auto jointId = jointIds[skinIndex];
+        for (int i = 0; i < jointId.size(); i++)
         {
-            for (int i = 0; i < jointId.second.size(); i++)
-            {
-                Matrix constructedMatrix;
-                constructedMatrix.getFlatBuffer()[0]  = matrices[(i * 16)  + 0];
-                constructedMatrix.getFlatBuffer()[1]  = matrices[(i * 16)  + 1];
-                constructedMatrix.getFlatBuffer()[2]  = matrices[(i * 16)  + 2];
-                constructedMatrix.getFlatBuffer()[3]  = matrices[(i * 16)  + 3];
-                constructedMatrix.getFlatBuffer()[4]  = matrices[(i * 16)  + 4];
-                constructedMatrix.getFlatBuffer()[5]  = matrices[(i * 16)  + 5];
-                constructedMatrix.getFlatBuffer()[6]  = matrices[(i * 16)  + 6];
-                constructedMatrix.getFlatBuffer()[7]  = matrices[(i * 16)  + 7];
-                constructedMatrix.getFlatBuffer()[8]  = matrices[(i * 16)  + 8];
-                constructedMatrix.getFlatBuffer()[9]  = matrices[(i * 16)  + 9];
-                constructedMatrix.getFlatBuffer()[10] = matrices[(i * 16) + 10];
-                constructedMatrix.getFlatBuffer()[11] = matrices[(i * 16) + 11];
-                constructedMatrix.getFlatBuffer()[12] = matrices[(i * 16) + 12];
-                constructedMatrix.getFlatBuffer()[13] = matrices[(i * 16) + 13];
-                constructedMatrix.getFlatBuffer()[14] = matrices[(i * 16) + 14];
-                constructedMatrix.getFlatBuffer()[15] = matrices[(i * 16) + 15];
+            Matrix constructedMatrix;
+            constructedMatrix.getFlatBuffer()[0]  = matrices[(i * 16) + 0];
+            constructedMatrix.getFlatBuffer()[1]  = matrices[(i * 16) + 1];
+            constructedMatrix.getFlatBuffer()[2]  = matrices[(i * 16) + 2];
+            constructedMatrix.getFlatBuffer()[3]  = matrices[(i * 16) + 3];
+            constructedMatrix.getFlatBuffer()[4]  = matrices[(i * 16) + 4];
+            constructedMatrix.getFlatBuffer()[5]  = matrices[(i * 16) + 5];
+            constructedMatrix.getFlatBuffer()[6]  = matrices[(i * 16) + 6];
+            constructedMatrix.getFlatBuffer()[7]  = matrices[(i * 16) + 7];
+            constructedMatrix.getFlatBuffer()[8]  = matrices[(i * 16) + 8];
+            constructedMatrix.getFlatBuffer()[9]  = matrices[(i * 16) + 9];
+            constructedMatrix.getFlatBuffer()[10] = matrices[(i * 16) + 10];
+            constructedMatrix.getFlatBuffer()[11] = matrices[(i * 16) + 11];
+            constructedMatrix.getFlatBuffer()[12] = matrices[(i * 16) + 12];
+            constructedMatrix.getFlatBuffer()[13] = matrices[(i * 16) + 13];
+            constructedMatrix.getFlatBuffer()[14] = matrices[(i * 16) + 14];
+            constructedMatrix.getFlatBuffer()[15] = matrices[(i * 16) + 15];
 
-                constructedMatrix = (Matrix::scale(1.0, 1.0, -1.0) * constructedMatrix.inverse()).inverse();
-                //constructedMatrix.getFlatBuffer()[12] = 0.0;//matrices[(i * 16) + 12];
-                //constructedMatrix.getFlatBuffer()[13] = 0.0;//matrices[(i * 16) + 13];
-                //constructedMatrix.getFlatBuffer()[14] = 0.0;//matrices[(i * 16) + 14];
-                //constructedMatrix.getFlatBuffer()[15] = 1.0;//matrices[(i * 16) + 15];
-
-                inverseBindMatrices[jointId.second[i]] = constructedMatrix;
-
-            }
+            inverseBindMatrices[skinIndex].push_back(constructedMatrix.transpose());
         }
-        skinIndex++;
-    }
 
-    std::map<int, std::vector<Matrix>> jointMatricesPerAnimationFrame;
-
-    int skinNodeIndex = 0;
-    for (auto node : skinnedNodes)
-    {
+        int skinNodeIndex = 0;
+        auto node = skinnedNodes[skinIndex];
         // Skinning
         std::vector<float> joints;
         std::vector<float> weights;
@@ -773,10 +759,10 @@ void BuildGltfMeshes(const Document*           document,
             }
 
             auto animatedModel = dynamic_cast<AnimatedModel*>(modelsPending[meshIndex]);
-            int  skinNodeIndex      = std::stoi(node.skinId, &sz);
+            int  skinNodeIndex = std::stoi(node.skinId, &sz);
 
-            int totalTransforms = 0;
-            int maxFrames       = 0;
+            int totalTransforms    = 0;
+            int maxFrames          = 0;
             int nodeWayPointsCount = nodeWayPoints.size();
             for (auto nodeWayPoint : nodeWayPoints)
             {
@@ -802,27 +788,23 @@ void BuildGltfMeshes(const Document*           document,
             {
                 Node node = document->nodes.Elements()[nodeIndex];
 
-                if (skinnedNodesIndices.find(nodeIndex) != skinnedNodesIndices.end())
+                if (skinnedNodesIndices.find(nodeIndex) != skinnedNodesIndices.end() &&
+                    skinNodeIndex == skinnedNodesIndices[nodeIndex])
                 {
                     for (int i = 0; i < maxFrames; i++)
                     {
-                        int j = 0;
                         auto jointId = jointIds[skinNodeIndex];
-
-                        for (auto nodeWayPoint : nodeWayPoints)
+                        for (int j = 0; j < jointId.size(); j++)
                         {
-                            if (j < jointId.size())
-                            {
-                                auto   worldToRoot = meshNodeTransforms[jointId[j]].inverse();
-                                Matrix jointMatrix;
+                            auto   worldToRoot = meshNodeTransforms[jointId[j]].inverse();
+                            Matrix jointMatrix;
 
-                                jointMatrix = /*inverseBindMatrices[jointId[j]] **/
-                                              nodeWayPoints[jointId[j]][i].transform *
-                                              worldToRoot;
+                            jointMatrix =
+                                /*worldToRoot **/
+                                nodeWayPoints[jointId[j]][i].transform *
+                                inverseBindMatrices[skinNodeIndex][j];
 
-                                finalTransforms.push_back(jointMatrix);
-                            }
-                            j++;
+                            finalTransforms.push_back(jointMatrix);
                         }
                     }
                 }
@@ -830,9 +812,8 @@ void BuildGltfMeshes(const Document*           document,
             animatedModel->setKeyFrames(maxFrames);
             animatedModel->setJointMatrices(finalTransforms);
         }
+        skinIndex--;
     }
-
-   
 
     int modelIndex = 0;
     while (modelIndex < document->meshes.Elements().size())
