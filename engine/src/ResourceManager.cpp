@@ -376,7 +376,7 @@ void ResourceManager::updateBLAS()
 
             // Bone uniforms
             auto   bones           = animatedModel->getJointMatrices();
-            float* bonesArray      = new float[16 * 150]; // 4x4 times number of bones
+            float* bonesArray      = new float[16 * bones.size()]; // 4x4 times number of bones
             int    bonesArrayIndex = 0;
             for (auto bone : bones)
             {
@@ -387,19 +387,18 @@ void ResourceManager::updateBLAS()
                 }
             }
 
-            _deformVerticesShader->updateData("bones[0]", bonesArray, true);
+            std::vector<VAO*>* vao          = animatedModel->getVAO();
+            D3DBuffer* boneMatrices = ((*vao)[0])->getBonesSRV();
+
+            auto bonesBuffer = ((*vao)[0])->getBonesResource();
+            bonesBuffer->uploadNewData(bonesArray, 16 * bones.size() * sizeof(float) * 4, cmdList);
 
             delete[] bonesArray;
 
             auto resourceBindings  = _deformVerticesShader->_resourceIndexes;
-           
+
             updateStructuredAttributeBufferUnbounded(
                 _deformVerticesShader->_resourceIndexes["vertexBuffer"], nullptr, true);
-
-            //updateStructuredIndexBufferUnbounded(
-            //    _deformVerticesShader->_resourceIndexes["indexBuffer"], nullptr, true);
-
-            std::vector<VAO*>* vao = animatedModel->getVAO();
 
             D3DBuffer* boneWeights = ((*vao)[0])->getBoneWeightSRV();
             D3DBuffer* boneIndexes = ((*vao)[0])->getBoneIndexSRV();
@@ -407,26 +406,26 @@ void ResourceManager::updateBLAS()
             ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
             cmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
+            cmdList->SetComputeRootDescriptorTable(resourceBindings["bones"],
+                                                   boneMatrices->gpuDescriptorHandle);
             cmdList->SetComputeRootDescriptorTable(resourceBindings["joints"],
                                                    boneIndexes->gpuDescriptorHandle);
             cmdList->SetComputeRootDescriptorTable(resourceBindings["weights"],
                                                    boneWeights->gpuDescriptorHandle);
 
-            static RenderTexture* _deformedVertices[2];
-            static ComPtr<ID3D12Resource> _blUpdateScratchResource;
-            if (_deformedVertices[0] == nullptr)
+            if (animatedModel->_deformedVertices == nullptr)
             {
-                _deformedVertices[0] =
+                animatedModel->_deformedVertices =
                     new RenderTexture(_vertexBufferMap[entity->getModel()].first[0]->count, 0,
                                       TextureFormat::RGB_FLOAT, "DeformedVerts");
             }
 
-            _deformVerticesShader->updateData("deformedVertices", 0, _deformedVertices[0], true,
+            _deformVerticesShader->updateData("deformedVertices", 0, animatedModel->_deformedVertices, true,
                                                   true);
 
             auto cameraView = EngineManager::instance()->getViewManager()->getView();
 
-            int modelIndex = 0;
+            int modelIndex = _vertexBufferMap[entity->getModel()].second;
             _deformVerticesShader->updateData("modelIndex", &modelIndex, true);
 
             _deformVerticesShader->dispatch(
@@ -457,7 +456,6 @@ void ResourceManager::updateBLAS()
                        : DXGI_FORMAT_R16_UINT;
 
             geomDesc.Triangles.IndexCount   = static_cast<UINT>(indexDesc.Width) / (indexFormat == DXGI_FORMAT_R32_UINT ? sizeof(uint32_t) : sizeof(uint16_t));
-            //geomDesc.Triangles.IndexCount   = _indexBufferMap[entity->getModel()].first[0]->count / sizeof(uint32_t);
 
 
             geomDesc.Triangles.IndexFormat  = indexFormat;
@@ -465,7 +463,9 @@ void ResourceManager::updateBLAS()
             geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
             geomDesc.Triangles.VertexCount  = _vertexBufferMap[entity->getModel()].first[0]->count;
             geomDesc.Triangles.VertexBuffer.StartAddress =
-                _deformedVertices[0]->getResource()->getResource()->GetGPUVirtualAddress();
+                animatedModel->_deformedVertices->getResource()
+                    ->getResource()
+                    ->GetGPUVirtualAddress();
             geomDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(float) * 3;
 
             // If model is a light holder then flag it as non opaque to indicate during shadow
@@ -507,16 +507,16 @@ void ResourceManager::updateBLAS()
                                               D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
             auto defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 
-            if (_blUpdateScratchResource == nullptr)
+            if (animatedModel->_blUpdateScratchResource == nullptr)
             {
                 _dxrDevice->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
                                                     &updateBufferDesc,
                                                     D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
-                                                    IID_PPV_ARGS(&_blUpdateScratchResource));
+                    IID_PPV_ARGS(&animatedModel->_blUpdateScratchResource));
             }
 
             bottomLevelBuildDesc.ScratchAccelerationStructureData =
-                _blUpdateScratchResource->GetGPUVirtualAddress();
+                animatedModel->_blUpdateScratchResource->GetGPUVirtualAddress();
 
             cmdList->BuildRaytracingAccelerationStructure(&bottomLevelBuildDesc, 0, nullptr);
         }

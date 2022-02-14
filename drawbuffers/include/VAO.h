@@ -80,8 +80,10 @@ class VAO
 
     ResourceBuffer*          _boneWeightBuffer;
     ResourceBuffer*          _boneIndexBuffer;
+    ResourceBuffer*          _bonesBuffer;
     D3DBuffer*               _boneWeightSRV;
     D3DBuffer*               _boneIndexSRV;
+    D3DBuffer*               _bonesSRV;
 
   public:
     VAO();
@@ -114,4 +116,6 @@ class VAO
     uint32_t                 getVAOContext();
     D3DBuffer*               getBoneWeightSRV(){ return _boneWeightSRV;}
     D3DBuffer*               getBoneIndexSRV() { return _boneIndexSRV; }
+    D3DBuffer*               getBonesSRV() { return _bonesSRV; }
+    ResourceBuffer*          getBonesResource() { return _bonesBuffer; }
 };

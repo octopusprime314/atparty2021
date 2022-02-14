@@ -26,6 +26,8 @@
 #include "Model.h"
 #include <mutex>
 
+#include "RenderTexture.h"
+
 class AnimatedModel : public Model
 {
 
@@ -42,6 +44,7 @@ class AnimatedModel : public Model
     std::vector<float>       _joints;
     std::vector<float>        _weights;
     int                       _frames;
+    
 
   public:
     AnimatedModel(std::string name);
@@ -62,4 +65,7 @@ class AnimatedModel : public Model
     std::vector<Matrix>  getJointMatrices();
     std::vector<float>*     getJoints();
     std::vector<float>*  getWeights();
+
+    RenderTexture*         _deformedVertices = nullptr;
+    ComPtr<ID3D12Resource> _blUpdateScratchResource = nullptr;
 };

@@ -263,7 +263,7 @@ float GetYaw(Vector4 q)
 }
 
 std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFResourceReader* resourceReader,
-                    std::vector<PathWaypoint> waypoints, int nodeIndex, int animationIndex,
+                    std::vector<PathWaypoint> waypoints, int nodeIndex, std::map<int, int> nodeIndexToAnimationIndex,
                     std::map<int, std::vector<PathWaypoint>>& nodeWayPoints, std::vector<PathWaypoint> currWayPoints,
                     std::map<int, std::map<TargetPath, int>>& nodeToSamplerIndex,
                Matrix transform)
@@ -272,7 +272,7 @@ std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFRes
 
     const auto& node = document->nodes.Elements()[nodeIndex];
 
-    auto samplerIds = document->animations[animationIndex].samplers.Elements();
+    auto samplerIds = document->animations[nodeIndexToAnimationIndex[nodeIndex]].samplers.Elements();
 
 
     auto targetPaths = nodeToSamplerIndex[nodeIndex];
@@ -473,7 +473,8 @@ void ProcessChild(const Document* document, const GLTFResourceReader* resourceRe
                   Matrix                                    currentTransform,
                   std::map<int, std::map<TargetPath, int>>  nodeToSamplerIndex,
                   std::map<int, std::vector<PathWaypoint>>& nodeWayPoints,
-                  std::vector<PathWaypoint> currWayPoints, int recursionIndex)
+                  std::vector<PathWaypoint> currWayPoints, int recursionIndex,
+                  std::map<int, int> nodeIndexToAnimationIndex)
 {
     recursionIndex++;
     std::vector<PathWaypoint> waypoints;
@@ -496,7 +497,7 @@ void ProcessChild(const Document* document, const GLTFResourceReader* resourceRe
 
     if (nodeToSamplerIndex.find(childNodeIndex) != nodeToSamplerIndex.end())
     {
-        currWayPoints = AnimatingNodes(document, resourceReader, waypoints, childNodeIndex, 0,
+        currWayPoints = AnimatingNodes(document, resourceReader, waypoints, childNodeIndex, nodeIndexToAnimationIndex,
                                        nodeWayPoints, currWayPoints, nodeToSamplerIndex, meshNodeTransforms[childNodeIndex]);
     }
 
@@ -508,7 +509,8 @@ void ProcessChild(const Document* document, const GLTFResourceReader* resourceRe
         std::string::size_type sz; // alias of size_t
         int                    newChildNodeIndex = std::stoi(node.children[childIndex], &sz);
         ProcessChild(document, resourceReader, newChildNodeIndex, meshNodeTransforms, newTransform,
-                     nodeToSamplerIndex, nodeWayPoints, currWayPoints, recursionIndex);
+                     nodeToSamplerIndex, nodeWayPoints, currWayPoints, recursionIndex,
+                     nodeIndexToAnimationIndex);
     }
 
 }
@@ -593,6 +595,8 @@ void BuildGltfMeshes(const Document*           document,
 
     std::map<int, std::map<TargetPath, int>> nodeToSamplerIndex;
 
+    std::map<int, int> nodeIndexToAnimationIndex;
+    int                animationIndex = 0;
     for (const auto& animation : document->animations.Elements())
     {
         for (const auto& channel : animation.channels.Elements())
@@ -603,7 +607,9 @@ void BuildGltfMeshes(const Document*           document,
             int        sampleIndex = std::stoi(channel.samplerId, &sz);
 
             nodeToSamplerIndex[nodeIndex][sampleType] = sampleIndex;
+            nodeIndexToAnimationIndex[nodeIndex]      = animationIndex;
         }
+        animationIndex++;
     }
 
     Vector4 cameraQuaternion = Vector4(0.0, 0.0, 0.0);
@@ -636,7 +642,7 @@ void BuildGltfMeshes(const Document*           document,
         std::vector<PathWaypoint> wayPointPathsCurrent;
         if (nodeToSamplerIndex.find(nodeIndex) != nodeToSamplerIndex.end())
         {
-            wayPointPathsCurrent = AnimatingNodes(document, resourceReader, waypoints, nodeIndex, 0,
+            wayPointPathsCurrent = AnimatingNodes(document, resourceReader, waypoints, nodeIndex, nodeIndexToAnimationIndex,
                                         nodeWayPoints, wayPointPathsCurrent, nodeToSamplerIndex, meshNodeTransforms[nodeIndex]);
         }
 
@@ -647,7 +653,8 @@ void BuildGltfMeshes(const Document*           document,
             std::string::size_type sz; // alias of size_t
             int childNodeIndex = std::stoi(node.children[childIndex], &sz);
             ProcessChild(document, resourceReader, childNodeIndex, meshNodeTransforms,
-                         currentTransform, nodeToSamplerIndex, nodeWayPoints, wayPointPathsCurrent, recursionIndex);
+                         currentTransform, nodeToSamplerIndex, nodeWayPoints, wayPointPathsCurrent,
+                         recursionIndex, nodeIndexToAnimationIndex);
         }
     }
 
@@ -673,7 +680,6 @@ void BuildGltfMeshes(const Document*           document,
     int skinIndex = 0;
     for (const auto& skin : document->skins.Elements())
     {
-        std::string skinName                  = skin.name;
         int         inverseBindMatricesIndex  = std::stoi(skin.inverseBindMatricesAccessorId, &sz);
         inverseBindMatricesIndices[skinIndex] = inverseBindMatricesIndex;
 
@@ -708,6 +714,12 @@ void BuildGltfMeshes(const Document*           document,
                 constructedMatrix.getFlatBuffer()[13] = matrices[(i * 16) + 13];
                 constructedMatrix.getFlatBuffer()[14] = matrices[(i * 16) + 14];
                 constructedMatrix.getFlatBuffer()[15] = matrices[(i * 16) + 15];
+
+                constructedMatrix = (Matrix::scale(1.0, 1.0, -1.0) * constructedMatrix.inverse()).inverse();
+                //constructedMatrix.getFlatBuffer()[12] = 0.0;//matrices[(i * 16) + 12];
+                //constructedMatrix.getFlatBuffer()[13] = 0.0;//matrices[(i * 16) + 13];
+                //constructedMatrix.getFlatBuffer()[14] = 0.0;//matrices[(i * 16) + 14];
+                //constructedMatrix.getFlatBuffer()[15] = 1.0;//matrices[(i * 16) + 15];
 
                 inverseBindMatrices[jointId.second[i]] = constructedMatrix;
 
@@ -761,7 +773,8 @@ void BuildGltfMeshes(const Document*           document,
             }
 
             auto animatedModel = dynamic_cast<AnimatedModel*>(modelsPending[meshIndex]);
-            
+            int  skinNodeIndex      = std::stoi(node.skinId, &sz);
+
             int totalTransforms = 0;
             int maxFrames       = 0;
             int nodeWayPointsCount = nodeWayPoints.size();
@@ -770,7 +783,13 @@ void BuildGltfMeshes(const Document*           document,
                 totalTransforms += nodeWayPoint.second.size();
                 if (nodeWayPoint.second.size() > maxFrames)
                 {
-                    maxFrames = nodeWayPoint.second.size();
+                    for (int i = 0; i < jointIds[skinNodeIndex].size(); i++)
+                    {
+                        if (nodeWayPoint.first == jointIds[skinNodeIndex][i])
+                        {
+                            maxFrames = nodeWayPoint.second.size();
+                        }
+                    }
                 }
             }
 
@@ -788,8 +807,8 @@ void BuildGltfMeshes(const Document*           document,
                     for (int i = 0; i < maxFrames; i++)
                     {
                         int j = 0;
-                        //for (auto jointId : jointIds)
-                        auto jointId = jointIds[0];
+                        auto jointId = jointIds[skinNodeIndex];
+
                         for (auto nodeWayPoint : nodeWayPoints)
                         {
                             if (j < jointId.size())
@@ -797,8 +816,9 @@ void BuildGltfMeshes(const Document*           document,
                                 auto   worldToRoot = meshNodeTransforms[jointId[j]].inverse();
                                 Matrix jointMatrix;
 
-                                jointMatrix = /*inverseBindMatrices[jointId[j]].transpose() **/
-                                    nodeWayPoints[jointId[j]][i].transform * worldToRoot;
+                                jointMatrix = /*inverseBindMatrices[jointId[j]] **/
+                                              nodeWayPoints[jointId[j]][i].transform *
+                                              worldToRoot;
 
                                 finalTransforms.push_back(jointMatrix);
                             }
@@ -810,7 +830,6 @@ void BuildGltfMeshes(const Document*           document,
             animatedModel->setKeyFrames(maxFrames);
             animatedModel->setJointMatrices(finalTransforms);
         }
-        skinNodeIndex++;
     }
 
    

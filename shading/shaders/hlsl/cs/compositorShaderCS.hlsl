@@ -33,9 +33,9 @@ void main(int3 threadId : SV_DispatchThreadID,
     // const float exposure = 0.01;
     const float exposure = 1.0;
     // reinhard tone mapping
-    float3 mapped = float3(1.0, 1.0, 1.0) - exp(-((specularUnpacked + diffuseUnpacked).xyz) * exposure);
+    float3 mapped = float3(1.0, 1.0, 1.0) - exp(-((specularUnpacked + diffuseUnpacked).xyz + pathTracerUAV[threadId.xy].xyz) * exposure);
     // gamma correction
     mapped = pow(mapped, float3(1.0, 1.0, 1.0) / float3(gamma, gamma, gamma));
 
-    pathTracerUAV[threadId.xy] += float4(mapped, 1.0);
+    pathTracerUAV[threadId.xy] = float4(mapped, 1.0);
 }

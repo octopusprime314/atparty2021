@@ -171,13 +171,37 @@ void VAO::createVAO(RenderBuffers* renderBuffers, ModelClass classId, AnimatedMo
         auto                   boneIndexes         = model->getJoints();
         auto                   boneWeights         = model->getWeights();
         size_t                 boneIndexesBuffSize = boneIndexes->size();
+        UINT                   boneSize            = model->getJointMatrices().size();
+        auto                   bones               = model->getJointMatrices();
+        UINT                   boneFloats    = static_cast<UINT>(boneSize * 16);
         float*                 flattenIndexes      = new float[boneIndexesBuffSize];
         float*                 flattenWeights      = new float[boneIndexesBuffSize];
+        float*                 flattenBones        = new float[boneFloats];
 
         for (int i = 0; i < boneIndexesBuffSize; i++)
         {
             flattenIndexes[i]   = (*boneIndexes)[i];
             flattenWeights[i] = (*boneWeights)[i];
+        }
+
+        for (int i = 0; i < boneSize; i++)
+        {
+            flattenBones[i * 16 + 0] = 1.0;
+            flattenBones[i * 16 + 1] = 0.0;
+            flattenBones[i * 16 + 2] = 0.0;
+            flattenBones[i * 16 + 3] = 0.0;
+            flattenBones[i * 16 + 4] = 0.0;
+            flattenBones[i * 16 + 5] = 1.0;
+            flattenBones[i * 16 + 6] = 0.0;
+            flattenBones[i * 16 + 7] = 0.0;
+            flattenBones[i * 16 + 8] = 0.0;
+            flattenBones[i * 16 + 9] = 0.0;
+            flattenBones[i * 16 + 10] = 1.0;
+            flattenBones[i * 16 + 11] = 0.0;
+            flattenBones[i * 16 + 12] = 0.0;
+            flattenBones[i * 16 + 13] = 0.0;
+            flattenBones[i * 16 + 14] = 0.0;
+            flattenBones[i * 16 + 15] = 1.0;
         }
 
         UINT byteSize = static_cast<UINT>(boneIndexesBuffSize * sizeof(float));
@@ -190,10 +214,15 @@ void VAO::createVAO(RenderBuffers* renderBuffers, ModelClass classId, AnimatedMo
         _boneIndexBuffer = new ResourceBuffer(flattenIndexes, byteSize, copyCommandBuffer,
                                               DXLayer::instance()->getDevice());
 
+        UINT byteSizeForBones = static_cast<UINT>(boneSize * sizeof(float) * 16);
+        _bonesBuffer = new ResourceBuffer(flattenBones, byteSizeForBones, copyCommandBuffer,
+                                          DXLayer::instance()->getDevice());
+
         copyCommandBuffer->EndEvent();
 
         _boneWeightSRV = new D3DBuffer();
         _boneIndexSRV  = new D3DBuffer();
+        _bonesSRV  = new D3DBuffer();
 
         _boneWeightSRV->count    = boneIndexesBuffSize;
         _boneWeightSRV->resource = _boneWeightBuffer->getResource();
@@ -201,11 +230,17 @@ void VAO::createVAO(RenderBuffers* renderBuffers, ModelClass classId, AnimatedMo
         _boneIndexSRV->count    = boneIndexesBuffSize;
         _boneIndexSRV->resource = _boneIndexBuffer->getResource();
 
+        _bonesSRV->count    = byteSizeForBones / sizeof(float);
+        _bonesSRV->resource = _bonesBuffer->getResource();
+
         ResourceManager* resourceManager = EngineManager::getResourceManager();
 
         UINT descriptorIndexBoneWeights =
             resourceManager->createBufferSRV(_boneWeightSRV, _boneWeightSRV->count, 0, DXGI_FORMAT_R32_FLOAT);
         UINT descriptorIndexBoneIndexes =
             resourceManager->createBufferSRV(_boneIndexSRV, _boneIndexSRV->count, 0, DXGI_FORMAT_R32_FLOAT);
+
+        UINT descriptorIndexBones =
+            resourceManager->createBufferSRV(_bonesSRV, _bonesSRV->count, 0, DXGI_FORMAT_R32_FLOAT);
     }
 }

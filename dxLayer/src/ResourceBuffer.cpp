@@ -40,10 +40,6 @@ ResourceBuffer::ResourceBuffer(const void* initData, UINT byteSize,
     UpdateSubresources<1>(cmdList.Get(), _defaultBuffer.Get(), _uploadBuffer.Get(), 0, 0, 1,
                           &subResourceData);
 
-    cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
-                                    _defaultBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
-                                    D3D12_RESOURCE_STATE_COMMON));
-
     dxLayer->unlock();
 }
 
@@ -349,6 +345,18 @@ ResourceBuffer::ResourceBuffer(D3D12_CLEAR_VALUE clearValue, UINT width, UINT he
 
     LPCWSTR      sw    = r.c_str();
     _defaultBuffer->SetName(sw);
+}
+
+void ResourceBuffer::uploadNewData(const void* initData, UINT byteSize,
+                                   ComPtr<ID3D12GraphicsCommandList4>& cmdList)
+{
+    D3D12_SUBRESOURCE_DATA subResourceData = {};
+    subResourceData.pData                  = initData;
+    subResourceData.RowPitch               = byteSize;
+    subResourceData.SlicePitch             = subResourceData.RowPitch;
+
+    UpdateSubresources<1>(cmdList.Get(), _defaultBuffer.Get(), _uploadBuffer.Get(), 0, 0, 1,
+                          &subResourceData);
 }
 
 D3D12_GPU_VIRTUAL_ADDRESS ResourceBuffer::getGPUAddress()
