@@ -57,18 +57,21 @@ void AnimatedModel::updateModel(Model* model)
 void AnimatedModel ::updateAnimation()
 {
     // If animation update request was received from an asynchronous event then send vbo to gpu
-    //if (_animationUpdateRequest)
-    //{
+    if (_animationUpdateRequest)
+    {
 
         // Set bone animation frame
         //_currBones = &_jointMatrices;//_animations[_currentAnimation]->getBones();
         // Set animation to the next frame
         _animations[_currentAnimation]->nextFrame();
+        _keyFrame++;
+
+        _keyFrame = _keyFrame % _frames;
 
         _updateLock.lock();
         _animationUpdateRequest = false;
         _updateLock.unlock();
-    //}
+    }
 }
 
 void AnimatedModel::setJointMatrices(std::vector<Matrix> jointMatrices) { _jointMatrices = jointMatrices; }
@@ -78,25 +81,14 @@ void AnimatedModel::setKeyFrames(int frames) { _frames = frames; }
 
 std::vector<Matrix> AnimatedModel::getJointMatrices()
 {
-   static int frameOffset = 0;
-   static int counter = 0;
    auto jointCount = _jointMatrices.size() / _frames;
    std::vector<Matrix> matricesForFrame;
    for (int i = 0; i < jointCount; i++)
    {
-       matricesForFrame.push_back(_jointMatrices[i + (frameOffset * jointCount)]);
+       matricesForFrame.push_back(_jointMatrices[i + (_keyFrame * jointCount)]);
    }
-   if (counter % 25 == 0)
-   {
-       frameOffset++;
-   }
-   counter++;
-   if (frameOffset >= _frames)
-   {
-       frameOffset = 0;
-   }
+
    return matricesForFrame;
-   //return &_jointMatrices;
 }
 std::vector<float>*    AnimatedModel::getJoints() { return &_joints; }
 std::vector<float>* AnimatedModel::getWeights() { return &_weights; }

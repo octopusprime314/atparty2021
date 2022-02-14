@@ -44,6 +44,7 @@ class AnimatedModel : public Model
     std::vector<float>       _joints;
     std::vector<float>        _weights;
     int                       _frames;
+    int                       _keyFrame = 0;
     
 
   public:

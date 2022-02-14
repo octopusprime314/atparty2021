@@ -5,6 +5,7 @@
 #include "Model.h"
 #include "ModelBroker.h"
 #include "ShaderBroker.h"
+#include "AnimatedModel.h"
 
 unsigned int Entity::_idGenerator = 1;
 
@@ -46,6 +47,12 @@ Entity::Entity(const SceneEntity& sceneEntity, ViewEventDistributor* viewManager
     // Hook up to kinematic update for proper physics handling
     _clock->subscribeKinematicsRate(this,
         std::bind(&Entity::_updatePathKinematics, this, std::placeholders::_1));
+
+    if (_model->getClassType() == ModelClass::AnimatedModelType)
+    {
+        _clock->subscribeAnimationRate(
+            this, std::bind(&Entity::_updateAnimation, this, std::placeholders::_1));
+    }
 }
 
 Entity::~Entity()
@@ -155,6 +162,15 @@ Model* Entity::getModel()
 
 void Entity::setModel(Model* model) { _model = model; }
 
+void Entity::_updateAnimation(int milliSeconds)
+{
+    // Coordinate loading new animation frame to gpu
+    if (_model->getClassType() == ModelClass::AnimatedModelType)
+    {
+        AnimatedModel* animatedModel = static_cast<AnimatedModel*>(_model);
+        animatedModel->triggerNextFrame();
+    }
+}
 
 void Entity::_updateView(Matrix view)
 {

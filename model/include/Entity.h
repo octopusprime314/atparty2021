@@ -117,4 +117,5 @@ class Entity : public EventSubscriber
     void _updatePathKinematics(int milliSeconds);
     void _updateView(Matrix view);
     void _updateDraw();
+    void _updateAnimation(int milliSeconds);
 };
