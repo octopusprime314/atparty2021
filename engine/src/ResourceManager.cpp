@@ -1092,16 +1092,22 @@ void ResourceManager::_updateResourceMappingBuffers()
 
         createBufferSRV(_instanceIndexToAttributeMappingGPUBuffer, newInstanceSize, 0, DXGI_FORMAT_R32_UINT);
 
+        int uniformMaterialCounts = 0;
+        for (auto maps : _uniformMaterialMap)
+        {
+            uniformMaterialCounts += maps.second.size();
+        }
+
         allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                                sizeof(UniformMaterial) * newInstanceSize,
+                             sizeof(UniformMaterial) * uniformMaterialCounts,
                              &_instanceUniformMaterialMappingUpload[_instanceMappingIndex],
                                 L"uniformMaterials");
 
         _instanceUniformMaterialMappingGPUBuffer->resource =
             _instanceUniformMaterialMappingUpload[_instanceMappingIndex];
-        _instanceUniformMaterialMappingGPUBuffer->count = newInstanceSize;
+        _instanceUniformMaterialMappingGPUBuffer->count = uniformMaterialCounts;
 
-        createBufferSRV(_instanceUniformMaterialMappingGPUBuffer, newInstanceSize, sizeof(UniformMaterial), DXGI_FORMAT_UNKNOWN);
+        createBufferSRV(_instanceUniformMaterialMappingGPUBuffer, uniformMaterialCounts, sizeof(UniformMaterial), DXGI_FORMAT_UNKNOWN);
 
         allocateUploadBuffer(
             DXLayer::instance()->getDevice().Get(), nullptr, sizeof(float) * 9 * newInstanceSize,
