@@ -717,100 +717,105 @@ void BuildGltfMeshes(const Document*           document,
             inverseBindMatrices[skinIndex].push_back(constructedMatrix.transpose());
         }
 
-        int skinNodeIndex = 0;
-        auto node = skinnedNodes[skinIndex];
-        // Skinning
-        std::vector<float> joints;
-        std::vector<float> weights;
-        bool               loadedJoints  = false;
-        bool               loadedWeights = false;
-        std::string        accessorId;
-
-        if (node.meshId.empty() == false)
+        for (auto node : skinnedNodes)
         {
+            int skinNodeIndex = 0;
+            // auto node = skinnedNodes[skinIndex];
+            // Skinning
+            std::vector<float> joints;
+            std::vector<float> weights;
+            bool               loadedJoints  = false;
+            bool               loadedWeights = false;
+            std::string        accessorId;
 
-            int  meshIndex = std::stoi(node.meshId, &sz);
-            auto mesh      = document->meshes[meshIndex];
-
-            for (int meshPrimIndex = 0; meshPrimIndex < mesh.primitives.size(); meshPrimIndex++)
+            if (node.meshId.empty() == false)
             {
-                const auto& meshPrimitive = mesh.primitives[meshPrimIndex];
 
-                if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_JOINTS_0, accessorId))
+                int  meshIndex = std::stoi(node.meshId, &sz);
+                auto mesh      = document->meshes[meshIndex];
+
+                for (int meshPrimIndex = 0; meshPrimIndex < mesh.primitives.size(); meshPrimIndex++)
                 {
-                    const Accessor& accessor = document->accessors.Get(accessorId);
+                    const auto& meshPrimitive = mesh.primitives[meshPrimIndex];
 
-                    auto tempJoints = resourceReader->ReadBinaryData<uint8_t>(*document, accessor);
-                    joints.insert(joints.end(), tempJoints.begin(), tempJoints.end());
-                    const auto dataByteLength = joints.size() * sizeof(float);
-
-                    loadedJoints = true;
-                }
-                if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_WEIGHTS_0, accessorId))
-                {
-                    const Accessor& accessor = document->accessors.Get(accessorId);
-
-                    auto tempWeights = resourceReader->ReadBinaryData<float>(*document, accessor);
-                    weights.insert(weights.end(), tempWeights.begin(), tempWeights.end());
-                    const auto dataByteLength = weights.size() * sizeof(float);
-
-                    loadedWeights = true;
-                }
-            }
-
-            auto animatedModel = dynamic_cast<AnimatedModel*>(modelsPending[meshIndex]);
-            int  skinNodeIndex = std::stoi(node.skinId, &sz);
-
-            int totalTransforms    = 0;
-            int maxFrames          = 0;
-            int nodeWayPointsCount = nodeWayPoints.size();
-            for (auto nodeWayPoint : nodeWayPoints)
-            {
-                totalTransforms += nodeWayPoint.second.size();
-                if (nodeWayPoint.second.size() > maxFrames)
-                {
-                    for (int i = 0; i < jointIds[skinNodeIndex].size(); i++)
+                    if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_JOINTS_0, accessorId))
                     {
-                        if (nodeWayPoint.first == jointIds[skinNodeIndex][i])
+                        const Accessor& accessor = document->accessors.Get(accessorId);
+
+                        auto tempJoints =
+                            resourceReader->ReadBinaryData<uint8_t>(*document, accessor);
+                        joints.insert(joints.end(), tempJoints.begin(), tempJoints.end());
+                        const auto dataByteLength = joints.size() * sizeof(float);
+
+                        loadedJoints = true;
+                    }
+                    if (meshPrimitive.TryGetAttributeAccessorId(ACCESSOR_WEIGHTS_0, accessorId))
+                    {
+                        const Accessor& accessor = document->accessors.Get(accessorId);
+
+                        auto tempWeights =
+                            resourceReader->ReadBinaryData<float>(*document, accessor);
+                        weights.insert(weights.end(), tempWeights.begin(), tempWeights.end());
+                        const auto dataByteLength = weights.size() * sizeof(float);
+
+                        loadedWeights = true;
+                    }
+                }
+
+                auto animatedModel = dynamic_cast<AnimatedModel*>(modelsPending[meshIndex]);
+                int  skinNodeIndex = std::stoi(node.skinId, &sz);
+
+                int totalTransforms    = 0;
+                int maxFrames          = 0;
+                int nodeWayPointsCount = nodeWayPoints.size();
+                for (auto nodeWayPoint : nodeWayPoints)
+                {
+                    totalTransforms += nodeWayPoint.second.size();
+                    if (nodeWayPoint.second.size() > maxFrames)
+                    {
+                        for (int i = 0; i < jointIds[skinNodeIndex].size(); i++)
                         {
-                            maxFrames = nodeWayPoint.second.size();
+                            if (nodeWayPoint.first == jointIds[skinNodeIndex][i])
+                            {
+                                maxFrames = nodeWayPoint.second.size();
+                            }
                         }
                     }
                 }
-            }
 
-            std::vector<Matrix> finalTransforms;
-            animatedModel->setWeights(weights);
-            animatedModel->setJoints(joints);
+                std::vector<Matrix> finalTransforms;
+                animatedModel->setWeights(weights);
+                animatedModel->setJoints(joints);
 
-            // Use the resource reader to get each mesh primitive's position data
-            for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
-            {
-                Node node = document->nodes.Elements()[nodeIndex];
-
-                if (skinnedNodesIndices.find(nodeIndex) != skinnedNodesIndices.end() &&
-                    skinNodeIndex == skinnedNodesIndices[nodeIndex])
+                // Use the resource reader to get each mesh primitive's position data
+                for (int nodeIndex = 0; nodeIndex < document->nodes.Elements().size(); nodeIndex++)
                 {
-                    for (int i = 0; i < maxFrames; i++)
+                    Node node = document->nodes.Elements()[nodeIndex];
+
+                    if (skinnedNodesIndices.find(nodeIndex) != skinnedNodesIndices.end() &&
+                        skinNodeIndex == skinnedNodesIndices[nodeIndex])
                     {
-                        auto jointId = jointIds[skinNodeIndex];
-                        for (int j = 0; j < jointId.size(); j++)
+                        for (int i = 0; i < maxFrames; i++)
                         {
-                            auto   worldToRoot = meshNodeTransforms[jointId[j]].inverse();
-                            Matrix jointMatrix;
+                            auto jointId = jointIds[skinNodeIndex];
+                            for (int j = 0; j < jointId.size(); j++)
+                            {
+                                auto   worldToRoot = meshNodeTransforms[jointId[j]].inverse();
+                                Matrix jointMatrix;
 
-                            jointMatrix =
-                                /*worldToRoot **/
-                                nodeWayPoints[jointId[j]][i].transform *
-                                inverseBindMatrices[skinNodeIndex][j];
+                                jointMatrix =
+                                    /*worldToRoot **/
+                                    nodeWayPoints[jointId[j]][i].transform *
+                                    inverseBindMatrices[skinNodeIndex][j];
 
-                            finalTransforms.push_back(jointMatrix);
+                                finalTransforms.push_back(jointMatrix);
+                            }
                         }
                     }
                 }
+                animatedModel->setKeyFrames(maxFrames);
+                animatedModel->setJointMatrices(finalTransforms);
             }
-            animatedModel->setKeyFrames(maxFrames);
-            animatedModel->setJointMatrices(finalTransforms);
         }
         skinIndex--;
     }

@@ -412,11 +412,18 @@ void ResourceManager::updateBLAS()
                                                    boneIndexes->gpuDescriptorHandle);
             cmdList->SetComputeRootDescriptorTable(resourceBindings["weights"],
                                                    boneWeights->gpuDescriptorHandle);
+            uint64_t vertexCount = 0;
 
+            for (int vertexBufferIndex = 0;
+                 vertexBufferIndex < _vertexBufferMap[entity->getModel()].first.size();
+                 vertexBufferIndex++)
+            {
+                vertexCount += _vertexBufferMap[entity->getModel()].first[vertexBufferIndex]->count;
+            }
             if (animatedModel->_deformedVertices == nullptr)
             {
                 animatedModel->_deformedVertices =
-                    new RenderTexture(_vertexBufferMap[entity->getModel()].first[0]->count, 0,
+                    new RenderTexture(vertexCount, 0,
                                       TextureFormat::RGB_FLOAT, "DeformedVerts");
             }
 
@@ -425,17 +432,32 @@ void ResourceManager::updateBLAS()
 
             auto cameraView = EngineManager::instance()->getViewManager()->getView();
 
-            int modelIndex = _vertexBufferMap[entity->getModel()].second;
-            _deformVerticesShader->updateData("modelIndex", &modelIndex, true);
+            
+            int firstVertexBufferSize =  _vertexBufferMap[entity->getModel()].first[0]->count;
 
-            _deformVerticesShader->dispatch(
-                ceilf(static_cast<float>(/*3 * */_vertexBufferMap[entity->getModel()].first[0]->count) /
-                        64.0f),
-                1, 1);
+            int currVertexOffset = 0;
+            for (int vertexBufferIndex = 0;
+                 vertexBufferIndex < _vertexBufferMap[entity->getModel()].first.size();
+                 vertexBufferIndex++)
+            {
+                int modelIndex = _vertexBufferMap[entity->getModel()].second + vertexBufferIndex;
+                _deformVerticesShader->updateData("modelIndex", &modelIndex, true);
+
+                _deformVerticesShader->updateData("indexOffset", &currVertexOffset, true);
+
+                _deformVerticesShader->updateData("vertexCount", &_vertexBufferMap[entity->getModel()].first[vertexBufferIndex]->count, true);
+
+                _deformVerticesShader->dispatch(ceilf(static_cast<float>(_vertexBufferMap[entity->getModel()].first[vertexBufferIndex]->count) / 64.0f),
+                                                1,
+                                                1);
+
+                currVertexOffset += _vertexBufferMap[entity->getModel()].first[vertexBufferIndex]->count;
+            }
 
             cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
 
             _deformVerticesShader->unbind();
+
 
             // Get required sizes for an acceleration structure.
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags =
@@ -444,54 +466,94 @@ void ResourceManager::updateBLAS()
             buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
             buildFlags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
 
-            D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
-            geomDesc.Type                           = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-            geomDesc.Triangles.IndexBuffer =
-                _indexBufferMap[entity->getModel()].first[0]->resource->GetGPUVirtualAddress();
-            auto indexDesc =
-                (*entity->getFrustumVAO())[0]->getIndexResource()->getResource()->GetDesc();
+            auto vertexAndBufferStrides =
+                (*entity->getModel()->getVAO())[0]->getVertexAndIndexBufferStrides();
 
-            auto indexFormat = entity->getModel()->getRenderBuffers()->is32BitIndices()
-                       ? DXGI_FORMAT_R32_UINT
-                       : DXGI_FORMAT_R16_UINT;
+            std::vector<D3D12_RAYTRACING_GEOMETRY_DESC>* geomDesc =
+                new std::vector<D3D12_RAYTRACING_GEOMETRY_DESC>();
 
-            geomDesc.Triangles.IndexCount   = static_cast<UINT>(indexDesc.Width) / (indexFormat == DXGI_FORMAT_R32_UINT ? sizeof(uint32_t) : sizeof(uint16_t));
+            int geometryIndex = 0;
 
+            int indexCountOffset  = 0;
+            int vertexCountOffset = 0;
 
-            geomDesc.Triangles.IndexFormat  = indexFormat;
-            geomDesc.Triangles.Transform3x4 = 0;
-            geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-            geomDesc.Triangles.VertexCount  = _vertexBufferMap[entity->getModel()].first[0]->count;
-            geomDesc.Triangles.VertexBuffer.StartAddress =
-                animatedModel->_deformedVertices->getResource()
-                    ->getResource()
-                    ->GetGPUVirtualAddress();
-            geomDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(float) * 3;
-
-            // If model is a light holder then flag it as non opaque to indicate during shadow
-            // traversal that we don't want to intersect with it to determine occlusion Also
-            // reflective surfaces we don't to intersect with for shadows
-            if (/*(entity->getModel()->getName().find("hanginglantern") != std::string::npos) ||
-                (entity->getModel()->getName().find("torch") != std::string::npos) ||
-                (entity->getModel()->getName().find("fluid") != std::string::npos) ||
-                (entity->getName().find("SUZANNEGHOST") != std::string::npos) ||*/
-                (entity->getModel()->getName().find("hagraven") != std::string::npos))
+            for (int i = 0; i < vertexAndBufferStrides.size(); i++)
             {
-                geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
-            }
-            else
-            {
-                geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-            }
+                geomDesc->push_back(D3D12_RAYTRACING_GEOMETRY_DESC());
+                auto indexFormat   = entity->getModel()->getRenderBuffers()->is32BitIndices()
+                                         ? DXGI_FORMAT_R32_UINT
+                                         : DXGI_FORMAT_R16_UINT;
+                auto indexTypeSize = 0;
+                if (indexFormat == DXGI_FORMAT_R32_UINT)
+                {
+                    indexTypeSize = 4;
+                }
+                else
+                {
+                    indexTypeSize = 2;
+                }
 
+                int indexCount  = vertexAndBufferStrides[i].second;
+                int vertexCount = vertexAndBufferStrides[i].first;
+
+                if (i > 0)
+                {
+                    indexCount =
+                        vertexAndBufferStrides[i].second - vertexAndBufferStrides[i - 1].second;
+                    vertexCount =
+                        vertexAndBufferStrides[i].first - vertexAndBufferStrides[i - 1].first;
+                }
+
+                (*geomDesc)[i].Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+
+                auto indexGPUAddress = (*entity->getFrustumVAO())[0]
+                                           ->getIndexResource()
+                                           ->getResource()
+                                           ->GetGPUVirtualAddress() +
+                                       (indexCountOffset * indexTypeSize);
+
+                auto vertexGPUAddress = animatedModel->_deformedVertices->getResource()->getResource()->GetGPUVirtualAddress() + (vertexCountOffset * sizeof(float) * 3);
+                
+                auto indexDesc =
+                    (*entity->getFrustumVAO())[0]->getIndexResource()->getResource()->GetDesc();
+
+
+                (*geomDesc)[i].Triangles.IndexBuffer    = indexGPUAddress;
+                (*geomDesc)[i].Triangles.IndexCount   = indexCount;
+                (*geomDesc)[i].Triangles.IndexFormat  = indexFormat;
+                (*geomDesc)[i].Triangles.Transform3x4 = 0;
+                (*geomDesc)[i].Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+                (*geomDesc)[i].Triangles.VertexCount  = vertexCount;
+                (*geomDesc)[i].Triangles.VertexBuffer.StartAddress  = vertexGPUAddress;
+                (*geomDesc)[i].Triangles.VertexBuffer.StrideInBytes = sizeof(float) * 3;
+
+                // If model is a light holder then flag it as non opaque to indicate during shadow
+                // traversal that we don't want to intersect with it to determine occlusion Also
+                // reflective surfaces we don't to intersect with for shadows
+                if (/*(entity->getModel()->getName().find("hanginglantern") != std::string::npos) ||
+                    (entity->getModel()->getName().find("torch") != std::string::npos) ||
+                    (entity->getModel()->getName().find("fluid") != std::string::npos) ||
+                    (entity->getName().find("SUZANNEGHOST") != std::string::npos) ||*/
+                    (entity->getModel()->getName().find("hagraven") != std::string::npos))
+                {
+                    (*geomDesc)[i].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+                }
+                else
+                {
+                    (*geomDesc)[i].Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+                }
+
+                indexCountOffset += indexCount;
+                vertexCountOffset += vertexCount;
+            }
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC    bottomLevelBuildDesc = {};
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& bottomLevelInputs =
                 bottomLevelBuildDesc.Inputs;
             bottomLevelInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
             bottomLevelInputs.Flags       = buildFlags;
-            bottomLevelInputs.NumDescs    = static_cast<UINT>(1);
+            bottomLevelInputs.NumDescs    = static_cast<UINT>(geomDesc->size());
             bottomLevelInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-            bottomLevelInputs.pGeometryDescs = &geomDesc;
+            bottomLevelInputs.pGeometryDescs = geomDesc->data();
 
             bottomLevelBuildDesc.DestAccelerationStructureData =
                 _blasMap[entityList[instanceIndex]->getModel()]->GetASBuffer();
@@ -509,9 +571,9 @@ void ResourceManager::updateBLAS()
 
             if (animatedModel->_blUpdateScratchResource == nullptr)
             {
-                _dxrDevice->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
-                                                    &updateBufferDesc,
-                                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+                _dxrDevice->CreateCommittedResource(
+                    &defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &updateBufferDesc,
+                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
                     IID_PPV_ARGS(&animatedModel->_blUpdateScratchResource));
             }
 
@@ -618,8 +680,10 @@ void ResourceManager::buildGeometry(Entity* entity)
         bool existed = false;
         if (_vertexBufferMap.find(bufferModel) == _vertexBufferMap.end())
         {
-            _vertexBufferMap[bufferModel] = ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
-            _indexBufferMap[bufferModel] = ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
+            _vertexBufferMap[bufferModel] =
+                ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
+            _indexBufferMap[bufferModel] =
+                ResourceManager::D3DBufferDescriptorHeapMap(std::vector<D3DBuffer*>(), 0);
 
             _indexBufferMap[bufferModel].first.push_back(new D3DBuffer());
             _vertexBufferMap[bufferModel].first.push_back(new D3DBuffer());
@@ -630,13 +694,15 @@ void ResourceManager::buildGeometry(Entity* entity)
             indexBuffer->indexBufferFormat = indexFormat;
             vertexBuffer->count            = static_cast<UINT>(vertexCount);
             indexBuffer->count             = static_cast<UINT>(indexCount);
-            indexBuffer->resource          = (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
+            indexBuffer->resource =
+                (*entity->getFrustumVAO())[0]->getIndexResource()->getResource();
 
-            vertexBuffer->resource = (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
-            vertexBuffer->nameId   = entity->getModel()->getName();
+            vertexBuffer->resource =
+                (*entity->getFrustumVAO())[0]->getVertexResource()->getResource();
+            vertexBuffer->nameId = entity->getModel()->getName();
 
-            vertexBuffer->offset = (vertexCountOffset/* * sizeof(CompressedAttribute)*/);
-            indexBuffer->offset  = (indexCountOffset/* * indexTypeSize*/ );
+            vertexBuffer->offset = (vertexCountOffset /* * sizeof(CompressedAttribute)*/);
+            indexBuffer->offset  = (indexCountOffset /* * indexTypeSize*/);
 
             UINT vertexBufferDescriptorIndex = addSRVToUnboundedAttributeBufferDescriptorTable(
                 vertexBuffer, vertexBuffer->count, vertexBuffer->offset);
@@ -650,10 +716,8 @@ void ResourceManager::buildGeometry(Entity* entity)
             // lock in the same index for attribute buffers
             _uniformMaterialMap[vertexBufferDescriptorIndex] = std::vector<UniformMaterial>();
 
-            
             _uniformMaterialMap[_vertexBufferMap[bufferModel].second].push_back(
                 bufferModel->getMaterialNames()[i].uniformMaterial);
-
         }
         else
         {
@@ -688,20 +752,20 @@ void ResourceManager::buildGeometry(Entity* entity)
             existed = true;
         }
 
-
         if (_texturesMap.find(bufferModel) == _texturesMap.end())
         {
             auto materialNames = entity->getModel()->getMaterialNames();
 
             UINT baseModelDescriptorIndex = -1;
             // Initialize the map values
-            _texturesMap[bufferModel] = ResourceManager::TextureDescriptorHeapMap(std::vector<AssetTexture*>(), 0);
+            _texturesMap[bufferModel] =
+                ResourceManager::TextureDescriptorHeapMap(std::vector<AssetTexture*>(), 0);
 
             for (auto textureNames : materialNames)
             {
                 // Grab the first descriptor heap index into the material's resources
-                AssetTexture* texture         = textureBroker->getTexture(textureNames.albedo);
-                UINT          descriptorIndex = addSRVToUnboundedTextureDescriptorTable(texture);
+                AssetTexture* texture = textureBroker->getTexture(textureNames.albedo);
+                UINT descriptorIndex  = addSRVToUnboundedTextureDescriptorTable(texture);
 
                 // For models with more than one material only insert the base offset of all
                 // material resources
@@ -725,7 +789,6 @@ void ResourceManager::buildGeometry(Entity* entity)
                 _texturesMap[bufferModel].first.push_back(texture);
             }
         }
-
         if (EngineManager::getGraphicsLayer() != GraphicsLayer::DX12)
         {
             int staticGeomIndex = staticGeometryDesc->size();
@@ -1459,7 +1522,6 @@ UINT ResourceManager::addSRVToUnboundedAttributeBufferDescriptorTable(D3DBuffer*
     srvDesc.Buffer.NumElements         = vertexCount;
     srvDesc.Buffer.StructureByteStride = sizeof(CompressedAttribute);
     srvDesc.Buffer.Flags               = D3D12_BUFFER_SRV_FLAG_NONE;
-    srvDesc.Buffer.FirstElement        = 0;
 
     device->CreateShaderResourceView(vertexBuffer->resource.Get(), &srvDesc, hDescriptor);
 
