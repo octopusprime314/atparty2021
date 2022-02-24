@@ -5,8 +5,8 @@
 float3 GetBRDFLight(float3 albedo, float3 normal, float3 hitPosition, float roughness,
                        float metallic, int2 threadId, float3 prevPosition,
                        float3 lightPos, uint pointLight, float lightIntensity, float3 lightColor,
-                       inout float3 diffuseRadiance,
-                       inout float3 specularRadiance,
+                       out float3 diffuseRadiance,
+                       out float3 specularRadiance,
                        out   float3 lightRadiance)
 {
     float3 eyeVector      = normalize(hitPosition - prevPosition);

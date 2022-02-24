@@ -241,7 +241,7 @@ void EngineManager::processLights(std::vector<Light*>&  lights,
             lightList.lightColorsArray[lightColorIndex++] = colorBuff[i];
         }
 
-        lightList.isPointLightArray[lightRangeIndex] = light->getType() == LightType::POINT ? true : false;
+        lightList.isPointLightArray[lightRangeIndex] = light->getType() == LightType::POINT ? 1 : 0;
         lightList.lightRangesArray[lightRangeIndex++] = light->getScale().getFlatBuffer()[0];
 
         totalLights++;

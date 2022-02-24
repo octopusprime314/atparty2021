@@ -30,6 +30,8 @@
 
 class Entity;
 
+const int TWENTY_FOUR_FPS    = 42; // frame time in milliseconds which is 24 frames per second
+const int THIRTY_FPS         = 33;      // frame time in milliseconds which is 30 frames per second
 const int DEFAULT_FRAME_TIME = 16; // frame time in milliseconds which is 60 frames per second
 const int KINEMATICS_TIME    = 5;  // kinematics time in milliseconds
 

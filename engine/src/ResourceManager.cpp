@@ -27,8 +27,6 @@ ResourceManager::ResourceManager()
     createUnboundedTextureSrvDescriptorTable(MaxBLASSRVsForRayTracing);
     createUnboundedAttributeBufferSrvDescriptorTable(MaxBLASSRVsForRayTracing);
     createUnboundedIndexBufferSrvDescriptorTable(MaxBLASSRVsForRayTracing);
-
-   
 }
 
 void ResourceManager::init(ComPtr<ID3D12Device> device)

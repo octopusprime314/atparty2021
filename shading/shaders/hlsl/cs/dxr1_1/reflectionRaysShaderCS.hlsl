@@ -32,8 +32,8 @@ cbuffer globalData : register(b0)
 
     float4 lightColors[MAX_LIGHTS];
     float4 lightPositions[MAX_LIGHTS];
-    float4  lightRanges[MAX_LIGHTS/4];
-    uint   isPointLight[MAX_LIGHTS];
+    float4 lightRanges[MAX_LIGHTS / 4];
+    uint4  isPointLight[MAX_LIGHTS / 4];
     uint   numLights;
 
     float2 screenSize;
@@ -70,12 +70,6 @@ cbuffer globalData : register(b0)
 
 #include "../../include/sunLightCommon.hlsl"
 #include "../../include/utils.hlsl"
-
-static float reflectionIndex = 0.5;
-static float refractionIndex = 1.0 - reflectionIndex;
-
-#define RNG_BRDF_X(bounce) (4 + 4 + 9 * bounce)
-#define RNG_BRDF_Y(bounce) (4 + 5 + 9 * bounce)
 
 float3 LinearToYCoCg(float3 color)
 {
@@ -218,7 +212,6 @@ void main(int3 threadId            : SV_DispatchThreadID,
             bool isRefractiveRay = false;
             if (transmittance > 0.0 && stochastic.y < brdfProbability)
             {
-                brdfProbability = brdfProbability;
                 isRefractiveRay = true;
             }
 
@@ -245,7 +238,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 float NdotL = max(0, dot(indirectNormal, newRayDir));
 
-                throughput /= ((1.0f - brdfProbability) / NdotL);
+                throughput /= (1.0f - brdfProbability)/* / NdotL*/;
                 diffuseRay = true;
             }
 
@@ -295,7 +288,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 float3 diffuseWeight = albedo * (1.0 - metallic);
                 // NdotL is for cosign weighted diffuse distribution
-                throughput *= (diffuseWeight/* * GetPDF(NdotL)*/);
+                throughput *= (diffuseWeight * GetPDF(NdotL));
             }
             else if ((diffuseRay == false && diffuseOrSpecular == 2) || diffuseOrSpecular == 1)
             {
@@ -383,7 +376,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal, indirectPos,
                                   transmittance, emissiveColor);
 
-            emissiveColor *= enableEmissives ? 10.0 : 0.0;
+            emissiveColor *= enableEmissives ? 50.0 : 0.0;
 
             float3 accumulatedLightRadiance = float3(0.0, 0.0, 0.0);
             float3 accumulatedDiffuseRadiance = float3(0.0, 0.0, 0.0);
@@ -394,6 +387,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 indirectNormal = -indirectNormal;
             }
 
+            int pointLightCount = 0;
             for (int lightIndex = 0; lightIndex < numLights; lightIndex++)
             {
                 float3 lightRadiance            = float3(0.0, 0.0, 0.0);
@@ -401,7 +395,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 float3 indirectSpecularRadiance = float3(0.0, 0.0, 0.0);
 
                 float3 indirectLighting = GetBRDFLight(albedo, indirectNormal, indirectPos, roughness, metallic, threadId.xy, previousPosition,
-                                 lightPositions[lightIndex].xyz, isPointLight[lightIndex], lightRanges[lightIndex/4][lightIndex%4], lightColors[lightIndex].xyz,
+                                 lightPositions[lightIndex].xyz, isPointLight[lightIndex/4][lightIndex%4], lightRanges[lightIndex/4][lightIndex%4], lightColors[lightIndex].xyz,
                                  indirectDiffuseRadiance, indirectSpecularRadiance, lightRadiance);
 
                 // bug fix for light leaking
@@ -416,8 +410,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             // Primary surface recording for denoiser
             if (i == 0)
             {
-                diffuseAlbedoDemodulation = albedo;/*float3(1.0, 1.0, 1.0);*///(accumulatedSpecularRadiance + accumulatedDiffuseRadiance);//albedo;
-                // specularFresnelDemodulation = indirectSpecularRadiance;
+                diffuseAlbedoDemodulation = albedo;
                 grabbedPrimarySurfaceDemodulator = true;
 
                 normalUAV[threadId.xy].xyz   = (-indirectNormal + 1.0) / 2.0;
@@ -450,8 +443,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     float normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x,
                                                                     specHitDistParams);
 
-                    nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) *
-                                   sampleWeight;
+                    nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) * sampleWeight;
                 }
             }
             else
@@ -480,7 +472,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                                         viewZUAV[threadId.xy].x,
                                                                         diffHitDistParams);
 
-                        nrdDiffuse += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) * sampleWeight;
+                            nrdDiffuse +=
+                                REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) *
+                                sampleWeight;
                     }
                 }
                 else
@@ -505,7 +499,10 @@ void main(int3 threadId            : SV_DispatchThreadID,
                                                                         viewZUAV[threadId.xy].x,
                                                                         specHitDistParams);
 
-                        nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) * sampleWeight;
+                        nrdSpecular +=
+                            REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) *
+                            sampleWeight;
+                        
                     }
                 }
             }
@@ -516,13 +513,10 @@ void main(int3 threadId            : SV_DispatchThreadID,
             float3 sampleVector = normalize(ray.Direction);
             float4 dayColor     = min(skyboxTexture.SampleLevel(bilinearWrap, float3(sampleVector.x, sampleVector.y, sampleVector.z), 0), 10.0);
 
+            dayColor *= 15.0;
+
             if (enableIBL == false)
             {
-                albedoUAV[threadId.xy]   = float4(dayColor.xyz, 0.0);
-                normalUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 1.0);
-                positionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, -1.0);
-
-                viewZUAV[threadId.xy].x = 1e5;
                 break;
             }
 
@@ -560,6 +554,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                         nrdDiffuse +=
                             REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
                     }
+                  
                 }
                 else
                 {
@@ -596,10 +591,6 @@ void main(int3 threadId            : SV_DispatchThreadID,
     {
         diffusePrimarySurfaceModulation[threadId.xy] = float4(diffuseAlbedoDemodulation.xyz, 1.0);
     }
-
-    // Write out number of diffuse rays, specular rays and total rays cast
-    //specularPrimarySurfaceModulation[threadId.xy] =
-    //        float4(reflectedDiffuseRayCount, reflectedSpecularRayCount, refractedDiffuseRayCount, refractedSpecularRayCount);
 
     // Write out number of diffuse rays, specular rays and total rays cast
 

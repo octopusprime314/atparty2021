@@ -57,7 +57,7 @@ struct Payload
     uint   recursionCount;
 };
 
-#define MAX_LIGHTS 24
+#define MAX_LIGHTS 512
 #define MAX_RAY_LENGTH 100000.0
 #define MIN_RAY_LENGTH 0.0
 #define RECURSION_LIMIT 31
