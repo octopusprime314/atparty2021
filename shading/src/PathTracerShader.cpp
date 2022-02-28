@@ -104,13 +104,6 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     std::vector<DXGI_FORMAT>* sunLightRaysFormats = new std::vector<DXGI_FORMAT>();
     // Albedo in R8G8B8 and maybe transparency in A8 to indicate water or something...
     sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
-    /*sunLightRaysFormats->push_back(DXGI_FORMAT_R32G32B32A32_FLOAT);
-    sunLightRaysFormats->push_back(DXGI_FORMAT_R16G16_FLOAT);
-    sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
-    sunLightRaysFormats->push_back(DXGI_FORMAT_R8G8B8A8_UNORM);*/
-
-    //_sunLightRaysShader =
-    //    new HLSLShader(DXR1_1_SHADERS_LOCATION + "sunLightRaysShaderCS", "", sunLightRaysFormats);
 
     _sunLightRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
@@ -260,7 +253,8 @@ PathTracerShader::PathTracerShader(std::string shaderName)
          static_cast<uint16_t>(IOEventDistributor::screenPixelHeight)},*/
         {nrd::Method::REBLUR_DIFFUSE, static_cast<uint16_t>(IOEventDistributor::screenPixelWidth),
          static_cast<uint16_t>(IOEventDistributor::screenPixelHeight)},
-        {nrd::Method::REBLUR_SPECULAR, static_cast<uint16_t>(IOEventDistributor::screenPixelWidth),
+        {nrd::Method::REBLUR_SPECULAR,
+         static_cast<uint16_t>(IOEventDistributor::screenPixelWidth),
          static_cast<uint16_t>(IOEventDistributor::screenPixelHeight)}
     };
 
@@ -567,14 +561,14 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         barrierDesc[2].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrierDesc[2].Transition.pResource = _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
         barrierDesc[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrierDesc[2].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        barrierDesc[2].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-
+        barrierDesc[2].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrierDesc[2].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        
         barrierDesc[3].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrierDesc[3].Transition.pResource = _indirectSpecularLightRaysHistoryBuffer->getResource()->getResource().Get();
         barrierDesc[3].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrierDesc[3].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrierDesc[3].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
         barrierDesc[4].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrierDesc[4].Transition.pResource = _diffusePrimarySurfaceModulation->getResource()->getResource().Get();
@@ -679,8 +673,8 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         nrd::CommonSettings commonSettings = {};
         commonSettings.frameIndex = _frameIndex;
         commonSettings.isMotionVectorInWorldSpace = true;
-        //commonSettings.motionVectorScale[0]       = 1.0;
-        //commonSettings.motionVectorScale[1]       = 1.0;
+        //commonSettings.splitScreen                = 1;
+        //commonSettings.debug                      = 1;
 
         uint32_t matrixSize = 16 * sizeof(float);
         auto     mat        = cameraView.transpose();
@@ -691,12 +685,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         auto projMat = cameraProj.transpose();
         memcpy(commonSettings.viewToClipMatrix, &projMat, matrixSize);
         memcpy(commonSettings.viewToClipMatrixPrev, &projMat, matrixSize);
-
-        //commonSettings.cameraJitter[0] = 0.0;
-        //commonSettings.cameraJitter[1] = 0.0;
-
-        //commonSettings.splitScreen = 1.0;
-        //commonSettings.debug       = 1.0;
 
 
         ////=============================================================================================================================
@@ -786,10 +774,10 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
             {&entryDescs[5], nri::Format::RGBA16_SFLOAT},
 
             //// Ambient (AO) occlusion (R8+)
-            //{nullptr, nri::Format::UNKNOWN},
+            {nullptr, nri::Format::UNKNOWN},
             //
             //// specular (SO) occlusion (R8+)
-            //{nullptr, nri::Format::UNKNOWN},
+            {nullptr, nri::Format::UNKNOWN},
 
             // IN_DIFF_DIRECTION_PDF,
             {nullptr, nri::Format::UNKNOWN},
@@ -799,10 +787,10 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
             //// (Optional) User-provided history confidence in range 0-1, i.e. antilag (R8+)
             //// IN_DIFF_CONFIDENCE
-            //{nullptr, nri::Format::UNKNOWN},
+            {nullptr, nri::Format::UNKNOWN},
             //
             ////IN_SPEC_CONFIDENCE,
-            //{nullptr, nri::Format::UNKNOWN},
+            {nullptr, nri::Format::UNKNOWN},
 
             // IN_SHADOW
             {nullptr, nri::Format::UNKNOWN},
@@ -824,18 +812,11 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
 
         _NRD.Denoise(0, *cmdBuffer, commonSettings, userPool);
 
-        // Set settings for each denoiser
-        //nrd::ReblurDiffuseSettings diffuseSettings = {};
-        //
-        //_NRD.SetMethodSettings(nrd::Method::REBLUR_DIFFUSE, &diffuseSettings);
-        //
-        //_NRD.Denoise(0, *cmdBuffer, commonSettings, userPool);
-
-        for (uint32_t i = 0; i < N; i++)
-        {
-            nri::Texture* texture = (nri::Texture*)entryDescs[i].texture;
-            _NRI.DestroyTexture(*texture);
-        }
+        //for (uint32_t i = 0; i < N; i++)
+        //{
+        //    nri::Texture* texture = (nri::Texture*)entryDescs[i].texture;
+        //    _NRI.DestroyTexture(*texture);
+        //}
         
         _NRI.DestroyCommandBuffer(*cmdBuffer);
 
@@ -964,31 +945,20 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     cmdList->EndEvent();
 
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
+
     barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc[0].Transition.pResource = _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
+    barrierDesc[0].Transition.pResource = _diffusePrimarySurfaceModulation->getResource()->getResource().Get();
     barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
     barrierDesc[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc[1].Transition.pResource = _indirectSpecularLightRaysHistoryBuffer->getResource()->getResource().Get();
+    barrierDesc[1].Transition.pResource = _specularPrimarySurfaceModulation->getResource()->getResource().Get();
     barrierDesc[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     barrierDesc[1].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     barrierDesc[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
-    barrierDesc[2].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc[2].Transition.pResource = _diffusePrimarySurfaceModulation->getResource()->getResource().Get();
-    barrierDesc[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrierDesc[2].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    barrierDesc[2].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-
-    barrierDesc[3].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc[3].Transition.pResource = _specularPrimarySurfaceModulation->getResource()->getResource().Get();
-    barrierDesc[3].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrierDesc[3].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-
-    cmdList->ResourceBarrier(4, barrierDesc);
+    cmdList->ResourceBarrier(2, barrierDesc);
 
     DXLayer::instance()->setTimeStamp();
 

@@ -270,7 +270,6 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             if ((diffuseRay == true && diffuseOrSpecular == 2) || diffuseOrSpecular == 0)
             {
-                //float2 randomSample = GetRandomSample(threadId.xy, screenSize).xy;
                 if ((isRefractiveRay == true && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
                 {
                     indirectNormal = normalize(-indirectNormal);
@@ -302,11 +301,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 float3 viewVector = normalize(indirectPos - previousPosition);
 
-                // ImportanceSampleGGX_VNDF doesn't like negative input
-                float2 rng = abs(GetRandomSample(threadId.xy, screenSize).xy);
-
                 float3 V = viewVector;
-                float3 H = ImportanceSampleGGX_VNDF(rng, roughness, V, basis);
+                float3 R = reflect(viewVector, indirectNormal);
+                // Tests perfect reflections
+                //float3 H = normalize(-V + R);
+                float3 H = ImportanceSampleGGX_VNDF(stochastic, roughness, V, basis);
 
                 if ((isRefractiveRay == true && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
                 {
@@ -376,7 +375,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal, indirectPos,
                                   transmittance, emissiveColor);
 
-            emissiveColor *= enableEmissives ? 50.0 : 0.0;
+            emissiveColor *= enableEmissives ? 10.0 : 0.0;
 
             float3 accumulatedLightRadiance = float3(0.0, 0.0, 0.0);
             float3 accumulatedDiffuseRadiance = float3(0.0, 0.0, 0.0);
@@ -538,13 +537,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 normalUAV[threadId.xy]   = float4(0.0, 0.0, 0.0, 1.0);
                 positionUAV[threadId.xy] = float4(0.0, 0.0, 0.0, -1.0);
 
-                viewZUAV[threadId.xy].x = 1e5;
+                viewZUAV[threadId.xy].x = 1e7f;
             }
             else
             {
                 if (diffuseRay == true)
                 {
-                    float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZUAV[threadId.xy].x,
+                    float normDist = REBLUR_FrontEnd_GetNormHitDist(1e7f, viewZUAV[threadId.xy].x,
                                                                     diffHitDistParams, 1.0);
 
                     float3 light = dayColor.xyz * throughput;
@@ -558,7 +557,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 }
                 else
                 {
-                    float normDist = REBLUR_FrontEnd_GetNormHitDist(1e5, viewZUAV[threadId.xy].x,
+                    float  normDist = REBLUR_FrontEnd_GetNormHitDist(1e7f, viewZUAV[threadId.xy].x,
                                                                     specHitDistParams, 1.0);
                     float3 light    = dayColor.xyz * throughput;
                     
@@ -605,4 +604,4 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     specularPrimarySurfaceModulation[threadId.xy] = float4(
             totalDiffuseRayCount, totalSpecularRayCount, ((float)totalSpecularRayCount) / ((float)totalRayCount), totalRayCount);
-    }
+}
