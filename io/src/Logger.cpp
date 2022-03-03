@@ -51,7 +51,7 @@ std::string Logger::getPID()
 void Logger::closeLog()
 {
     logMutex->lock();
-    outputFile->close();
+    //outputFile->close();
     logMutex->unlock();
 
     delete outputFile;

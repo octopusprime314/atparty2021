@@ -278,12 +278,14 @@ void Light::_updateKinematics(int milliSeconds)
         {
             _waypointPath->updateState(milliSeconds, &_state);
 
-            Vector4 linearPos = _state.getLinearPosition();
+            //Vector4 linearPos = _state.getLinearPosition();
 
             // Only scale or translate light sources...rotation blows up stuff because we need to
             // billboard lights
-            Matrix kinematicTransform =
-                Matrix::translation(linearPos.getx(), linearPos.gety(), linearPos.getz());
+            //Matrix kinematicTransform =
+            //    Matrix::translation(linearPos.getx(), linearPos.gety(), linearPos.getz());
+
+            Matrix kinematicTransform = _state.getTransform();
 
             _lightMVP.setModel(kinematicTransform);
         }

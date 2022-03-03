@@ -202,6 +202,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
         {
             float2 stochastic = GetRandomSample(threadId.xy, screenSize).xy;
             stochastic        = (stochastic + 1.0) / 2.0;
+            //float2 uv         = float2(threadId.xy) / float2(screenSize.xy);
+            //float2 uv         = float2(fmod(threadId.xy + int2(frameNumber, frameNumber), screenSize.xy)) / float2(screenSize.xy);
+            //float2 stochastic = float2(random(uv), random(float2(1.0, 1.0) - uv));
             
             float3 viewVector = normalize(indirectPos - previousPosition);
             // Decide whether to sample diffuse or specular BRDF (based on Fresnel term)
@@ -218,7 +221,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             // specular ray
             if (stochastic.x < brdfProbability)
             {
-                throughput /= brdfProbability;
+                //throughput /= brdfProbability;
                 diffuseRay = false;
             }
             // diffuse ray
@@ -228,17 +231,21 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 if ((isRefractiveRay == true && reflectionOrRefraction == 2) ||
                     reflectionOrRefraction == 1)
                 {
-                    newRayDir = normalize(GetRandomRayDirection(threadId.xy, -indirectNormal, screenSize, 0, indirectPos));
+                    //newRayDir = normalize(GetRandomRayDirection(threadId.xy, -indirectNormal, screenSize, 0, indirectPos));
+                    //newRayDir = randomDir(uv, -indirectNormal);
+                    newRayDir = -indirectNormal;
                 }
                 else if ((isRefractiveRay == false && reflectionOrRefraction == 2) ||
                          reflectionOrRefraction == 0)
                 {
-                    newRayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    //newRayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    //newRayDir = randomDir(uv, indirectNormal);
+                    newRayDir = indirectNormal;
                 }
 
                 float NdotL = max(0, dot(indirectNormal, newRayDir));
 
-                throughput /= (1.0f - brdfProbability)/* / NdotL*/;
+                //throughput /= (1.0f - brdfProbability) / NdotL;
                 diffuseRay = true;
             }
 
@@ -270,15 +277,20 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             if ((diffuseRay == true && diffuseOrSpecular == 2) || diffuseOrSpecular == 0)
             {
+                float pdf = 0.0;
                 if ((isRefractiveRay == true && reflectionOrRefraction == 2) || reflectionOrRefraction == 1)
                 {
                     indirectNormal = normalize(-indirectNormal);
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    //rayDir = randomDir(uv, indirectNormal, pdf);
+                    //rayDir = indirectNormal;
                     refractedDiffuseRayCount++;
                 }
                 else if ((isRefractiveRay == false && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
                 {
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    //rayDir = randomDir(uv, indirectNormal, pdf);
+                    //rayDir = indirectNormal;
                     reflectedDiffuseRayCount++;
                 }
 
@@ -287,7 +299,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 float3 diffuseWeight = albedo * (1.0 - metallic);
                 // NdotL is for cosign weighted diffuse distribution
-                throughput *= (diffuseWeight * GetPDF(NdotL));
+                throughput *= (diffuseWeight /** pdf*/ /* GetPDF(NdotL) */);
             }
             else if ((diffuseRay == false && diffuseOrSpecular == 2) || diffuseOrSpecular == 1)
             {
@@ -414,7 +426,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 normalUAV[threadId.xy].xyz   = (-indirectNormal + 1.0) / 2.0;
                 positionUAV[threadId.xy].xyz = indirectPos;
-                albedoUAV[threadId.xy].xyz   = albedo.xyz;
+                albedoUAV[threadId.xy].xyz   = albedo;
             
                 // Denoiser can't handle roughness value of 0.0
                 normalUAV[threadId.xy].w   = roughness;

@@ -197,6 +197,30 @@ float2 rand_2_0004(in float2 uv)
     return float2(noiseX, noiseY) * 0.004;
 }
 
+float random(float2 p)
+{
+    // We need irrationals for pseudo randomness.
+    // Most (all?) known transcendental numbers will (generally) work.
+    const float2 r = float2(23.1406926327792690, // e^pi (Gelfond's constant)
+                        2.6651441426902251); // 2^sqrt(2) (Gelfond–Schneider constant)
+    return frac(cos(fmod(123456789., 1e-7 + 256. * dot(p, r))));
+}
+
+float3 randomDir(float2 p, float3 normal, out float pdf)
+{
+    float2 u = float2(random(p), random(float2(1.0, 1.0) - p));
+
+    float  a = 1.0 - 2.0 * u[0];
+    float  b = sqrt(1.0 - a * a);
+    float  phi = 2 * PI * u[1];
+    float  x   = normal[0] + b * cos(phi);
+    float  y   = normal[1] + b * sin(phi);
+    float z = normal[2] + a;
+    pdf        = a / PI;
+
+    return normalize(float3(x, y, z));
+}
+
 #define SMALL_NUM 0.00000001 // anything that avoids division overflow
 
 // intersect3D_RayTriangle(): find the 3D intersection of a ray with a triangle
