@@ -203,7 +203,7 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     mappedData = nullptr;
 
     auto computeCmdList = DXLayer::instance()->getComputeCmdList();
-    D3D12_RESOURCE_BARRIER barrierDesc[9];
+    D3D12_RESOURCE_BARRIER barrierDesc[11];
     ZeroMemory(&barrierDesc, sizeof(barrierDesc));
 
     barrierDesc[0].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -211,8 +211,8 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
     barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-    barrierDesc[8] = barrierDesc[7] = barrierDesc[6] = barrierDesc[5] = barrierDesc[4] = barrierDesc[3] =
-        barrierDesc[2] = barrierDesc[1] = barrierDesc[0];
+    barrierDesc[10] = barrierDesc[9] = barrierDesc[8] = barrierDesc[7] = barrierDesc[6] =
+    barrierDesc[5] = barrierDesc[4] = barrierDesc[3] = barrierDesc[2] = barrierDesc[1] = barrierDesc[0];
 
     barrierDesc[0].Transition.pResource = _reflectionRays->getResource()->getResource().Get();
     barrierDesc[1].Transition.pResource = _occlusionRays->getResource()->getResource().Get();
@@ -223,8 +223,10 @@ PathTracerShader::PathTracerShader(std::string shaderName)
     barrierDesc[6].Transition.pResource = _compositor->getResource()->getResource().Get();
     barrierDesc[7].Transition.pResource = _denoisedOcclusionRays->getResource()->getResource().Get();
     barrierDesc[8].Transition.pResource = _viewZPrimaryRays->getResource()->getResource().Get();
+    barrierDesc[9].Transition.pResource = _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
+    barrierDesc[10].Transition.pResource = _indirectSpecularLightRaysHistoryBuffer->getResource()->getResource().Get();
 
-    computeCmdList->ResourceBarrier(9, barrierDesc);
+    computeCmdList->ResourceBarrier(11, barrierDesc);
 
     //_dxrStateObject = new DXRStateObject(_primaryRaysShader->getRootSignature(),
     //                                     _reflectionRaysShader->getRootSignature());
@@ -558,31 +560,19 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
         barrierDesc[1].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
         barrierDesc[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
-        barrierDesc[2].Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrierDesc[2].Transition.pResource = _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
+        barrierDesc[2].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrierDesc[2].Transition.pResource = _diffusePrimarySurfaceModulation->getResource()->getResource().Get();
         barrierDesc[2].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrierDesc[2].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        barrierDesc[2].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        
+        barrierDesc[2].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[2].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
         barrierDesc[3].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrierDesc[3].Transition.pResource = _indirectSpecularLightRaysHistoryBuffer->getResource()->getResource().Get();
+        barrierDesc[3].Transition.pResource = _specularPrimarySurfaceModulation->getResource()->getResource().Get();
         barrierDesc[3].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrierDesc[3].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[3].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrierDesc[3].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-        barrierDesc[4].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrierDesc[4].Transition.pResource = _diffusePrimarySurfaceModulation->getResource()->getResource().Get();
-        barrierDesc[4].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrierDesc[4].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        barrierDesc[4].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-
-        barrierDesc[5].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrierDesc[5].Transition.pResource = _specularPrimarySurfaceModulation->getResource()->getResource().Get();
-        barrierDesc[5].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrierDesc[5].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        barrierDesc[5].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-
-        cmdList->ResourceBarrier(6, barrierDesc);
+        cmdList->ResourceBarrier(4, barrierDesc);
 
         // Wrap the command buffer
         nri::CommandBufferD3D12Desc cmdDesc = {};

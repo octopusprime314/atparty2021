@@ -245,7 +245,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 float NdotL = max(0, dot(indirectNormal, newRayDir));
 
-                //throughput /= (1.0f - brdfProbability) / NdotL;
+                //throughput /= (1.0f - brdfProbability);
                 diffuseRay = true;
             }
 
@@ -282,6 +282,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 {
                     indirectNormal = normalize(-indirectNormal);
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    //rayDir = normalize((indirectNormal + GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos)));//indirectNormal;
+                    //if (dot(indirectNormal, rayDir) < 0.0)
+                    //{
+                    //    rayDir = indirectNormal;
+                    //}
                     //rayDir = randomDir(uv, indirectNormal, pdf);
                     //rayDir = indirectNormal;
                     refractedDiffuseRayCount++;
@@ -289,6 +294,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 else if ((isRefractiveRay == false && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
                 {
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
+                    //rayDir = normalize((indirectNormal + GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos)));//indirectNormal;
+                    //if (dot(indirectNormal, rayDir) < 0.0)
+                    //{
+                    //    rayDir = indirectNormal;
+                    //}
                     //rayDir = randomDir(uv, indirectNormal, pdf);
                     //rayDir = indirectNormal;
                     reflectedDiffuseRayCount++;
@@ -299,7 +309,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 float3 diffuseWeight = albedo * (1.0 - metallic);
                 // NdotL is for cosign weighted diffuse distribution
-                throughput *= (diffuseWeight /** pdf*/ /* GetPDF(NdotL) */);
+                throughput *= (diffuseWeight * NdotL);
             }
             else if ((diffuseRay == false && diffuseOrSpecular == 2) || diffuseOrSpecular == 1)
             {

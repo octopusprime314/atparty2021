@@ -254,16 +254,6 @@ void Entity::_updatePathKinematics(int milliSeconds)
     }
 
     _prevMVP.setModel(_mvp.getModelMatrix());
-    //Vector4 linearPos  = _state.getLinearPosition();
-    //Vector4 angularPos = _state.getAngularPosition();
-    //// Compute x, y and z rotation vectors by multiplying through
-    //Matrix rotation = Matrix::rotationAroundY(static_cast<float>(angularPos.gety())) *
-    //                  Matrix::rotationAroundZ(static_cast<float>(angularPos.getz())) *
-    //                  Matrix::rotationAroundX(static_cast<float>(angularPos.getx()));
-    //
-    //Matrix kinematicTransform =
-    //    Matrix::translation(linearPos.getx(), linearPos.gety(), linearPos.getz()) * rotation
-    //     * Matrix::scale(_scale.getx(), _scale.gety(), _scale.getz());
 
     Matrix kinematicTransform = _state.getTransform();
 
