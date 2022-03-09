@@ -1,4 +1,5 @@
-#include "../../hlsl/include/NRD.hlsl"
+#define COMPILER_DXC 1
+#include "../../hlsl/include/NRD.hlsli"
 
 Texture2D indirectLightRaysHistoryBufferSRV : register(t0, space0);
 Texture2D indirectSpecularLightRaysHistoryBufferSRV : register(t1, space0);

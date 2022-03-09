@@ -1,5 +1,7 @@
 #include "../../include/structs.hlsl"
 #include "../../include/dxr1_1_defines.hlsl"
+#define COMPILER_DXC 1
+#include "../../../hlsl/include/NRD.hlsli"
 
 RaytracingAccelerationStructure             rtAS                             : register(t0, space0);
 Texture2D                                   diffuseTexture[]                 : register(t1, space1);
@@ -146,8 +148,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
     float4 diffHitDistParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
     float4 specHitDistParams = float4(3.0f, 0.1f, 10.0f, -25.0f);
 
-    float4 nrdSpecular = REBLUR_FrontEnd_PackRadiance(float3(0.0, 0.0, 0.0), 0.0, 0);
-    float4 nrdDiffuse = REBLUR_FrontEnd_PackRadiance(float3(0.0, 0.0, 0.0), 0.0, 0);
+    float4 nrdSpecular = REBLUR_FrontEnd_PackRadianceAndHitDist(float3(0.0, 0.0, 0.0), 0.0, 0);
+    float4 nrdDiffuse  = REBLUR_FrontEnd_PackRadianceAndHitDist(float3(0.0, 0.0, 0.0), 0.0, 0);
 
     float3 indirectPos    = float3(0.0, 0.0, 0.0);
     float3 indirectNormal = float3(0.0, 0.0, 0.0);
@@ -192,7 +194,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
         totalRayCount++;
         // First ray is directional and perfect mirror from camera eye so mirror ray it is
         bool diffuseRay = false;
-
+        float path       = 0.0; 
         if (i == 0)
         {
             GenerateCameraRay(threadId.xy, indirectPos, rayDir, viewTransform);
@@ -397,6 +399,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
             ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal, indirectPos,
                                   transmittance, emissiveColor);
 
+            //roughness = sqrt(roughness);
+
             emissiveColor *= enableEmissives ? 10.0 : 0.0;
 
             float3 accumulatedLightRadiance = float3(0.0, 0.0, 0.0);
@@ -429,22 +433,25 @@ void main(int3 threadId            : SV_DispatchThreadID,
             }
 
             // Primary surface recording for denoiser
-            if (i == 0)
+            if (i == 0 /*roughness >= 0.1 && grabbedPrimarySurfaceDemodulator == false*/)
             {
-                diffuseAlbedoDemodulation = albedo;
+                diffuseAlbedoDemodulation        = albedo;
                 grabbedPrimarySurfaceDemodulator = true;
 
                 normalUAV[threadId.xy].xyz   = (-indirectNormal + 1.0) / 2.0;
                 positionUAV[threadId.xy].xyz = indirectPos;
                 albedoUAV[threadId.xy].xyz   = albedo;
-            
+
                 // Denoiser can't handle roughness value of 0.0
                 normalUAV[threadId.xy].w   = roughness;
                 positionUAV[threadId.xy].w = rayData.instanceIndex;
                 albedoUAV[threadId.xy].w   = metallic;
-            
-                viewZUAV[threadId.xy].x = mul(float4(indirectPos, 1.0), viewTransform).z;
 
+                viewZUAV[threadId.xy].x = mul(float4(indirectPos, 1.0), viewTransform).z;
+            }
+
+            if (i == 0)
+            {
                 float3 light = float3(0.0, 0.0, 0.0);
 
                 light = (accumulatedSpecularRadiance + accumulatedDiffuseRadiance) *
@@ -460,11 +467,9 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                 if (i == rayBounceIndex || rayBounceIndex == -1)
                 {
-                    float path = NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, roughness);
-                    float normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x,
-                                                                    specHitDistParams);
-
-                    nrdSpecular += REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) * sampleWeight;
+                    nrdDiffuse +=
+                        REBLUR_FrontEnd_PackRadianceAndHitDist(light, 0, USE_SANITIZATION) *
+                        sampleWeight;
                 }
             }
             else
@@ -487,14 +492,14 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
 
-                        float path = NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, 1.0);
+                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, 1.0);
 
                         float normDist = REBLUR_FrontEnd_GetNormHitDist(path,
                                                                         viewZUAV[threadId.xy].x,
                                                                         diffHitDistParams);
 
-                            nrdDiffuse +=
-                                REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) *
+                            nrdDiffuse += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
+                                                                             USE_SANITIZATION) *
                                 sampleWeight;
                     }
                 }
@@ -515,13 +520,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
-                        float path     = NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, roughness);
+                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, roughness);
                         float normDist = REBLUR_FrontEnd_GetNormHitDist(path,
                                                                         viewZUAV[threadId.xy].x,
                                                                         specHitDistParams);
 
-                        nrdSpecular +=
-                            REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION) *
+                        nrdSpecular += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
+                                                                              USE_SANITIZATION) *
                             sampleWeight;
                         
                     }
@@ -572,8 +577,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
-                        nrdDiffuse +=
-                            REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                        nrdDiffuse += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
+                                                                             USE_SANITIZATION);
                     }
                   
                 }
@@ -585,8 +590,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
-                        nrdSpecular +=
-                            REBLUR_FrontEnd_PackRadiance(light, normDist, USE_SANITIZATION);
+                        nrdSpecular += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
+                                                                              USE_SANITIZATION);
                     }
                 }
             }

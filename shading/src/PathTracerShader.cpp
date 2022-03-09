@@ -57,14 +57,14 @@ PathTracerShader::PathTracerShader(std::string shaderName)
                           IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_UNSIGNED_BYTE, "_albedoPrimaryRays");
     _normalPrimaryRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
-                          IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_UNSIGNED_BYTE, "_normalPrimaryRays");
+                          IOEventDistributor::screenPixelHeight, TextureFormat::R16G16B16A16_FLOAT, "_normalPrimaryRays");
     _positionPrimaryRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
                           IOEventDistributor::screenPixelHeight, TextureFormat::RGBA_FLOAT, "_positionPrimaryRays");
 
     _viewZPrimaryRays = new RenderTexture(IOEventDistributor::screenPixelWidth,
                                           IOEventDistributor::screenPixelHeight,
-                                          TextureFormat::R_FLOAT, "_viewZPrimaryRays");
+                                          TextureFormat::R16_FLOAT, "_viewZPrimaryRays");
 
     _occlusionRays =
         new RenderTexture(IOEventDistributor::screenPixelWidth,
@@ -752,10 +752,10 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
             {&entryDescs[1], nri::Format::RGBA16_SFLOAT},
 
             // IN_NORMAL_ROUGHNESS
-            {&entryDescs[0], nri::Format::RGBA8_UNORM},
+            {&entryDescs[0], nri::Format::RGBA16_SFLOAT},
 
             // IN_VIEWZ
-            {&entryDescs[3], nri::Format::R32_SFLOAT},
+            {&entryDescs[3], nri::Format::R16_SFLOAT},
 
             // IN_DIFF_HIT,
             {&entryDescs[2], nri::Format::RGBA16_SFLOAT},

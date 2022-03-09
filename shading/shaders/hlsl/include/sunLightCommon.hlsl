@@ -1,6 +1,5 @@
 #include "math.hlsl"
 #include "randomRays.hlsl"
-#include "NRD.hlsl"
 
 float3 GetBRDFLight(float3 albedo, float3 normal, float3 hitPosition, float roughness,
                        float metallic, int2 threadId, float3 prevPosition,
