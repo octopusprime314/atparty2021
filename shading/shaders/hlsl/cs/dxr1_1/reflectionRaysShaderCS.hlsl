@@ -220,8 +220,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 isRefractiveRay = true;
             }
 
-            // specular ray
-            if (stochastic.x < brdfProbability)
+            // specular rays can only be launched 1-3 bounce index
+            if (stochastic.x < brdfProbability && i < 3)
             {
                 //throughput /= brdfProbability;
                 diffuseRay = false;
@@ -492,7 +492,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
 
-                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, 1.0);
+                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), i, 1.0);
 
                         float normDist = REBLUR_FrontEnd_GetNormHitDist(path,
                                                                         viewZUAV[threadId.xy].x,
@@ -520,7 +520,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
-                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, roughness);
+                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), i, normalUAV[threadId.xy].w);
                         float normDist = REBLUR_FrontEnd_GetNormHitDist(path,
                                                                         viewZUAV[threadId.xy].x,
                                                                         specHitDistParams);
@@ -570,9 +570,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
             {
                 if (diffuseRay == true)
                 {
-                    float normDist = REBLUR_FrontEnd_GetNormHitDist(1e7f, viewZUAV[threadId.xy].x,
-                                                                    diffHitDistParams, 1.0);
-
+                    path += NRD_GetCorrectedHitDist(1e7f, i, normalUAV[threadId.xy].w);
+                    float normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x, diffHitDistParams);
                     float3 light = dayColor.xyz * throughput;
 
                     if (i == rayBounceIndex || rayBounceIndex == -1)
@@ -584,8 +583,8 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 }
                 else
                 {
-                    float  normDist = REBLUR_FrontEnd_GetNormHitDist(1e7f, viewZUAV[threadId.xy].x,
-                                                                    specHitDistParams, 1.0);
+                    path += NRD_GetCorrectedHitDist(1e7f, i, normalUAV[threadId.xy].w);
+                    float  normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x, specHitDistParams);
                     float3 light    = dayColor.xyz * throughput;
                     
                     if (i == rayBounceIndex || rayBounceIndex == -1)

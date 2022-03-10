@@ -122,13 +122,13 @@ class ResourceManager
     UINT                                                              _unboundedIndexBufferSrvIndex;
 
     bool                                                              _doneAdding;
-    bool                                                              _useCompaction        = true;
-    int                                                               _topLevelIndex        = 0;
-    int                                                               _instanceMappingIndex = 0;
-    int                                                               _raysPerPixel         = 5;
-    int                                                               _renderMode           = 2;
-    int                                                               _rayBounceIndex       = 0; // 0 means all rays are visualized
-    int                                                               _diffuseOrSpecular = 2; // Indicates stochastic
+    bool                                                              _useCompaction          = true;
+    int                                                               _topLevelIndex          = 0;
+    int                                                               _instanceMappingIndex   = 0;
+    int                                                               _raysPerPixel           = 3;
+    int                                                               _renderMode             = 2;
+    int                                                               _rayBounceIndex         = 0; // 0 means all rays are visualized
+    int                                                               _diffuseOrSpecular      = 2; // Indicates stochastic
     int                                                               _reflectionOrRefraction = 2; // Indicates stochastic
     bool                                                              _enableEmissives =  true;
     bool                                                              _enableIBL       = true;
