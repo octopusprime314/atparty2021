@@ -63,7 +63,7 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
     CreateDXGIFactory1(IID_PPV_ARGS(&pDxgiFactory));
 
     IDXGIAdapter* pAdapter = nullptr;
-    pDxgiFactory->EnumAdapters(0, &_dxgiAdapter);
+    pDxgiFactory->EnumAdapters(1, &_dxgiAdapter);
 
     DXGI_ADAPTER_DESC testing123;
     _dxgiAdapter->GetDesc(&testing123);

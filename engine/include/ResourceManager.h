@@ -98,9 +98,11 @@ class ResourceManager
     D3DBuffer*                                                        _instanceNormalMatrixTransformsGPUBuffer;
 
     ComPtr<ID3D12Resource>                                            _prevInstanceTransformsUpload[CMD_LIST_NUM];
+    ComPtr<ID3D12Resource>                                            _prevInstanceTransformsGPU;
     D3DBuffer*                                                        _prevInstanceTransformsGPUBuffer;
 
     ComPtr<ID3D12Resource>                                            _worldToObjectInstanceTransformsUpload[CMD_LIST_NUM];
+    ComPtr<ID3D12Resource>                                            _worldToObjectInstanceTransformsGPU;
     D3DBuffer*                                                        _worldToObjectInstanceTransformsGPUBuffer;
 
     ComPtr<ID3D12Resource>                                            _instanceModelMatrixTransformsUpload[CMD_LIST_NUM];

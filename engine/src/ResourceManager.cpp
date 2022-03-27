@@ -293,13 +293,19 @@ void ResourceManager::updateAndBindNormalMatrixBuffer(std::map<std::string, UINT
 void ResourceManager::updateAndBindPrevInstanceMatrixBuffer(std::map<std::string, UINT> resourceIndexes,
                                                             bool                        isCompute)
 {
+    auto cmdListIndex = DXLayer::instance()->getCmdListIndex();
+
     BYTE* mappedData = nullptr;
-    _prevInstanceTransformsGPUBuffer->resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+    _prevInstanceTransformsUpload[cmdListIndex]->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
 
     memcpy(&mappedData[0], _prevInstanceTransforms.data(),
            sizeof(float) * _prevInstanceTransforms.size());
 
-    auto                  cmdList           = DXLayer::instance()->getCmdList();
+    auto cmdList = DXLayer::instance()->getCmdList();
+
+    cmdList->CopyResource(_prevInstanceTransformsGPUBuffer->resource.Get(),
+                          _prevInstanceTransformsUpload[cmdListIndex].Get());
+
     auto                  resourceBindings  = resourceIndexes;
     ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
     cmdList->SetDescriptorHeaps(1, descriptorHeaps);
@@ -320,13 +326,18 @@ void ResourceManager::updateAndBindPrevInstanceMatrixBuffer(std::map<std::string
 void ResourceManager::updateAndBindWorldToObjectMatrixBuffer(std::map<std::string, UINT> resourceIndexes,
                                                             bool                        isCompute)
 {
+    auto  cmdListIndex = DXLayer::instance()->getCmdListIndex();
     BYTE* mappedData = nullptr;
-    _worldToObjectInstanceTransformsGPUBuffer->resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+    _worldToObjectInstanceTransformsUpload[cmdListIndex]->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
 
     memcpy(&mappedData[0], _instanceWorldToObjectMatrixTransforms.data(),
            sizeof(float) * _instanceWorldToObjectMatrixTransforms.size());
 
     auto                  cmdList           = DXLayer::instance()->getCmdList();
+
+    cmdList->CopyResource(_worldToObjectInstanceTransformsGPUBuffer->resource.Get(),
+                          _worldToObjectInstanceTransformsUpload[cmdListIndex].Get());
+
     auto                  resourceBindings  = resourceIndexes;
     ID3D12DescriptorHeap* descriptorHeaps[] = {_descriptorHeap.Get()};
     cmdList->SetDescriptorHeaps(1, descriptorHeaps);
@@ -1049,26 +1060,6 @@ void ResourceManager::_updateResourceMappingBuffers()
         _prevInstanceTransforms.resize(instanceTransformSizeInBytes);
 
         allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(float) * transformOffset * newInstanceSize,
-                             &_prevInstanceTransformsUpload[_instanceMappingIndex],
-                             L"prevInstanceTransforms");
-
-        _prevInstanceTransformsGPUBuffer->resource = _prevInstanceTransformsUpload[_instanceMappingIndex];
-        _prevInstanceTransformsGPUBuffer->count = newInstanceSize;
-            
-        createBufferSRV(_prevInstanceTransformsGPUBuffer, transformOffset * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
-
-        allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
-                             sizeof(float) * transformOffset * newInstanceSize,
-                             &_worldToObjectInstanceTransformsUpload[_instanceMappingIndex],
-                             L"prevInstanceTransforms");
-
-        _worldToObjectInstanceTransformsGPUBuffer->resource = _worldToObjectInstanceTransformsUpload[_instanceMappingIndex];
-        _worldToObjectInstanceTransformsGPUBuffer->count = newInstanceSize;
-            
-        createBufferSRV(_worldToObjectInstanceTransformsGPUBuffer, transformOffset * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
-
-        allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
                                 sizeof(UINT) * newInstanceSize,
                              &_instanceIndexToMaterialMappingUpload[_instanceMappingIndex],
                                 L"instanceIndexToMaterial");
@@ -1136,6 +1127,41 @@ void ResourceManager::_updateResourceMappingBuffers()
         _instanceModelMatrixTransformsGPUBuffer->count = newInstanceSize;
             
         createBufferSRV(_instanceModelMatrixTransformsGPUBuffer, 16 * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
+
+         for (int i = 0; i < CMD_LIST_NUM; i++)
+        {
+            allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
+                                 sizeof(float) * transformOffset * newInstanceSize,
+                                 &_prevInstanceTransformsUpload[i], L"prevInstanceTransforms");
+        }
+
+        gpuBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(float) * transformOffset * newInstanceSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+        DXLayer::instance()->getDevice()->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                            &gpuBufferDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&_prevInstanceTransformsGPU));
+
+        _prevInstanceTransformsGPUBuffer->resource = _prevInstanceTransformsGPU;
+        _prevInstanceTransformsGPUBuffer->count = newInstanceSize;
+            
+        createBufferSRV(_prevInstanceTransformsGPUBuffer, transformOffset * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
+
+        for (int i = 0; i < CMD_LIST_NUM; i++)
+        {
+            allocateUploadBuffer(DXLayer::instance()->getDevice().Get(), nullptr,
+                                 sizeof(float) * transformOffset * newInstanceSize,
+                                 &_worldToObjectInstanceTransformsUpload[i],
+                                 L"prevInstanceTransforms");
+        }
+
+         gpuBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(float) * transformOffset * newInstanceSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+        DXLayer::instance()->getDevice()->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE,
+                                            &gpuBufferDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&_worldToObjectInstanceTransformsGPU));
+
+        _worldToObjectInstanceTransformsGPUBuffer->resource = _worldToObjectInstanceTransformsGPU;
+        _worldToObjectInstanceTransformsGPUBuffer->count = newInstanceSize;
+            
+        createBufferSRV(_worldToObjectInstanceTransformsGPUBuffer, transformOffset * newInstanceSize, 0, DXGI_FORMAT_R32_FLOAT);
     }
 }
 
