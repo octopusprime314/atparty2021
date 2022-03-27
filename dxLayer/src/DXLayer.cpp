@@ -289,7 +289,11 @@ void DXLayer::initCmdLists()
         _cmdListIndex   = 0;
     }
 
-    while (_cmdListFinishedExecution[prevCommandList] == false)
+    /*while (_cmdListFinishedExecution[prevCommandList] == false)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(0));
+    }*/
+    while (_cmdListFinishedExecution[nextCommandList] == false)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(0));
     }
@@ -397,7 +401,7 @@ void DXLayer::flushCommandList(RenderTexture* renderFrame)
 
     ImGui::Text(_perfData.c_str());
 
-    ImGui::Text(RTCompaction::GetLog());
+    //ImGui::Text(RTCompaction::GetLog());
 
     auto entityList = EngineManager::instance()->getEntityList();
     ResourceManager* resourceManager = EngineManager::getResourceManager();
