@@ -63,7 +63,7 @@ DXLayer::DXLayer(HINSTANCE hInstance, int cmdShow) : _cmdShow(cmdShow), _cmdList
     CreateDXGIFactory1(IID_PPV_ARGS(&pDxgiFactory));
 
     IDXGIAdapter* pAdapter = nullptr;
-    pDxgiFactory->EnumAdapters(1, &_dxgiAdapter);
+    pDxgiFactory->EnumAdapters(0, &_dxgiAdapter);
 
     DXGI_ADAPTER_DESC testing123;
     _dxgiAdapter->GetDesc(&testing123);
@@ -256,30 +256,6 @@ void DXLayer::initCmdLists()
 {
     _previousCpuTime = clock();
 
-    // Sleep loop randomly selecting an available command list
-    /*bool foundCommandList = false;
-    while (foundCommandList == false)
-    {
-        for (int i = 0; i < CMD_LIST_NUM; i++)
-        {
-            if (_cmdListFinishedExecution[i])
-            {
-                _cmdListIndex = i;
-                foundCommandList = true;
-                break;
-            }
-        }
-        if (foundCommandList == false)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(0));
-        }
-    }*/
-
-    /*while (_pendingCmdListIndices.size() > 0)
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(0));
-    }*/
-
     int prevCommandList = _cmdListIndex;
     _cmdListIndex       = ++_cmdListIndex % CMD_LIST_NUM;
     int nextCommandList = _cmdListIndex;
@@ -288,11 +264,6 @@ void DXLayer::initCmdLists()
         nextCommandList = 0;
         _cmdListIndex   = 0;
     }
-
-    /*while (_cmdListFinishedExecution[prevCommandList] == false)
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(0));
-    }*/
     while (_cmdListFinishedExecution[nextCommandList] == false)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(0));
