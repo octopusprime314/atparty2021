@@ -520,7 +520,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
-                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), i, normalUAV[threadId.xy].w);
+                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), i, roughness);
                         float normDist = REBLUR_FrontEnd_GetNormHitDist(path,
                                                                         viewZUAV[threadId.xy].x,
                                                                         specHitDistParams);
@@ -570,7 +570,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             {
                 if (diffuseRay == true)
                 {
-                    path += NRD_GetCorrectedHitDist(1e7f, i, normalUAV[threadId.xy].w);
+                    path += NRD_GetCorrectedHitDist(1e7f, i, roughness);
                     float normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x, diffHitDistParams);
                     float3 light = dayColor.xyz * throughput;
 
@@ -583,7 +583,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 }
                 else
                 {
-                    path += NRD_GetCorrectedHitDist(1e7f, i, normalUAV[threadId.xy].w);
+                    path += NRD_GetCorrectedHitDist(1e7f, i, roughness);
                     float  normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x, specHitDistParams);
                     float3 light    = dayColor.xyz * throughput;
                     
