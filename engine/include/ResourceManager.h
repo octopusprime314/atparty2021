@@ -36,7 +36,7 @@ struct GpuToCpuBuffers
 #define InitInstancesForRayTracing 256
 #define MaxInstancesForRayTracing  50000
 // 4000 BLAS count using 4 textures each
-#define MaxBLASSRVsForRayTracing   12000 * 4
+#define MaxBLASSRVsForRayTracing   16000 * 4
 #define TlasAllocationMultiplier   10
 
 #define RandomInsertAndRemoveEntities 0
@@ -127,7 +127,7 @@ class ResourceManager
     bool                                                              _useCompaction          = true;
     int                                                               _topLevelIndex          = 0;
     int                                                               _instanceMappingIndex   = 0;
-    int                                                               _raysPerPixel           = 3;
+    int                                                               _raysPerPixel           = 4;
     int                                                               _renderMode             = 2;
     int                                                               _rayBounceIndex         = 0; // 0 means all rays are visualized
     int                                                               _diffuseOrSpecular      = 2; // Indicates stochastic

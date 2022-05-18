@@ -333,11 +333,7 @@ std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFRes
     {
         return currWayPoints;
     }
-
-    Vector4 translation = Vector4(0.0, 0.0, 0.0);
-    Vector4 rotation = Vector4(0.0, 0.0, 0.0);
-    Vector4 scale    = Vector4(1.0, 1.0, 1.0);
-                
+ 
     // Offset animation by timeOffset in seconds
     float timeOffset  = 0;
     float currentTime = timeOffset;
@@ -347,6 +343,10 @@ std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFRes
     // Don't process step interpolation by making sure iterations are greater than 1
     while (timeIndex < iterations)
     {
+        Vector4 translation = Vector4(0.0, 0.0, 0.0);
+        Vector4 rotation    = Vector4(0.0, 0.0, 0.0);
+        Vector4 scale       = Vector4(1.0, 1.0, 1.0);
+
         bool grabbedTime = false;
         if (timeIndex < translationTimeFloats.size() &&
             inputAccessorForAnimation.find(TargetPath::TARGET_TRANSLATION) != inputAccessorForAnimation.end())
@@ -359,7 +359,7 @@ std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFRes
             currentTime = (translationTimeFloats[timeIndex]) + timeOffset;
         }
 
-        if (timeIndex < rotationTimeFloats.size() &&
+        if ((rotationIndex/4) < rotationTimeFloats.size() && currentTime >= rotationTimeFloats[rotationIndex/4] &&
             inputAccessorForAnimation.find(TargetPath::TARGET_ROTATION) != inputAccessorForAnimation.end())
         {
             Vector4 quaternion(rotationVectors[rotationIndex],
@@ -380,17 +380,17 @@ std::vector<PathWaypoint> AnimatingNodes(const Document* document, const GLTFRes
                     Vector4(-GetRoll(quaternion), -GetPitch(quaternion), -GetYaw(quaternion));
             }
 
-            currentTime = (rotationTimeFloats[timeIndex]) + timeOffset;
+            currentTime = (rotationTimeFloats[rotationIndex / 4]) + timeOffset;
             rotationIndex += 4;
         }
 
-        if (timeIndex < scaleTimeFloats.size() &&
+        if ((scaleIndex/3) < scaleTimeFloats.size() && currentTime >= scaleTimeFloats[scaleIndex/3] &&
             inputAccessorForAnimation.find(TargetPath::TARGET_SCALE) != inputAccessorForAnimation.end())
         {
             scale = Vector4(scaleVectors[scaleIndex], scaleVectors[scaleIndex + 1],
                             scaleVectors[scaleIndex + 2]);
 
-            currentTime = (scaleTimeFloats[timeIndex]) + timeOffset;
+            currentTime = (scaleTimeFloats[scaleIndex / 3]) + timeOffset;
 
             scaleIndex += 3;
         }
@@ -1050,6 +1050,7 @@ void BuildGltfMeshes(const Document*           document,
 
         if (materialIndices.size() == 0)
         {
+            uniformMaterials.push_back(UniformMaterial());
             uniformMaterials.back().validBits = 0xFF;
             uniformMaterials.back().baseColor[0]     = 1.0;
             uniformMaterials.back().baseColor[1]     = 1.0;

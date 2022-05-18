@@ -261,10 +261,10 @@ void Entity::_updatePathKinematics(int milliSeconds)
     {
         _worldSpaceTransform = kinematicTransform;
     }
-    else
+    /*else
     {
         _worldSpaceTransform = _initialWorldSpaceTransform;
-    }
+    }*/
     
     _mvp.setModel(_worldSpaceTransform);
 }

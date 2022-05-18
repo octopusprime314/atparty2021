@@ -853,6 +853,131 @@ void ResourceManager::_updateTransformData()
 
     // Create an instance desc for the dynamic and static bottom levels
     std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescriptionCPUBuffer(entityList->size());
+    std::random_device                          rd;
+    std::mt19937                                generator(rd());
+    std::uniform_real_distribution<>            randomFloats(-1.0, 1.0);
+
+    std::uniform_real_distribution<> zeroToOneRandomFloats(0.0, 1.0);
+
+    std::uniform_real_distribution<>fireConeRandomFloats(-0.05, 0.05);
+
+    struct ParticleData
+    {
+        Vector4 initialTrajectory;
+        int     initParticleIndex;
+        int     lifeTotal;
+        Vector4 initialPosition;
+    };
+    static bool particlesInitialized = false;
+    static std::vector<ParticleData> particleMetaData;
+    static int                       particleLifeTick = 0;
+    int                              particleIndex = 0;
+    int                              particleLifeCycleMax = 1000;
+
+    enum EffectState
+    {
+        FIRE,
+        FIREFLIES
+    };
+
+    EffectState state = FIREFLIES;
+
+    static unsigned int gameTime = 0;
+    unsigned int diffTime = MasterClock::instance()->getGameTime() - gameTime;
+
+    unsigned int particleUpdateTime = 10;
+
+    if (diffTime >= particleUpdateTime)
+    {
+        gameTime = MasterClock::instance()->getGameTime();
+
+        for (auto entity : *entityList)
+        {
+            if (entity->getName().find("particle") != std::string::npos)
+            {
+                auto worldSpaceTransform = entity->getWorldSpaceTransform();
+
+                auto pos = Vector4(worldSpaceTransform.getFlatBuffer()[3],
+                                   worldSpaceTransform.getFlatBuffer()[7],
+                                   worldSpaceTransform.getFlatBuffer()[11]);
+
+                Vector4 direction;
+                Vector4 scale = Vector4(0.001, 0.001, 0.001);
+                if (particlesInitialized == false ||
+                    particleLifeTick >= particleMetaData[particleIndex].lifeTotal +
+                                            particleMetaData[particleIndex].initParticleIndex)
+                {
+                    if (particlesInitialized == true)
+                    {
+                        pos = particleMetaData[particleIndex].initialPosition;
+                    }
+
+                    if (state == FIREFLIES)
+                    {
+                        direction =
+                            Vector4(randomFloats(generator), zeroToOneRandomFloats(generator),
+                                    randomFloats(generator));
+                        direction.normalize();
+                        direction            = direction * Vector4(0.0001, 0.0001, 0.0001);
+                        particleLifeCycleMax = 100000;
+                    }
+                    else if (state == FIRE)
+                    {
+                        direction            = Vector4(fireConeRandomFloats(generator),
+                                            zeroToOneRandomFloats(generator),
+                                            fireConeRandomFloats(generator));
+                        direction            = direction * (Vector4(0.001, 0.001, 0.001));
+                        particleLifeCycleMax = 300;
+                    }
+
+                    int particleLifeCycle =
+                        static_cast<float>(particleLifeCycleMax) * zeroToOneRandomFloats(generator);
+
+                    if (particlesInitialized == false)
+                    {
+                        particleMetaData.push_back(
+                            ParticleData{direction, particleLifeTick, particleLifeCycle, pos});
+                    }
+                    else
+                    {
+                        particleMetaData[particleIndex] =
+                            ParticleData{direction, particleLifeTick, particleLifeCycle, pos};
+                    }
+                }
+                else
+                {
+                    direction = particleMetaData[particleIndex].initialTrajectory * (static_cast<float>(diffTime) / static_cast<float>(particleUpdateTime));
+
+                    // random movement
+                    direction += Vector4(randomFloats(generator), randomFloats(generator),
+                                         randomFloats(generator)) *
+                        Vector4(0.001, 0.001, 0.001) *
+                        (static_cast<float>(diffTime) / static_cast<float>(particleUpdateTime));
+
+                    float singleScaleValue = zeroToOneRandomFloats(generator);
+
+                    float particleTime =
+                        particleMetaData[particleIndex].lifeTotal -
+                        (particleLifeTick - particleMetaData[particleIndex].initParticleIndex);
+
+                    scale =
+                        Vector4(particleTime, particleTime, particleTime) *
+                        Vector4(
+                            1.0f / static_cast<float>(particleMetaData[particleIndex].lifeTotal),
+                            1.0f / static_cast<float>(particleMetaData[particleIndex].lifeTotal),
+                            1.0f / static_cast<float>(particleMetaData[particleIndex].lifeTotal)) *
+                        Vector4(0.001, 0.001, 0.001);
+                }
+
+                particleIndex++;
+
+                entity->setState(pos + direction, Vector4(0.0, 0.0, 0.0), scale);
+            }
+        }
+
+        particleLifeTick++;
+        particlesInitialized = true;
+    }
 
     int instanceDescIndex = 0;
     for (auto entity : *entityList)

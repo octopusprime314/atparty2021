@@ -77,7 +77,7 @@ float3 ImportanceSampleGGX_VNDF(float2 u, float roughness, float3 V, float3x3 ba
     float3 T1 = lensq > 0.0 ? float3(-Vh.y, Vh.x, 0.0) * rsqrt(lensq) : float3(1.0, 0.0, 0.0);
     float3 T2 = cross(Vh, T1);
 
-    float r = sqrt(u.x /** global_ubo.pt_ndf_trim*/);
+    float r = sqrt(u.x * 0.1/** global_ubo.pt_ndf_trim*/);
     float phi = 2.0 * PI * u.y;
     float t1 = r * cos(phi);
     float t2 = r * sin(phi);

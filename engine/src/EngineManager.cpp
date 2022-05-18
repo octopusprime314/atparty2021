@@ -99,6 +99,59 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
     _viewManager->triggerEvents();
     _viewManager->setEntityList(_scene->entityList);
 
+    std::string::size_type sz; // alias of size_t
+    auto meshModel = ModelBroker::instance()->getModel("particle");
+
+    SceneEntity sceneEntity;
+
+    const int numParticlesPerOrigin = 75;
+    // random floats between -1.0 - 1.0
+    std::random_device               rd;
+    std::mt19937                     generator(rd());
+    std::uniform_real_distribution<> randomFloats(-1.0, 1.0);
+
+    std::vector<Vector4> particleOrigins = {
+        Vector4(0.05, -0.41, -3.63),
+        Vector4(0.5, -0.41, -3.63),
+        Vector4(0.25, -0.41, -3.63),
+        Vector4(0.05, -0.41, -2.63),
+        Vector4(0.5, -0.41, -2.63),
+        Vector4(0.25, -0.41, -2.63),
+        Vector4(0.05, -0.41, -1.63),
+        Vector4(0.5, -0.41, -1.63),
+        Vector4(0.25, -0.41, -1.63),
+        Vector4(0.05, -0.41, -0.63),
+        Vector4(0.5, -0.41, -0.63),
+        Vector4(0.25, -0.41, -0.63),
+        Vector4(0.5, -0.41, -4.63), Vector4(0.75, -0.41, -4.63), Vector4(1.0, -0.41, -4.63),
+        Vector4(1.25, -0.41, -5.63),  Vector4(1.5, -0.41, -5.63), Vector4(1.75, -0.41, -5.63),
+        Vector4(2.0, -0.41, -6.63),  Vector4(2.25, -0.41, -6.63), Vector4(2.50, -0.41, -6.63),
+        Vector4(2.5, -0.41, -7.63),  Vector4(2.75, -0.41, -7.63), Vector4(3.0, -0.41, -7.63),
+    };
+
+    int particleOriginIndex = 0;
+    for (int i = 0; i < numParticlesPerOrigin * particleOrigins.size(); i++)
+    {
+        sceneEntity.modelname = meshModel->getName().substr(0, meshModel->getName().find_last_of("."));
+        sceneEntity.name      = sceneEntity.modelname + std::to_string(i);
+        sceneEntity.position  = particleOrigins[particleOriginIndex];
+        sceneEntity.rotation  = Vector4(0.0, 0.0, 0.0);
+        auto scale            = (randomFloats(generator) + 1.0) / 2.0;
+        sceneEntity.scale     = Vector4(scale * 0.001, scale * 0.001,  scale * 0.001);
+        auto transform = Matrix::translation(sceneEntity.position.getx(), sceneEntity.position.gety(), sceneEntity.position.getz()) *
+                         Matrix::rotationAroundY(sceneEntity.rotation.gety()) *
+                         Matrix::rotationAroundZ(sceneEntity.rotation.getz()) *
+                         Matrix::rotationAroundX(sceneEntity.rotation.getx()) *
+                         Matrix::scale(sceneEntity.scale.getx(), sceneEntity.scale.gety(), sceneEntity.scale.getz());
+
+        sceneEntity.useTransform = true;
+        sceneEntity.transform    = transform;
+
+        EngineManager::instance()->addEntity(sceneEntity);
+
+        particleOriginIndex = i / numParticlesPerOrigin;
+    }
+
     MasterClock::instance()->start();
     DXLayer::instance()->fenceCommandList();
     _inputLayer->run();

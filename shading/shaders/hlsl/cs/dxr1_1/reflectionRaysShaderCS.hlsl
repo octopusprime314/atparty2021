@@ -17,7 +17,7 @@ TextureCube                                 skyboxTexture                    : r
 RWTexture2D<float4> indirectLightRaysUAV : register(u0);
 RWTexture2D<float4> indirectSpecularLightRaysUAV : register(u1);
 RWTexture2D<float4> diffusePrimarySurfaceModulation : register(u2);
-RWTexture2D<float4> specularPrimarySurfaceModulation : register(u3);
+RWTexture2D<float4> specularRefraction : register(u3);
 RWTexture2D<float4> albedoUAV : register(u4);
 RWTexture2D<float4> positionUAV : register(u5);
 RWTexture2D<float4> normalUAV : register(u6);
@@ -150,6 +150,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     float4 nrdSpecular = REBLUR_FrontEnd_PackRadianceAndHitDist(float3(0.0, 0.0, 0.0), 0.0, 0);
     float4 nrdDiffuse  = REBLUR_FrontEnd_PackRadianceAndHitDist(float3(0.0, 0.0, 0.0), 0.0, 0);
+    float4 nrdSpecularRefraction = REBLUR_FrontEnd_PackRadianceAndHitDist(float3(0.0, 0.0, 0.0), 0.0, 0);
 
     float3 indirectPos    = float3(0.0, 0.0, 0.0);
     float3 indirectNormal = float3(0.0, 0.0, 0.0);
@@ -183,18 +184,15 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
     bool grabbedPrimarySurfaceDemodulator = false;
 
-    uint totalDiffuseRayCount = specularPrimarySurfaceModulation[threadId.xy].x;
-    uint totalSpecularRayCount = specularPrimarySurfaceModulation[threadId.xy].y;
-    uint totalRayCount = specularPrimarySurfaceModulation[threadId.xy].w;
-
     bool rayIsBotched = false;
 
     for (i = 0; i < maxBounces; i++)
     {
-        totalRayCount++;
         // First ray is directional and perfect mirror from camera eye so mirror ray it is
         bool diffuseRay = false;
         float path       = 0.0; 
+        bool  isRefractiveRay = false;
+
         if (i == 0)
         {
             GenerateCameraRay(threadId.xy, indirectPos, rayDir, viewTransform);
@@ -214,14 +212,63 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             // When calculating the fresnel term we need to make the probability flipped for translucent geometry
             // and shoot rays based on the brdf probability
-            bool isRefractiveRay = false;
             if (transmittance > 0.0 && stochastic.y < brdfProbability)
             {
                 isRefractiveRay = true;
             }
 
+            //float3 V = viewVector;
+            //float3 L = float3(0.0, 0.0, 0.0);
+
+            //if ((isRefractiveRay == true && reflectionOrRefraction == 2) ||
+            //    reflectionOrRefraction == 1)
+            //{
+            //    L = RefractionRay(indirectNormal, V);
+            //    indirectNormal = -indirectNormal;
+            //}
+            //else if ((isRefractiveRay == false && reflectionOrRefraction == 2) ||
+            //         reflectionOrRefraction == 0)
+            //{
+            //    // VNDF reflection sampling
+            //    // Specular
+            //    float3x3 basis = orthoNormalBasis(indirectNormal);
+            //    float3 H = ImportanceSampleGGX_VNDF(stochastic, roughness, V, basis);
+            //    L = reflect(V, H);
+            //}
+
+            // // Specular
+            //float3x3 basis = orthoNormalBasis(indirectNormal);
+
+            //// Sampling of normal distribution function to compute the reflected ray.
+            //// See the paper "Sampling the GGX Distribution of Visible Normals" by E. Heitz,
+            //// Journal of Computer Graphics Techniques Vol. 7, No. 4, 2018.
+            //// http://jcgt.org/published/0007/04/01/paper.pdf
+
+            //float3 R = reflect(viewVector, indirectNormal);
+            //// Tests perfect reflections
+            //// float3 H = normalize(-V + R);
+            //float3 H = ImportanceSampleGGX_VNDF(stochastic, roughness, V, basis);
+
+
+            //if ((isRefractiveRay == true && reflectionOrRefraction == 2) ||
+            //    reflectionOrRefraction == 1)
+            //{
+            //    indirectNormal = normalize(-indirectNormal);
+            //}
+
+            //float3 N = indirectNormal;
+
+            //float NdotV = max(0, dot(N, viewVector));
+            //float NdotL = max(0, dot(N, L));
+
+            //bool potentialSpecular = false;
+            //if (NdotL > 0 && NdotV > 0)
+            //{
+            //    potentialSpecular = true;
+            //}
+
             // specular rays can only be launched 1-3 bounce index
-            if (stochastic.x < brdfProbability && i < 3)
+            if (stochastic.x < brdfProbability && i < 3/* && potentialSpecular*/)
             {
                 //throughput /= brdfProbability;
                 diffuseRay = false;
@@ -401,7 +448,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             //roughness = sqrt(roughness);
 
-            emissiveColor *= enableEmissives ? 10.0 : 0.0;
+            emissiveColor *= enableEmissives ? 20.0 : 0.0;
 
             float3 accumulatedLightRadiance = float3(0.0, 0.0, 0.0);
             float3 accumulatedDiffuseRadiance = float3(0.0, 0.0, 0.0);
@@ -492,15 +539,13 @@ void main(int3 threadId            : SV_DispatchThreadID,
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
 
-                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), i, 1.0);
+                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, 1.0);
 
                         float normDist = REBLUR_FrontEnd_GetNormHitDist(path,
                                                                         viewZUAV[threadId.xy].x,
                                                                         diffHitDistParams);
 
-                            nrdDiffuse += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
-                                                                             USE_SANITIZATION) *
-                                sampleWeight;
+                        nrdDiffuse += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist, USE_SANITIZATION) * sampleWeight;
                     }
                 }
                 else
@@ -520,14 +565,21 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
-                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), i, roughness);
+                        path += NRD_GetCorrectedHitDist(rayQuery.CommittedRayT(), 0, roughness);
                         float normDist = REBLUR_FrontEnd_GetNormHitDist(path,
                                                                         viewZUAV[threadId.xy].x,
                                                                         specHitDistParams);
 
-                        nrdSpecular += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
-                                                                              USE_SANITIZATION) *
-                            sampleWeight;
+
+                        if (isRefractiveRay)
+                        {
+                            nrdSpecularRefraction += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist, USE_SANITIZATION) * sampleWeight;
+                        }
+                        else
+                        {
+                            nrdSpecular += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist, USE_SANITIZATION) * sampleWeight;
+                            
+                        }
                         
                     }
                 }
@@ -539,7 +591,7 @@ void main(int3 threadId            : SV_DispatchThreadID,
             float3 sampleVector = normalize(ray.Direction);
             float4 dayColor     = min(skyboxTexture.SampleLevel(bilinearWrap, float3(sampleVector.x, sampleVector.y, sampleVector.z), 0), 10.0);
 
-            dayColor *= 15.0;
+            //dayColor *= 5.0;
 
             if (enableIBL == false)
             {
@@ -570,27 +622,36 @@ void main(int3 threadId            : SV_DispatchThreadID,
             {
                 if (diffuseRay == true)
                 {
-                    path += NRD_GetCorrectedHitDist(1e7f, i, roughness);
-                    float normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x, diffHitDistParams);
+                    path += NRD_GetCorrectedHitDist(1e7f, 0, roughness);
+                    float  normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x,
+                                                                    diffHitDistParams);
                     float3 light = dayColor.xyz * throughput;
 
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
-                        nrdDiffuse += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
-                                                                             USE_SANITIZATION);
+                        nrdDiffuse += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist, USE_SANITIZATION);
                     }
                   
                 }
                 else
                 {
-                    path += NRD_GetCorrectedHitDist(1e7f, i, roughness);
-                    float  normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x, specHitDistParams);
+                    path += NRD_GetCorrectedHitDist(1e7f, 0, roughness);
+                    float  normDist = REBLUR_FrontEnd_GetNormHitDist(path, viewZUAV[threadId.xy].x,
+                                                                   specHitDistParams);
                     float3 light    = dayColor.xyz * throughput;
                     
                     if (i == rayBounceIndex || rayBounceIndex == -1)
                     {
-                        nrdSpecular += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
-                                                                              USE_SANITIZATION);
+                        if (isRefractiveRay)
+                        {
+                            nrdSpecularRefraction += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
+                                                                                  USE_SANITIZATION);
+                        }
+                        else
+                        {
+                            nrdSpecular += REBLUR_FrontEnd_PackRadianceAndHitDist(light, normDist,
+                                                                                  USE_SANITIZATION);
+                        }
                     }
                 }
             }
@@ -617,17 +678,5 @@ void main(int3 threadId            : SV_DispatchThreadID,
         diffusePrimarySurfaceModulation[threadId.xy] = float4(diffuseAlbedoDemodulation.xyz, 1.0);
     }
 
-    // Write out number of diffuse rays, specular rays and total rays cast
-
-    totalDiffuseRayCount += reflectedDiffuseRayCount;
-    totalSpecularRayCount += reflectedSpecularRayCount;
-
-    float percentOfDiffuseRays = ((float)reflectedDiffuseRayCount) / ((float)(i + 1));
-    float percentOfSpecularRays = ((float)reflectedSpecularRayCount) / ((float)(i + 1));
-
-    float averagePercentOfDiffuseRays = (percentOfDiffuseRays / ((float)frameNumber + 1)) + specularPrimarySurfaceModulation[threadId.xy].x;
-    float averagePercentOfSpecularRays = (percentOfSpecularRays / ((float)frameNumber + 1)) + specularPrimarySurfaceModulation[threadId.xy].y;
-
-    specularPrimarySurfaceModulation[threadId.xy] = float4(
-            totalDiffuseRayCount, totalSpecularRayCount, ((float)totalSpecularRayCount) / ((float)totalRayCount), totalRayCount);
+    specularRefraction[threadId.xy] = nrdSpecularRefraction;
 }
