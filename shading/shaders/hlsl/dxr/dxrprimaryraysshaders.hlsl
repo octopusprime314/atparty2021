@@ -33,6 +33,7 @@ cbuffer globalData : register(b0)
     uint numSamplesPerSet;
     uint numSampleSets;
     uint numPixelsPerDimPerSet;
+    float fov;
 }
 
 #include "../include/utils.hlsl"

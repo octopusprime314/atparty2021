@@ -37,6 +37,7 @@ cbuffer globalData : register(b0)
     uint numSampleSets;
     uint numPixelsPerDimPerSet;
     uint texturesPerMaterial;
+    float fov;
 }
 
 #include "../include/pointLightCommon.hlsl"

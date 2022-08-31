@@ -166,7 +166,7 @@ void ViewEventDistributor::setProjection(unsigned int viewportWidth, unsigned in
     // near plane from camera location
     // far plane from camera location
     _currCamera->setProjection(Matrix::projection(
-        30.0f, static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight),
+        _currCamera->getFov(), static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight),
         nearPlaneDistance, farPlaneDistance));
     _godCamera.setProjection(_currCamera->getProjection());
     _viewCamera.setProjection(_currCamera->getProjection());
@@ -195,6 +195,13 @@ void ViewEventDistributor::setCamera(const CameraSettings&            settings,
     _lockOffset   = settings.lockOffset;
     _bobble       = settings.bobble;
     _cameraType   = settings.type;
+
+    _currCamera->setFov(settings.fov);
+    _vectorCamera.setFov(settings.fov);
+    _waypointCamera.setFov(settings.fov);
+    _godCamera.setFov(settings.fov);
+    _trackedCamera->setFov(settings.fov);
+
     if (settings.type == CameraType::VECTOR)
     {
         std::string vec_file = settings.path;
@@ -205,7 +212,6 @@ void ViewEventDistributor::setCamera(const CameraSettings&            settings,
         _vectorCamera.reset();
         _trackedCamera = &_vectorCamera;
         _currCamera    = _trackedCamera;
-
         setProjection(IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight,
                       0.1f, 5000.0f);
         setView(Matrix::translation(584.0f, -5.0f, 20.0f), Matrix::rotationAroundY(-180.0f),
@@ -216,6 +222,7 @@ void ViewEventDistributor::setCamera(const CameraSettings&            settings,
         state->setActive(true);
         state->setLinearPosition(settings.position);
         state->setAngularPosition(settings.rotation);
+
     }
     else if (settings.type == CameraType::WAYPOINT)
     {
@@ -240,7 +247,6 @@ void ViewEventDistributor::setCamera(const CameraSettings&            settings,
         _vectorCamera.reset();
         _trackedCamera = &_waypointCamera;
         _currCamera    = _trackedCamera;
-
         setProjection(IOEventDistributor::screenPixelWidth, IOEventDistributor::screenPixelHeight,
                       0.1f, 5000.0f);
 
@@ -251,6 +257,7 @@ void ViewEventDistributor::setCamera(const CameraSettings&            settings,
         _trackedState      = true;
         _godState          = true;
         _currCamera        = &_godCamera;
+
         StateVector* state = _currCamera->getState();
         state->setContact(true);
         state->setGravity(false);
@@ -282,6 +289,11 @@ Matrix ViewEventDistributor::getView()
     //cameraView.getFlatBuffer()[6] = -cameraView.getFlatBuffer()[2];
     //cameraView.getFlatBuffer()[7] = -cameraView.getFlatBuffer()[3];
     return cameraView;
+}
+
+float ViewEventDistributor::getFov()
+{
+    return _currCamera->getFov();
 }
 
 Matrix ViewEventDistributor::getFrustumProjection() { return _viewCamera.getProjection(); }

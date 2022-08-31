@@ -1138,7 +1138,6 @@ void BuildGltfMeshes(const Document*           document,
                 {
                     materialTextureNames.push_back(textureName);
                 }
-                //materialRepeatCount.insert(textureName);
             }
             else
             {
@@ -1216,6 +1215,27 @@ void BuildGltfMeshes(const Document*           document,
 
                 auto viewMan     = ModelBroker::getViewManager();
                 camSettings.type = ViewEventDistributor::CameraType::WAYPOINT;
+
+                if (node.children.size() == 0)
+                {
+                    camSettings.fov = 30.0f;
+                }
+                else
+                {
+                    int cameraNodeIndex = stoi(node.children[0]);
+                    auto tempNode        = node;
+
+                    while (tempNode.children.size() != 0)
+                    {
+                        cameraNodeIndex = stoi(tempNode.children[0]);
+
+                        tempNode = document->nodes.Elements()[cameraNodeIndex];
+                    }
+                    int cameraId = stoi(document->nodes.Elements()[cameraNodeIndex].cameraId);
+
+                    camSettings.fov =
+                        document->cameras[cameraId].GetPerspective().yfov * 180.0 / PI;
+                }
                 viewMan->setCamera(camSettings, &nodeWayPoints[nodeIndex]);
             }
             else if (node.meshId.empty() == false)
@@ -1263,6 +1283,7 @@ void BuildGltfMeshes(const Document*           document,
             camSettings.lockOffset       = Vector4(0.0, 0.0, 0.0, 0.0);
             camSettings.path             = "";
             camSettings.position         = cameraPosition;
+            camSettings.fov              = 30.0f;
 
             Vector4 baseQuaternion(-0.7071067690849304, 0.0, 0.0, 0.7071067690849304);
 

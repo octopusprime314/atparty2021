@@ -72,6 +72,7 @@ class ViewEventDistributor : public EventSubscriber
         std::string                      lockedEntityName = "";
         Vector4                          lockOffset       = Vector4();
         bool                             bobble           = false;
+        float                            fov;
     };
 
   private:
@@ -131,6 +132,7 @@ class ViewEventDistributor : public EventSubscriber
     Vector4           getEyeDirection();
     Vector4           getPrevCameraPos();
     Matrix            getPrevCameraView();
+    float             getFov();
 
   protected:
     void _updateKeyboard(int key, int x, int y);        // Do stuff based on keyboard upate

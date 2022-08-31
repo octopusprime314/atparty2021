@@ -68,6 +68,7 @@ cbuffer globalData : register(b0)
     int reflectionOrRefraction;
     bool enableEmissives;
     bool enableIBL;
+    float fov;
 }
 
 #include "../../include/sunLightCommon.hlsl"
@@ -202,9 +203,6 @@ void main(int3 threadId            : SV_DispatchThreadID,
         {
             float2 stochastic = GetRandomSample(threadId.xy, screenSize).xy;
             stochastic        = (stochastic + 1.0) / 2.0;
-            //float2 uv         = float2(threadId.xy) / float2(screenSize.xy);
-            //float2 uv         = float2(fmod(threadId.xy + int2(frameNumber, frameNumber), screenSize.xy)) / float2(screenSize.xy);
-            //float2 stochastic = float2(random(uv), random(float2(1.0, 1.0) - uv));
             
             float3 viewVector = normalize(indirectPos - previousPosition);
             // Decide whether to sample diffuse or specular BRDF (based on Fresnel term)
@@ -212,60 +210,21 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             // When calculating the fresnel term we need to make the probability flipped for translucent geometry
             // and shoot rays based on the brdf probability
-            if (transmittance > 0.0 && stochastic.y < brdfProbability)
+            // Make probability 0.5 reflection/refraction for less noise
+            if (transmittance > 0.0 && stochastic.y < /*brdfProbability*/0.5)
             {
                 isRefractiveRay = true;
             }
 
-            //float3 V = viewVector;
-            //float3 L = float3(0.0, 0.0, 0.0);
-
-            //if ((isRefractiveRay == true && reflectionOrRefraction == 2) ||
-            //    reflectionOrRefraction == 1)
-            //{
-            //    L = RefractionRay(indirectNormal, V);
-            //    indirectNormal = -indirectNormal;
-            //}
-            //else if ((isRefractiveRay == false && reflectionOrRefraction == 2) ||
-            //         reflectionOrRefraction == 0)
-            //{
-            //    // VNDF reflection sampling
-            //    // Specular
-            //    float3x3 basis = orthoNormalBasis(indirectNormal);
-            //    float3 H = ImportanceSampleGGX_VNDF(stochastic, roughness, V, basis);
-            //    L = reflect(V, H);
-            //}
-
-            // // Specular
-            //float3x3 basis = orthoNormalBasis(indirectNormal);
-
-            //// Sampling of normal distribution function to compute the reflected ray.
-            //// See the paper "Sampling the GGX Distribution of Visible Normals" by E. Heitz,
-            //// Journal of Computer Graphics Techniques Vol. 7, No. 4, 2018.
-            //// http://jcgt.org/published/0007/04/01/paper.pdf
-
-            //float3 R = reflect(viewVector, indirectNormal);
-            //// Tests perfect reflections
-            //// float3 H = normalize(-V + R);
-            //float3 H = ImportanceSampleGGX_VNDF(stochastic, roughness, V, basis);
-
-
-            //if ((isRefractiveRay == true && reflectionOrRefraction == 2) ||
-            //    reflectionOrRefraction == 1)
-            //{
-            //    indirectNormal = normalize(-indirectNormal);
-            //}
-
-            //float3 N = indirectNormal;
-
-            //float NdotV = max(0, dot(N, viewVector));
-            //float NdotL = max(0, dot(N, L));
-
-            //bool potentialSpecular = false;
-            //if (NdotL > 0 && NdotV > 0)
-            //{
-            //    potentialSpecular = true;
-            //}
+            // Water simulation
+            if (transmittance > 0.0)
+            {
+                //float sinFrameNumber = asin(sin(float(frameNumber + threadId.x + threadId.y) / 30.0)) * 0.5;
+                //float cosFrameNumber = acos(cos(float(frameNumber + threadId.x + threadId.y) / 30.0)) * 0.5;
+                //indirectNormal       = normalize(float3(indirectNormal.x * sinFrameNumber,
+                //                                        indirectNormal.y,
+                //                                        indirectNormal.z * sinFrameNumber));
+            }
 
             // specular rays can only be launched 1-3 bounce index
             if (stochastic.x < brdfProbability && i < 3/* && potentialSpecular*/)
@@ -280,15 +239,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 if ((isRefractiveRay == true && reflectionOrRefraction == 2) ||
                     reflectionOrRefraction == 1)
                 {
-                    //newRayDir = normalize(GetRandomRayDirection(threadId.xy, -indirectNormal, screenSize, 0, indirectPos));
-                    //newRayDir = randomDir(uv, -indirectNormal);
                     newRayDir = -indirectNormal;
                 }
                 else if ((isRefractiveRay == false && reflectionOrRefraction == 2) ||
                          reflectionOrRefraction == 0)
                 {
-                    //newRayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
-                    //newRayDir = randomDir(uv, indirectNormal);
                     newRayDir = indirectNormal;
                 }
 
@@ -331,25 +286,11 @@ void main(int3 threadId            : SV_DispatchThreadID,
                 {
                     indirectNormal = normalize(-indirectNormal);
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
-                    //rayDir = normalize((indirectNormal + GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos)));//indirectNormal;
-                    //if (dot(indirectNormal, rayDir) < 0.0)
-                    //{
-                    //    rayDir = indirectNormal;
-                    //}
-                    //rayDir = randomDir(uv, indirectNormal, pdf);
-                    //rayDir = indirectNormal;
                     refractedDiffuseRayCount++;
                 }
                 else if ((isRefractiveRay == false && reflectionOrRefraction == 2) || reflectionOrRefraction == 0)
                 {
                     rayDir = normalize(GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos));
-                    //rayDir = normalize((indirectNormal + GetRandomRayDirection(threadId.xy, indirectNormal, screenSize, 0, indirectPos)));//indirectNormal;
-                    //if (dot(indirectNormal, rayDir) < 0.0)
-                    //{
-                    //    rayDir = indirectNormal;
-                    //}
-                    //rayDir = randomDir(uv, indirectNormal, pdf);
-                    //rayDir = indirectNormal;
                     reflectedDiffuseRayCount++;
                 }
 
@@ -445,8 +386,6 @@ void main(int3 threadId            : SV_DispatchThreadID,
 
             ProcessOpaqueTriangle(rayData, albedo, roughness, metallic, indirectNormal, indirectPos,
                                   transmittance, emissiveColor);
-
-            //roughness = sqrt(roughness);
 
             emissiveColor *= enableEmissives ? 20.0 : 0.0;
 

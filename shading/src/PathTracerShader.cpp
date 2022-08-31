@@ -449,6 +449,9 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
     shader->updateData("enableEmissives", &enableEmissives, true);
     shader->updateData("enableIBL", &enableIBL, true);
 
+    float fov = viewEventDistributor->getFov();
+    shader->updateData("fov", &fov, true);
+
     resourceManager->updateTextureUnbounded(shader->_resourceIndexes["diffuseTexture"], 0, nullptr, 0, true);
     resourceManager->updateStructuredAttributeBufferUnbounded(shader->_resourceIndexes["vertexBuffer"], nullptr, true);
     resourceManager->updateStructuredIndexBufferUnbounded(shader->_resourceIndexes["indexBuffer"], nullptr, true);
@@ -851,15 +854,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
             entryDescs[1].nextAccess = nri::AccessBits::SHADER_RESOURCE;
             entryDescs[1].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
 
-          /*  textureDesc               = {};
-            textureDesc.d3d12Resource = _indirectLightRays->getResource()->getResource().Get();
-            texture                   = (nri::Texture*)entryDescs[2].texture;
-            _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
-
-            entryDescs[2].texture    = texture;
-            entryDescs[2].nextAccess = nri::AccessBits::SHADER_RESOURCE;
-            entryDescs[2].nextLayout = nri::TextureLayout::SHADER_RESOURCE;*/
-
             textureDesc               = {};
             textureDesc.d3d12Resource = _viewZPrimaryRays->getResource()->getResource().Get();
             texture                   = (nri::Texture*)entryDescs[3].texture;
@@ -868,16 +862,6 @@ void PathTracerShader::runShader(std::vector<Light*>&  lights,
             entryDescs[3].texture    = texture;
             entryDescs[3].nextAccess = nri::AccessBits::SHADER_RESOURCE;
             entryDescs[3].nextLayout = nri::TextureLayout::SHADER_RESOURCE;
-
-            /*textureDesc = {};
-            textureDesc.d3d12Resource = 
-                _indirectLightRaysHistoryBuffer->getResource()->getResource().Get();
-            texture = (nri::Texture*)entryDescs[4].texture;
-            _NRI.CreateTextureD3D12(*_nriDevice, textureDesc, texture);
-
-            entryDescs[4].texture    = texture;
-            entryDescs[4].nextAccess = nri::AccessBits::SHADER_RESOURCE_STORAGE;
-            entryDescs[4].nextLayout = nri::TextureLayout::GENERAL;*/
 
             textureDesc = {};
             textureDesc.d3d12Resource =

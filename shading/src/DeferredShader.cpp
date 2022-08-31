@@ -32,9 +32,9 @@ void DeferredShader::runShader(PointLightList*       pointLightList,
     Vector4 sunLightColor = Vector4(1.0, 0.85, 0.4);
     //float   sunLightRange = 100000.0;
     Vector4 sunLightPos   = Vector4(50000.0, 50000.0, 50000.0);
-    _shader->updateData("sunLightColor", sunLightColor.getFlatBuffer(), true);
+    _shader->updateData("sunLightColor", sunLightColor.getFlatBuffer(), false);
     //_shader->updateData("sunLightRange", &sunLightRange, true);
-    _shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), true);
+    _shader->updateData("sunLightPosition", sunLightPos.getFlatBuffer(), false);
     //_shader->updateData("sunLightRadius", &sunLightRadius, true);
 
     // Change of basis from camera view position back to world position

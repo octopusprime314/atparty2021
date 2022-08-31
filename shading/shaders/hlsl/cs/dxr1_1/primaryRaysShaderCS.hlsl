@@ -27,6 +27,7 @@ cbuffer globalData : register(b0)
     float2   screenSize;
     uint     texturesPerMaterial;
     float3   cameraPos;
+    float    fov;
 }
 
 #include "../../include/utils.hlsl"

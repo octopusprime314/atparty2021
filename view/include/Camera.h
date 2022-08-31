@@ -49,7 +49,7 @@ class Camera
     MVP          _prevMvp;
     StateVector  _state;
     VAO          _frustumVAO;
-
+    float        _fov;
   public:
     Camera();
     ~Camera();
@@ -65,4 +65,6 @@ class Camera
     virtual void updateState(int milliseconds);
     StateVector* getState();
     void         setState(StateVector* state);
+    void         setFov(float fov);
+    float        getFov();
 };

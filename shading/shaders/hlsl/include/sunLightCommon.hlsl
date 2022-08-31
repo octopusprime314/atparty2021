@@ -42,8 +42,6 @@ float3 GetBRDFLight(float3 albedo, float3 normal, float3 hitPosition, float roug
     // but also shorten the ray to make sure it doesn't hit the primary ray target
     ray.TMax = distance;
 
-    float2 index = threadId.xy;
-
     ray.Origin                 = hitPosition + (-lightDirection * 0.001);
     float3 penumbraLightVector = -lightDirection;
     penumbraLightVector        = penumbraLightVector + GetRandomRayDirection(threadId, penumbraLightVector, screenSize, 0, hitPosition) * 0.005;

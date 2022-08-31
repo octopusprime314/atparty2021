@@ -877,15 +877,110 @@ void ResourceManager::_updateTransformData()
     enum EffectState
     {
         FIRE,
-        FIREFLIES
+        FIREFLIES,
+        FIREWORKS
     };
 
-    EffectState state = FIREFLIES;
+    struct ParticleTimeEvent
+    {
+        EffectState  state;
+        unsigned int initMilliSeconds = 0;
+    };
+
+    std::map<std::string, ParticleTimeEvent> particleEvents;
+
+    particleEvents["particle_lod10"]  = ParticleTimeEvent{FIREFLIES, 1000 / 4};
+    //particleEvents["particle_lod11"]  = ParticleTimeEvent{FIREFLIES, 2000 / 4};
+    //particleEvents["particle_lod12"]  = ParticleTimeEvent{FIREFLIES, 3000 / 4};
+    //particleEvents["particle_lod13"]  = ParticleTimeEvent{FIREWORKS, 4000  / 4};
+    //particleEvents["particle_lod14"]  = ParticleTimeEvent{FIREWORKS, 5000  / 4};
+    //particleEvents["particle_lod15"]  = ParticleTimeEvent{FIREWORKS, 6000  / 4};
+    //particleEvents["particle_lod16"]  = ParticleTimeEvent{FIREWORKS, 7000  / 4};
+    //particleEvents["particle_lod17"]  = ParticleTimeEvent{FIREWORKS, 8000  / 4};
+    //particleEvents["particle_lod18"]  = ParticleTimeEvent{FIREWORKS, 9000  / 4};
+    //particleEvents["particle_lod19"]  = ParticleTimeEvent{FIREWORKS, 10000 / 4};
+    //particleEvents["particle_lod110"] = ParticleTimeEvent{FIREWORKS, 11000 / 4};
+    //particleEvents["particle_lod111"] = ParticleTimeEvent{FIREWORKS, 12000 / 4};
+    //particleEvents["particle_lod112"] = ParticleTimeEvent{FIREWORKS, 13000 / 4};
+    //particleEvents["particle_lod113"] = ParticleTimeEvent{FIREWORKS, 14000 / 4};
+    //particleEvents["particle_lod114"] = ParticleTimeEvent{FIREWORKS, 15000 / 4};
+    //particleEvents["particle_lod115"] = ParticleTimeEvent{FIREWORKS, 16000 / 4};
+    //particleEvents["particle_lod116"] = ParticleTimeEvent{FIREWORKS, 17000 / 4};
+    //particleEvents["particle_lod117"] = ParticleTimeEvent{FIREWORKS, 18000 / 4};
+    //particleEvents["particle_lod118"] = ParticleTimeEvent{FIREWORKS, 19000 / 4};
+    //particleEvents["particle_lod119"] = ParticleTimeEvent{FIREWORKS, 20000 / 4};
+    //particleEvents["particle_lod120"] = ParticleTimeEvent{FIREWORKS, 21000 / 4};
+    //particleEvents["particle_lod121"] = ParticleTimeEvent{FIREWORKS, 22000 / 4};
+    //particleEvents["particle_lod122"] = ParticleTimeEvent{FIREWORKS, 23000 / 4};
+    //particleEvents["particle_lod123"] = ParticleTimeEvent{FIREWORKS, 24000 / 4};
+
+    if (particlesInitialized == false)
+    {
+
+        for (auto entity : *entityList)
+        {
+            auto worldSpaceTransform = entity->getWorldSpaceTransform();
+
+            auto pos = Vector4(worldSpaceTransform.getFlatBuffer()[3],
+                               worldSpaceTransform.getFlatBuffer()[7],
+                               worldSpaceTransform.getFlatBuffer()[11]);
+
+            Vector4 direction;
+            std::string entityName = entity->getName();
+
+            if (particleEvents.find(entityName) != particleEvents.end())
+            {
+                if (particleEvents[entityName].state == FIREFLIES)
+                {
+                    direction = Vector4(randomFloats(generator), zeroToOneRandomFloats(generator),
+                                        randomFloats(generator));
+                    direction.normalize();
+                    direction            = direction * Vector4(0.0001, 0.0001, 0.0001);
+                    particleLifeCycleMax = 100000;
+                }
+                else if (particleEvents[entityName].state == FIRE)
+                {
+                    direction =
+                        Vector4(fireConeRandomFloats(generator), zeroToOneRandomFloats(generator),
+                                fireConeRandomFloats(generator));
+                    direction            = direction * (Vector4(0.001, 0.001, 0.001));
+                    particleLifeCycleMax = 300;
+                }
+                else if (particleEvents[entityName].state == FIREWORKS)
+                {
+                    direction = Vector4(randomFloats(generator), zeroToOneRandomFloats(generator),
+                                        randomFloats(generator));
+
+                    direction.normalize();
+
+                    Vector4 direction2 =
+                        Vector4(fireConeRandomFloats(generator), zeroToOneRandomFloats(generator),
+                                fireConeRandomFloats(generator));
+
+                    direction2.normalize();
+
+                    direction = (direction + direction2) * (Vector4(0.001, 0.001, 0.001));
+
+                    particleLifeCycleMax = 500;
+                }
+
+                int particleLifeCycle =
+                    static_cast<float>(particleLifeCycleMax) * zeroToOneRandomFloats(generator);
+
+                particleMetaData.push_back(
+                    ParticleData{direction, particleLifeTick, particleLifeCycle, pos});
+            }
+        }
+
+        particlesInitialized = true;
+    }
 
     static unsigned int gameTime = 0;
     unsigned int diffTime = MasterClock::instance()->getGameTime() - gameTime;
 
     unsigned int particleUpdateTime = 10;
+
+    unsigned int particleStartTime = 0.5 * 1000;
 
     if (diffTime >= particleUpdateTime)
     {
@@ -893,26 +988,24 @@ void ResourceManager::_updateTransformData()
 
         for (auto entity : *entityList)
         {
-            if (entity->getName().find("particle") != std::string::npos)
+            std::string entityName = entity->getName();
+            if (particleEvents.find(entityName) != particleEvents.end() &&
+                gameTime >= particleEvents[entityName].initMilliSeconds)
             {
                 auto worldSpaceTransform = entity->getWorldSpaceTransform();
 
                 auto pos = Vector4(worldSpaceTransform.getFlatBuffer()[3],
-                                   worldSpaceTransform.getFlatBuffer()[7],
-                                   worldSpaceTransform.getFlatBuffer()[11]);
+                                    worldSpaceTransform.getFlatBuffer()[7],
+                                    worldSpaceTransform.getFlatBuffer()[11]);
 
                 Vector4 direction;
                 Vector4 scale = Vector4(0.001, 0.001, 0.001);
-                if (particlesInitialized == false ||
-                    particleLifeTick >= particleMetaData[particleIndex].lifeTotal +
+                if (particleLifeTick >= particleMetaData[particleIndex].lifeTotal +
                                             particleMetaData[particleIndex].initParticleIndex)
                 {
-                    if (particlesInitialized == true)
-                    {
-                        pos = particleMetaData[particleIndex].initialPosition;
-                    }
+                    pos = particleMetaData[particleIndex].initialPosition;
 
-                    if (state == FIREFLIES)
+                    if (particleEvents[entityName].state == FIREFLIES)
                     {
                         direction =
                             Vector4(randomFloats(generator), zeroToOneRandomFloats(generator),
@@ -921,7 +1014,7 @@ void ResourceManager::_updateTransformData()
                         direction            = direction * Vector4(0.0001, 0.0001, 0.0001);
                         particleLifeCycleMax = 100000;
                     }
-                    else if (state == FIRE)
+                    else if (particleEvents[entityName].state == FIRE)
                     {
                         direction            = Vector4(fireConeRandomFloats(generator),
                                             zeroToOneRandomFloats(generator),
@@ -929,20 +1022,30 @@ void ResourceManager::_updateTransformData()
                         direction            = direction * (Vector4(0.001, 0.001, 0.001));
                         particleLifeCycleMax = 300;
                     }
+                    else if (particleEvents[entityName].state == FIREWORKS)
+                    {
+                        direction =
+                            Vector4(randomFloats(generator), zeroToOneRandomFloats(generator),
+                                    randomFloats(generator));
+
+                        direction.normalize();
+
+                        Vector4 direction2 = Vector4(fireConeRandomFloats(generator),
+                                            zeroToOneRandomFloats(generator),
+                                            fireConeRandomFloats(generator));
+
+                        direction2.normalize();
+
+                        direction = (direction + direction2) * (Vector4(0.001, 0.001, 0.001));
+
+                        particleLifeCycleMax = 1000;
+                    }
 
                     int particleLifeCycle =
                         static_cast<float>(particleLifeCycleMax) * zeroToOneRandomFloats(generator);
 
-                    if (particlesInitialized == false)
-                    {
-                        particleMetaData.push_back(
-                            ParticleData{direction, particleLifeTick, particleLifeCycle, pos});
-                    }
-                    else
-                    {
-                        particleMetaData[particleIndex] =
-                            ParticleData{direction, particleLifeTick, particleLifeCycle, pos};
-                    }
+                    particleMetaData[particleIndex] =
+                        ParticleData{direction, particleLifeTick, particleLifeCycle, pos};
                 }
                 else
                 {
@@ -950,7 +1053,7 @@ void ResourceManager::_updateTransformData()
 
                     // random movement
                     direction += Vector4(randomFloats(generator), randomFloats(generator),
-                                         randomFloats(generator)) *
+                                            randomFloats(generator)) *
                         Vector4(0.001, 0.001, 0.001) *
                         (static_cast<float>(diffTime) / static_cast<float>(particleUpdateTime));
 
@@ -974,9 +1077,7 @@ void ResourceManager::_updateTransformData()
                 entity->setState(pos + direction, Vector4(0.0, 0.0, 0.0), scale);
             }
         }
-
         particleLifeTick++;
-        particlesInitialized = true;
     }
 
     int instanceDescIndex = 0;

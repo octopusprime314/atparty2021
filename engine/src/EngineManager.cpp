@@ -100,40 +100,68 @@ EngineManager::EngineManager(int* argc, char** argv, HINSTANCE hInstance, int nC
     _viewManager->setEntityList(_scene->entityList);
 
     std::string::size_type sz; // alias of size_t
-    auto meshModel = ModelBroker::instance()->getModel("particle");
+    auto meshModel0 = ModelBroker::instance()->getModel("particle");
+    auto meshModel1 = ModelBroker::instance()->getModel("particle1");
+    auto meshModel2 = ModelBroker::instance()->getModel("particle2");
+    auto meshModel3 = ModelBroker::instance()->getModel("particle3");
 
     SceneEntity sceneEntity;
 
-    const int numParticlesPerOrigin = 75;
+    const int numParticlesPerOrigin = 750;
     // random floats between -1.0 - 1.0
     std::random_device               rd;
     std::mt19937                     generator(rd());
     std::uniform_real_distribution<> randomFloats(-1.0, 1.0);
 
+
     std::vector<Vector4> particleOrigins = {
-        Vector4(0.05, -0.41, -3.63),
-        Vector4(0.5, -0.41, -3.63),
-        Vector4(0.25, -0.41, -3.63),
-        Vector4(0.05, -0.41, -2.63),
-        Vector4(0.5, -0.41, -2.63),
-        Vector4(0.25, -0.41, -2.63),
-        Vector4(0.05, -0.41, -1.63),
-        Vector4(0.5, -0.41, -1.63),
-        Vector4(0.25, -0.41, -1.63),
-        Vector4(0.05, -0.41, -0.63),
-        Vector4(0.5, -0.41, -0.63),
-        Vector4(0.25, -0.41, -0.63),
+        Vector4(-13.05, -0.41, -0.63)/*, Vector4(-13.45, -0.41, -0.63),  Vector4(-13.85, -0.41, -0.63),*/
+        //Vector4(0.05, -0.41, -0.63), Vector4(0.5, -0.41, -0.63),  Vector4(0.25, -0.41, -0.63),
+        /*Vector4(0.05, -0.41, -1.63), Vector4(0.5, -0.41, -1.63),  Vector4(0.25, -0.41, -1.63),
+        Vector4(0.05, -0.41, -2.63), Vector4(0.5, -0.41, -2.63),  Vector4(0.25, -0.41, -2.63),
+        Vector4(0.05, -0.41, -3.63), Vector4(0.5, -0.41, -3.63), Vector4(0.25, -0.41, -3.63),
         Vector4(0.5, -0.41, -4.63), Vector4(0.75, -0.41, -4.63), Vector4(1.0, -0.41, -4.63),
         Vector4(1.25, -0.41, -5.63),  Vector4(1.5, -0.41, -5.63), Vector4(1.75, -0.41, -5.63),
         Vector4(2.0, -0.41, -6.63),  Vector4(2.25, -0.41, -6.63), Vector4(2.50, -0.41, -6.63),
-        Vector4(2.5, -0.41, -7.63),  Vector4(2.75, -0.41, -7.63), Vector4(3.0, -0.41, -7.63),
+        Vector4(2.5, -0.41, -7.63),  Vector4(2.75, -0.41, -7.63), Vector4(3.0, -0.41, -7.63),*/
     };
+
+    //// End of cave location
+    //std::vector<Vector4> particleOrigins = {
+    //    Vector4(10.45, 0.01, -10.93),
+    //};
 
     int particleOriginIndex = 0;
     for (int i = 0; i < numParticlesPerOrigin * particleOrigins.size(); i++)
     {
-        sceneEntity.modelname = meshModel->getName().substr(0, meshModel->getName().find_last_of("."));
-        sceneEntity.name      = sceneEntity.modelname + std::to_string(i);
+        // Random colorful particles
+        float modelChoice = randomFloats(generator);
+        //if (modelChoice <= -0.5)
+        //{
+        //    sceneEntity.modelname =
+        //        meshModel0->getName().substr(0, meshModel0->getName().find_last_of("."));
+        //}
+        //else if (modelChoice > -0.5 && modelChoice <= 0.0)
+        //{
+        //    sceneEntity.modelname =
+        //        meshModel1->getName().substr(0, meshModel1->getName().find_last_of("."));
+        //}
+        //else if (modelChoice > 0.0 && modelChoice <= 0.5)
+        //{
+        //    sceneEntity.modelname =
+        //        meshModel2->getName().substr(0, meshModel2->getName().find_last_of("."));
+        //}
+        //else if (modelChoice > 0.5)
+        //{
+            sceneEntity.modelname =
+                meshModel3->getName().substr(0, meshModel3->getName().find_last_of("."));
+        //}
+
+        //sceneEntity.modelname = meshModel0->getName().substr(0, meshModel0->getName().find_last_of("."));
+
+        int particleGroupId = i / numParticlesPerOrigin;
+
+        sceneEntity.name      = /*sceneEntity.modelname*/ "particle_lod1" + std::to_string(particleGroupId);
         sceneEntity.position  = particleOrigins[particleOriginIndex];
         sceneEntity.rotation  = Vector4(0.0, 0.0, 0.0);
         auto scale            = (randomFloats(generator) + 1.0) / 2.0;
@@ -355,7 +383,7 @@ void EngineManager::_postDraw()
         HLSLShader::releaseOM(_gBuffers->getTextures());
 
         // Only compute ssao for opaque objects
-        _ssaoPass->computeSSAO(_gBuffers, _viewManager);
+        //_ssaoPass->computeSSAO(_gBuffers, _viewManager);
 
         std::vector<RenderTexture> rts;
         rts.push_back(*_renderTexture);
@@ -376,41 +404,18 @@ void EngineManager::_postDraw()
 
         HLSLShader::releaseOM(rts);
 
-        Bloom*     bloom = getBloomShader();
-        SSCompute* add   = getAddShader();
-
-        add->uavBarrier();
-
-        // Compute bloom from finalized render target
-        bloom->compute(_renderTexture);
-
-        // THE FINAL ADD TO THE COMPOSITION RENDER TARGET CAUSES CORRUPTION
-        // IN THE FORM OF OVERLAYING A RANDOM COLLECTION TEXTURE IN THE TOP
-        // LEFT CORNER OF THE SCREEN...LOOKS LIKE DOWNSAMPLING OR SOME PASS
-        // OF THE BLOOM SHADERS ARE BEING WRITTEN TO THE FINAL COMPOSITION???
-
-        //ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-        //barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        //barrierDesc[0].Transition.pResource =
-        //   bloom->getTexture()->getResource()->getResource().Get();
-        //barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        //barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        //barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        //cmdList->ResourceBarrier(1, barrierDesc);
-
-        // Adds bloom data back into the composite render target
-        add->compute(bloom->getTexture(), _renderTexture);
-
-        ///ZeroMemory(&barrierDesc, sizeof(barrierDesc));
-        ///barrierDesc[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        ///barrierDesc[0].Transition.pResource =
-        ///   bloom->getTexture()->getResource()->getResource().Get();
-        ///barrierDesc[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        ///barrierDesc[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        ///barrierDesc[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        ///cmdList->ResourceBarrier(1, barrierDesc);
-
-        add->uavBarrier();
+        //Bloom*     bloom = getBloomShader();
+        //SSCompute* add   = getAddShader();
+        //
+        //add->uavBarrier();
+        //
+        //// Compute bloom from finalized render target
+        //bloom->compute(_renderTexture);
+        //
+        //// Adds bloom data back into the composite render target
+        //add->compute(bloom->getTexture(), _renderTexture);
+        //
+        //add->uavBarrier();
 
         RenderTexture& velocityTexture = _gBuffers->getTextures()[3];
         auto mergeShader = static_cast<MergeShader*>(ShaderBroker::instance()->getShader("mergeShader"));

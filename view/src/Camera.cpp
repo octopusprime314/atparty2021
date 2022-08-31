@@ -34,6 +34,8 @@ void Camera::setViewMatrix(Matrix transform)
 
 StateVector* Camera::getState() { return &_state; }
 void         Camera::setState(StateVector* state) { _state = *state; }
+void         Camera::setFov(float fov) { _fov = fov; }
+float        Camera::getFov() { return _fov; }
 
 void Camera::setView(Matrix translation, Matrix rotation, Matrix scale)
 {
